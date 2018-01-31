@@ -1,0 +1,4 @@
+PROBLEM_FILE = atsp/5.atsp
+OUTPUT_TOUR_FILE = lkh/out/5.$.lkh
+RUNS = 200
+BACKTRACKING = YES
