@@ -16,7 +16,7 @@ Installing LKH on a Unix-like system (e.g. Linux or Mac) can be as simple as run
 
 ```sh
 curl -LO http://www.akira.ruc.dk/~keld/research/LKH/LKH-2.0.7.tgz
-tar zxf LKH-2.0.7.tgz 
+tar zxf LKH-2.0.7.tgz
 cd LKH-2.0.7
 make
 cp ./LKH /usr/local/bin/
@@ -46,20 +46,33 @@ which should print something like
 
 ## Break new ground
 
-Now you’ve got LKH running, you can start to discover new things! You could look for novel short superpermutations of 6 symbols:
+Now you’ve got LKH running, you can start to discover new things! You could look for novel short superpermutations of 6 symbols. It is recommended to use the runner script to avoid some shortcoming in the usage of LKH for this project:
 
 ```sh
-LKH lkh/par/6.par
+bin/lkh_runner.py -o lkh/out/
+```
+You can start multiple instances of LKH, just change the output directory to avoid conflicts:
+```sh
+bin/lkh_runner.py -o lkh/out/1/
+bin/lkh_runner.py -o lkh/out/2/
+...
 ```
 
 Or if you’re feeling ambitious, you can try 7 symbols! The input file for 7 is quite large, so it is not included in the repository and you will have to create it first:
 
 ```sh
 make atsp/7.atsp
-LKH lkh/par/7.par
+bin/lkh_runner.py -o lkh/out/ -p atsp/7.atsp -n 7
 ```
 
+LKH runner keeps a maximum of 20 solution files by default.
+
 Share what you find.
+
+You can run the following command to see all options of the runner:
+```sh
+bin/lkh_runner.py -h
+```
 
 ## Try Concorde
 
