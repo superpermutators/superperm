@@ -1,3 +1,0 @@
-# This is an output directory; we don’t want to store the output files in Git
-
-*.lkh
