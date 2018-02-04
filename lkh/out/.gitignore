@@ -1,0 +1,9 @@
+# Ignore all files in the output directory apart from this one
+#
+# The reason this file exists – rather than just adding the ignore
+# rules to the top-level .gitignore file – is that Git does not
+# track empty directories, and we would like this directory to
+# be created when the repository is cloned.
+
+*
+!/.gitignore
