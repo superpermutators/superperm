@@ -1,0 +1,13 @@
+The demutator is a little tool that extracts all the permutations from a superpermutation and formats
+them in an output file (in this case, out.txt) so that they line up with the superpermutations given
+in the data file (in this case, data.txt). The first line of the data file may only contain the
+"radix," or the "largest number whose permutations have been superpermutated"
+ex: radix "2" -> superpermutation "121"
+
+This code is by no means devoid of all errors, and you can probably find a way to completely break it,
+but it should be completely fine given the job it was designed for.
+
+I've included both the data and output files so you can get a feel for what this does.
+
+Its purpose is to aid in manually determining patterns with the superpermutations. I found that by
+lining up the permutations like this, some things start to stand out about their construction.
