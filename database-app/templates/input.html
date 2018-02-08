@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Input</title>
+	<style>
+		body { background: white; font-family: "Gill Sans", sans-serif; max-width: 800px; margin: 1em auto; padding: 1em; }
+		textarea { width: 600px; height: 200px; }
+		.error { color: red; }
+	</style>
+</head>
+<body>
+	{% if error %}
+		<div class="error">
+			Error: {{ error }}
+		</div>
+	{% endif %}
+	<form method="GET" action="/lookup">
+		<h2>Enter your superpermutation</h2>
+		<p>Look up a superpermutation in the database.</p>
+		<div><textarea name="q">{{ q }}</textarea></div>
+		<div><input type="submit" value="Look up"></div>
+	</form>
+</body>
+</html>

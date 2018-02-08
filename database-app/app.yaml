@@ -1,0 +1,18 @@
+runtime: python27
+api_version: 1
+threadsafe: true
+
+application: superpermutations
+version: 1
+
+builtins:
+- appstats: on
+- remote_api: on
+
+libraries:
+- name: flask
+  version: "0.12"
+
+handlers:
+- url: /.*
+  script: app.app
