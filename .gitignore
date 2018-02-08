@@ -1,2 +1,15 @@
-# Output directory; we don’t want to store the output files in Git
-lkh/out/*
+.DS_Store
+*.pyc
+
+# Ignore large generated files
+/atsp/7.atsp
+/tsp/7.tsp
+
+# Ignore the files Concorde generates
+/*.sav
+/*.pul
+/*.mas
+/*.res
+
+/5.???
+/6.???
