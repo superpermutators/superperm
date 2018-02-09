@@ -57,6 +57,8 @@ bin/lkh_runner.py -o lkh/out/1/
 bin/lkh_runner.py -o lkh/out/2/
 ...
 ```
+LKH keeps all the solutions below a certain weight and discards the others. The max weight is configurable with -w and is 866 by default.
+
 
 Or if you’re feeling ambitious, you can try 7 symbols! The input file for 7 is quite large, so it is not included in the repository and you will have to create it first:
 
@@ -64,8 +66,6 @@ Or if you’re feeling ambitious, you can try 7 symbols! The input file for 7 is
 make atsp/7.atsp
 bin/lkh_runner.py -o lkh/out/ -p atsp/7.atsp -n 7
 ```
-
-LKH runner keeps a maximum of 20 solution files by default.
 
 Share what you find.
 
