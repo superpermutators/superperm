@@ -16,6 +16,13 @@ class NotComplete(Exception): message = "Superpermutation is incomplete"
 class TooManySymbols(Exception): message = "Too many different symbols (max = %d)" % (len(SYMBOL),)
 
 
+class StoredSuperpermutation(ndb.Model):
+    t_created = ndb.DateTimeProperty(auto_now_add=True)
+
+    n = ndb.IntegerProperty(required=True)
+    s = ndb.TextProperty(required=True)
+
+
 def _hash(s):
     """Compute the SHA256 hash of the string s.
     """
@@ -86,11 +93,13 @@ def _split(s, n):
     o = _overlap(s[1:], s)
     k = 0
     for i in xrange(len(s)):
-        if i >= n and s[i] != s[i - n]:
+        if not _elements_are_distinct(s[i-n : i]):
             k += 1
-            if k >= n - o:
+            print k
+            if k >= n - o - 1:
                 r[-1] = r[-1][:o-n+1]
                 r.append(list(s[i-n+1 : i]))
+                k = 0
         else:
             k = 0
         r[-1].append(s[i])
@@ -110,24 +119,11 @@ def _minimise(s, n):
 def _parse(s):
     parts = re.split(r"\s+", s.strip())
     s = _squash(parts)
-
-    logging.info("Squashed: %s", s)
     s, n = _normalise(s)
-
-    logging.info("Normalised: (%s, %d)", s, n)
     _check(s, n)
-    logging.info("Checked!")
-
     s = _minimise(s, n)
-    logging.info("Minimised: %s", s)
 
     return s, n
-
-class StoredSuperpermutation(ndb.Model):
-    t_created = ndb.DateTimeProperty(auto_now_add=True)
-
-    n = ndb.IntegerProperty(required=True)
-    s = ndb.TextProperty(required=True)
 
 
 def lookup(raw):
@@ -146,4 +142,5 @@ def lookup(raw):
             ss = StoredSuperpermutation(key=k, s=s, n=n)
             ss.put()
 
-    return dict(s=s, n=n, len=len(s), is_long=is_long, threshold_length=threshold_length, is_novel=is_novel)
+    parts = _split(s, n)
+    return dict(s=s, n=n, len=len(s), is_long=is_long, threshold_length=threshold_length, is_novel=is_novel, parts=parts)
