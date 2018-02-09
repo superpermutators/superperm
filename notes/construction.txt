@@ -1,0 +1,55 @@
+Construction of Superpermutations
+In this discussion a "line" is a set of n permutations, and a "block" is a set of n(n - 1) permutations
+
+We start with a greedy algorithm to generate the first few numbers in the construction.  This won't be the start of the final superpermutation as we'll see later, and in fact will cover both the beginning and end.  This step will always cover 3 iterations.  Throughout, examples for 6 will be presented, but this can be extended as low as 3, and theorized to extend indefinitely upwards.
+
+Iteration 1 (n - 1) We only have one possible choice here for each additional character.  Of note here is that we always add all rotations, and so can ignore that from now on.
+12345612345         One line, n^2 - (n - 1)^2
+                              n^2 - n^2 + 2n - 1
+                              2n - 1 characters
+
+Iteration 2 (n - 2) With an overlap of 4, we have 2 possible choices between lines, but one choice is already used.
+12345612345         One block (n - 1) * (2n - 1) - (n - 2)^2
+    1623451                   2n^2 - 3n + 1 - n^2 + 4n - 4
+    2634512                   n^2 + n - 3 characters
+    3645123
+    4651234
+    
+Iteration 3 (n - 3) With an overlap of 3, we have 6 possible choices between blocks. For length 6, we start with 234. We can see from Iteration 2 that the 6h digit slides through the other digits.
+12345612345         This means that the 6th digit can be neither 5, as we already have all combinations involving 2345, nor 1, as we already have all combinations involving 1234. 6th digit is 6 (n).
+    1623451         The 5th digit cannot be 1, as the second line swaps the last two digits.  Therefore our only possible sequence here is 234156.  The 3rd and 4th block proceed likewise.
+    2634512         (n - 2) blocks (n - 2) * (n^2 + n - 3) - (n - 3)^2
+    3645123                        n^3 - n^2 - 5n + 6 - n^2 - n^2 + 6n - 9
+    4651234                        n^3 - 2n^2 + n - 3 characters
+   15623415
+    2634152
+    3641523
+    4615234
+    1652341
+   25634125
+    3641253
+    4612534
+    1625341
+    2653412
+   35641235
+    4612354
+    1623541
+    2635412
+    3654123
+
+We could try continuing in this way for (n - 4). We find that even though with 4 digits of freedom we have more than 1 possibility, it's impossible to construct another group as above.
+At each iteration, we've constructed a sequence in the most efficient way possible, down to the listed amount of overlap.  In addition, since the sequence forms a cycle with the same overlap, there's no possibility of inserting another permutation within the sequence.  Substituting n = 6 into the above equation gives a total of 147 characters for this part.
+
+We now need to fit the remaining (n! - n * (n - 1) * (n - 2)) / n lines into this base sequence.  It's clear that while we started by convention with characters in a numerical order, a substitution of any order would follow the same logic. Therefore, we can conclude a block MUST be (n - 1) lines, no matter what sequence we have.  We can't fit a full block in at a time because no matter where you split a group, there was only one option that could come next.  We can, however, insert a group of (n - 2) lines into the sequence that along with a line already existing in the sequence creates a full group.  We split between 2 existing permutations, overlapping by (n - 1) characters, creating (n - 1) extra characters in the process.  We then add our other (n - 2) complete lines for an additional (2n - 1) * (n - 2) - (n - 2) * (n - 1) characters. (The overlap is between each line, and at the beginning and end.)
+(2n - 1) * (n - 2) - (n - 2) * (n - 1) + n - 1
+2n^2 - 5n + 2 - n^2 + 3n - 2 + n - 1
+n^2 - n - 1 characters per insertion
+
+Putting it all together, and simplifying:
+(n^3 - 2n^2 + n - 3) + ((n! - n * (n - 1) * (n - 2)) / n) / (n - 2) * (n^2 - n - 1)
+n^3 - 2n^2 + n - 3 + (n - 1) * ((n - 3)! - 1) * (n^2 - n - 1)
+n^3 - 2n^2 + n - 3 + (n^3 - 2n^2 + 1) * ((n - 3)! - 1)
+n^3 - 2n^2 + n - 3 - (n^3 - 2n^2 + 1) + (n^3 - 2n^2 + 1) * (n - 3)!
+n - 4 + (n^3 - 2n^2 + 1) * (n - 3)!
+
+We can see that this formula works for permutation lengths of 3 to 5.  It also matches our current shortest solution of 872 for a permutation length of 6.  It should give a lower bound for all higher n, but does not guarantee a solution exists at the bound. It is however conjectured that this is likely the case.
