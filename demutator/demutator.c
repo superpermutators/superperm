@@ -26,9 +26,8 @@ char* formatplist(struct permutable *plist, const int size, const uint8_t radix,
     /*	variables
 		index -> which line of permutations are we on? (this is useful due to how this formats things)
 		i -> temporary index of *plist
-		a -> offset between numbers
-		c -> used to determine buffer offset
-		ptr -> current buffer pointer, used to poke things into the buffer.
+		currptr -> current buffer pointer, used to poke things into the buffer.
+		lineptr -> pointer to help establish numeral tabbing
     */
 	int i, currptr, lineptr = 0;
 	uint8_t index;
