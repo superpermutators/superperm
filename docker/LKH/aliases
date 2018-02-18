@@ -1,0 +1,1 @@
+function lkh-six { docker run --rm -it -v ${1:-$PWD}:/mnt/out lkh /bin/bash run.sh; }
