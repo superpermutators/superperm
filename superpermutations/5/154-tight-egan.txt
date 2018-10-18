@@ -1,0 +1,7 @@
+# The following superpermutation on 5 symbols contains at most 1 consecutive “wasted” digit,
+# i.e. regarded as a Hamiltonian path it uses only edges of weights 1 and 2.
+#
+# It was found by Greg Egan, and posted to Twitter on 2018-10-18:
+# https://twitter.com/gregeganSF/status/1052781185913372674
+#
+1234512341523412534215342513425314235142315423145213452143521453241532451324531243512431524312543215432514325413524135421354123541325431245321452314253412
