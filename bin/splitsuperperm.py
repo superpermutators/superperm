@@ -4,11 +4,14 @@ from __future__ import division
 
 import sys
 
+SYMBOLS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
 n_str = sys.argv[1]
 n = int(n_str)
 
+sorted_perm = list(SYMBOLS[:n])
+
 def split_superperm(superperm):
-    sorted_perm = map(str, range(1, n+1))
     for i in range(len(superperm) - n + 1):
         p = superperm[i : i + n]
         s = sorted(p)
