@@ -21,5 +21,5 @@ def split_superperm(superperm):
 if len(sys.argv) > 2:
     split_superperm(sys.argv[2])
 else:
-    split_superperm(sys.stdin.read())
+    split_superperm(sys.stdin.read().strip())
 
