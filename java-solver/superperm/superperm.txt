@@ -1,0 +1,434 @@
+Compiled from "Main.java"
+public class superperm.Main {
+  public superperm.Main();
+    Code:
+       0: aload_0
+       1: invokespecial #8                  // Method java/lang/Object."<init>":()V
+       4: return
+
+  int cycle(int, int, int);
+    Code:
+       0: iload_1
+       1: iload_3
+       2: irem
+       3: istore        4
+       5: iload         4
+       7: iload_2
+       8: iadd
+       9: iload_3
+      10: irem
+      11: iload         4
+      13: isub
+      14: iload_1
+      15: iadd
+      16: ireturn
+
+  int rotate(int);
+    Code:
+       0: bipush        30
+       2: istore_3
+       3: iload_1
+       4: bipush        6
+       6: irem
+       7: istore        4
+       9: iload         4
+      11: lookupswitch  { // 2
+                     0: 36
+                     5: 42
+               default: 48
+          }
+      36: bipush        6
+      38: istore_2
+      39: goto          194
+      42: bipush        20
+      44: istore_2
+      45: goto          194
+      48: bipush        120
+      50: istore_3
+      51: iload_1
+      52: bipush        6
+      54: idiv
+      55: iload         4
+      57: iadd
+      58: iconst_5
+      59: irem
+      60: istore        5
+      62: iload         5
+      64: tableswitch   { // 0 to 4
+                     0: 100
+                     1: 112
+                     2: 112
+                     3: 112
+                     4: 106
+               default: 112
+          }
+     100: bipush        25
+     102: istore_2
+     103: goto          194
+     106: bipush        97
+     108: istore_2
+     109: goto          194
+     112: sipush        360
+     115: istore_3
+     116: iload_1
+     117: bipush        30
+     119: idiv
+     120: iload         5
+     122: iadd
+     123: iconst_4
+     124: irem
+     125: istore        6
+     127: iload         6
+     129: tableswitch   { // 0 to 3
+                     0: 160
+                     1: 173
+                     2: 173
+                     3: 166
+               default: 173
+          }
+     160: bipush        91
+     162: istore_2
+     163: goto          194
+     166: sipush        271
+     169: istore_2
+     170: goto          194
+     173: sipush        720
+     176: istore_3
+     177: iload_1
+     178: bipush        120
+     180: idiv
+     181: iload         6
+     183: iadd
+     184: iconst_3
+     185: irem
+     186: bipush        120
+     188: imul
+     189: sipush        241
+     192: iadd
+     193: istore_2
+     194: aload_0
+     195: iload_1
+     196: iload_2
+     197: iload_3
+     198: invokevirtual #22                 // Method cycle:(III)I
+     201: ireturn
+
+  void findChain();
+    Code:
+       0: sipush        720
+       3: newarray       int
+       5: astore_1
+       6: sipush        720
+       9: newarray       long
+      11: astore_2
+      12: sipush        720
+      15: newarray       long
+      17: astore_3
+      18: sipush        720
+      21: newarray       int
+      23: astore        8
+      25: iconst_0
+      26: istore        9
+      28: iconst_0
+      29: istore        10
+      31: iconst_0
+      32: istore        11
+      34: goto          50
+      37: aload_1
+      38: iload         11
+      40: aload_0
+      41: iload         11
+      43: invokevirtual #29                 // Method rotate:(I)I
+      46: iastore
+      47: iinc          11, 1
+      50: iload         11
+      52: sipush        720
+      55: if_icmplt     37
+      58: iconst_0
+      59: istore        11
+      61: goto          134
+      64: iload         11
+      66: istore        12
+      68: iconst_0
+      69: istore        13
+      71: goto          125
+      74: aload_1
+      75: iload         12
+      77: iaload
+      78: istore        12
+      80: iload         12
+      82: bipush        6
+      84: idiv
+      85: istore        14
+      87: iload         14
+      89: bipush        64
+      91: if_icmplt     111
+      94: aload_3
+      95: iload         11
+      97: dup2
+      98: laload
+      99: lconst_1
+     100: iload         14
+     102: bipush        64
+     104: isub
+     105: lshl
+     106: lor
+     107: lastore
+     108: goto          122
+     111: aload_2
+     112: iload         11
+     114: dup2
+     115: laload
+     116: lconst_1
+     117: iload         14
+     119: lshl
+     120: lor
+     121: lastore
+     122: iinc          13, 1
+     125: iload         13
+     127: iconst_4
+     128: if_icmplt     74
+     131: iinc          11, 1
+     134: iload         11
+     136: sipush        720
+     139: if_icmplt     64
+     142: ldc2_w        #31                 // long 1048575l
+     145: lstore        4
+     147: lconst_0
+     148: lstore        6
+     150: iconst_0
+     151: istore        11
+     153: goto          193
+     156: lload         4
+     158: aload_2
+     159: iload         11
+     161: laload
+     162: land
+     163: lconst_0
+     164: lcmp
+     165: ifne          190
+     168: lload         6
+     170: aload_3
+     171: iload         11
+     173: laload
+     174: land
+     175: lconst_0
+     176: lcmp
+     177: ifne          190
+     180: aload         8
+     182: iload         9
+     184: iinc          9, 1
+     187: iload         11
+     189: iastore
+     190: iinc          11, 1
+     193: iload         11
+     195: bipush        120
+     197: if_icmplt     156
+     200: iconst_0
+     201: istore        11
+     203: goto          238
+     206: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     209: new           #39                 // class java/lang/StringBuilder
+     212: dup
+     213: aload         8
+     215: iload         11
+     217: iaload
+     218: invokestatic  #41                 // Method java/lang/String.valueOf:(I)Ljava/lang/String;
+     221: invokespecial #47                 // Method java/lang/StringBuilder."<init>":(Ljava/lang/String;)V
+     224: ldc           #50                 // String
+     226: invokevirtual #52                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     229: invokevirtual #56                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     232: invokevirtual #60                 // Method java/io/PrintStream.print:(Ljava/lang/String;)V
+     235: iinc          11, 1
+     238: iload         11
+     240: iload         9
+     242: if_icmplt     206
+     245: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     248: invokevirtual #65                 // Method java/io/PrintStream.println:()V
+     251: bipush        25
+     253: newarray       int
+     255: astore        11
+     257: iconst_0
+     258: istore        12
+     260: goto          450
+     263: aload         8
+     265: iload         10
+     267: iinc          10, 1
+     270: iaload
+     271: istore        13
+     273: lload         4
+     275: aload_2
+     276: iload         13
+     278: laload
+     279: land
+     280: lconst_0
+     281: lcmp
+     282: ifne          387
+     285: lload         6
+     287: aload_3
+     288: iload         13
+     290: laload
+     291: land
+     292: lconst_0
+     293: lcmp
+     294: ifeq          300
+     297: goto          387
+     300: lload         4
+     302: aload_2
+     303: iload         13
+     305: laload
+     306: lor
+     307: lstore        4
+     309: lload         6
+     311: aload_3
+     312: iload         13
+     314: laload
+     315: lor
+     316: lstore        6
+     318: iconst_0
+     319: istore        14
+     321: goto          366
+     324: aload_1
+     325: iload         13
+     327: iaload
+     328: istore        13
+     330: iconst_2
+     331: istore        15
+     333: goto          357
+     336: aload         8
+     338: iload         9
+     340: iinc          9, 1
+     343: aload_0
+     344: iload         13
+     346: iload         15
+     348: bipush        6
+     350: invokevirtual #22                 // Method cycle:(III)I
+     353: iastore
+     354: iinc          15, 1
+     357: iload         15
+     359: iconst_5
+     360: if_icmplt     336
+     363: iinc          14, 1
+     366: iload         14
+     368: iconst_4
+     369: if_icmplt     324
+     372: aload         11
+     374: iload         12
+     376: iinc          12, 1
+     379: iload         10
+     381: iconst_1
+     382: isub
+     383: iastore
+     384: goto          394
+     387: iload         10
+     389: iload         9
+     391: if_icmplt     263
+     394: iload         10
+     396: iload         9
+     398: if_icmplt     450
+     401: iinc          9, -12
+     404: aload         11
+     406: iinc          12, -1
+     409: iload         12
+     411: iaload
+     412: istore        10
+     414: aload         8
+     416: iload         10
+     418: iinc          10, 1
+     421: iaload
+     422: istore        13
+     424: lload         4
+     426: aload_2
+     427: iload         13
+     429: laload
+     430: ldc2_w        #68                 // long -1l
+     433: lxor
+     434: land
+     435: lstore        4
+     437: lload         6
+     439: aload_3
+     440: iload         13
+     442: laload
+     443: ldc2_w        #68                 // long -1l
+     446: lxor
+     447: land
+     448: lstore        6
+     450: iload         12
+     452: bipush        25
+     454: if_icmplt     387
+     457: aload         11
+     459: dup
+     460: astore        16
+     462: arraylength
+     463: istore        15
+     465: iconst_0
+     466: istore        14
+     468: goto          510
+     471: aload         16
+     473: iload         14
+     475: iaload
+     476: istore        13
+     478: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     481: new           #39                 // class java/lang/StringBuilder
+     484: dup
+     485: aload         8
+     487: iload         13
+     489: iaload
+     490: invokestatic  #41                 // Method java/lang/String.valueOf:(I)Ljava/lang/String;
+     493: invokespecial #47                 // Method java/lang/StringBuilder."<init>":(Ljava/lang/String;)V
+     496: ldc           #50                 // String
+     498: invokevirtual #52                 // Method java/lang/StringBuilder.append:(Ljava/lang/String;)Ljava/lang/StringBuilder;
+     501: invokevirtual #56                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     504: invokevirtual #60                 // Method java/io/PrintStream.print:(Ljava/lang/String;)V
+     507: iinc          14, 1
+     510: iload         14
+     512: iload         15
+     514: if_icmplt     471
+     517: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     520: invokevirtual #65                 // Method java/io/PrintStream.println:()V
+     523: iconst_0
+     524: istore        13
+     526: goto          594
+     529: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     532: iload         13
+     534: invokevirtual #70                 // Method java/io/PrintStream.print:(I)V
+     537: iload         13
+     539: istore        14
+     541: iconst_0
+     542: istore        15
+     544: goto          579
+     547: aload_1
+     548: iload         14
+     550: iaload
+     551: istore        14
+     553: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     556: new           #39                 // class java/lang/StringBuilder
+     559: dup
+     560: ldc           #73                 // String \t
+     562: invokespecial #47                 // Method java/lang/StringBuilder."<init>":(Ljava/lang/String;)V
+     565: iload         14
+     567: invokevirtual #75                 // Method java/lang/StringBuilder.append:(I)Ljava/lang/StringBuilder;
+     570: invokevirtual #56                 // Method java/lang/StringBuilder.toString:()Ljava/lang/String;
+     573: invokevirtual #60                 // Method java/io/PrintStream.print:(Ljava/lang/String;)V
+     576: iinc          15, 1
+     579: iload         15
+     581: iconst_5
+     582: if_icmplt     547
+     585: getstatic     #33                 // Field java/lang/System.out:Ljava/io/PrintStream;
+     588: invokevirtual #65                 // Method java/io/PrintStream.println:()V
+     591: iinc          13, 1
+     594: iload         13
+     596: sipush        720
+     599: if_icmplt     529
+     602: return
+
+  public static void main(java.lang.String[]);
+    Code:
+       0: new           #1                  // class superperm/Main
+       3: dup
+       4: invokespecial #99                 // Method "<init>":()V
+       7: astore_1
+       8: aload_1
+       9: invokevirtual #100                // Method findChain:()V
+      12: return
+}
