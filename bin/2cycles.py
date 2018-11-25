@@ -1,21 +1,30 @@
 #!/usr/bin/python
 # -*- encoding: utf8 -*-
 
+import optparse
 import sys
 
 SYMBOLS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
-text = ""
 
-n = int(sys.argv[1])
-if len(sys.argv) == 2:
+parser = optparse.OptionParser(usage="%prog [options] N")
+parser.add_option("-g", "--graph", action="store_true", help="output the results in graphviz format")
+parser.add_option("", "--oneline", action="store_true", help="output the results in one-line format")
+
+(options, args) = parser.parse_args()
+if options.graph and options.compact:
+	parser.error("You can’t specify both --graph and --oneline")
+if len(args) != 1: parser.error("Wrong number of arguments")
+
+n = int(args[0])
+header = ""
+if len(args) == 1:
 	s = sys.stdin.read().strip()
-elif len(sys.argv) == 3:
-	filename = sys.argv[2]
-	text = "\n=>" + filename + "\n"
+elif len(args) == 2:
+	filename = args[1]
+	header = "\n=>" + filename
 	s = open(filename).read().strip()
 else:
-	print >>sys.stderr, "%s: Wrong number of arguments" % (sys.argv[0],)
-	sys.exit(1)
+	parser.error("Wrong number of arguments")
 
 sorted_perm = list(SYMBOLS[:n])
 
@@ -66,34 +75,53 @@ for i in range(len(s) - n):
 	else:
 		gap += 1
 
-# for (c, p) in sorted(two_cycles.keys()):
-# 	print c + " " + p + "  ", ", ".join(two_cycles[(c, p)])
+def two_cycles_adjacencies(two_cycles):
+	max_nb = 0
+	n_nbs = {}
+	tss = set(two_cycles.iterkeys())
+	r = ""
+	for (c, p) in sorted(tss):
+		nbs = [
+			c_ + " " + p_ + ("*" if d_ else "") for (c_, p_, d_) in neighbours(c, p)
+			if (c_, p_) in tss
+		]
+		max_nb = max(max_nb, len(nbs))
+		n_nbs[len(nbs)] = n_nbs.get(len(nbs), 0) + 1
+		r += c + " " + p + "   " + ", ".join(nbs) + "\n"
+	return r
 
-max_nb = 0
-n_nbs = {}
-tss = set(two_cycles.iterkeys())
-for (c, p) in sorted(tss):
-	nbs = [
-		c_ + " " + p_ + ("*" if d_ else "") for (c_, p_, d_) in neighbours(c, p)
-		if (c_, p_) in tss
-	]
-	max_nb = max(max_nb, len(nbs))
-	n_nbs[len(nbs)] = n_nbs.get(len(nbs), 0) + 1
-	text += c + " " + p + "   " + ", ".join(nbs) + "\n"
+def two_cycles_graphviz(two_cycles):
+	ts_list = list(two_cycles.iterkeys())
+	tss = set(ts_list)
 
-# if max_nb <= 3:
-# 	print text
+	index_by_two_cycle = {}
+	for (i, ts) in enumerate(ts_list): index_by_two_cycle[ts] = i
 
-# if n_nbs.get(3, 0) == 0:
-# 	print text
+	r = "graph {\n"
+	for (i, (c, p)) in enumerate(ts_list):
+		r += "  \"%s/%s\";\n" % (c, p)
+		for (c_, p_, d_) in neighbours(c, p):
+			if (c_, p_) not in tss: continue
+			if index_by_two_cycle[(c_, p_)] < i: continue
+			edge = "\"%s/%s\" -- \"%s/%s\"" % (c, p, c_, p_)
+			if d_:
+				r += "  { edge[style=bold]; %s; }\n" % (edge,);
+			else:
+				r += "  %s;\n" % (edge,);
 
-# if n_nbs.get(0, 0) == 1: print text
+	r += "}\n"
+	return r
 
-# if n_nbs.get(2, 0) == 0: print text
+def two_cycles_oneline(two_cycles):
+	return " ".join([
+		"%s/%s" % ts
+		for ts in sorted(two_cycles.iterkeys())
+	])
 
-print text
-
-# print
-# thrss = set(three_cycles.iterkeys())
-# for (c, d, p) in sorted(thrss):
-# 	print c + "/" + d + " " + p
+if options.oneline:
+	print two_cycles_oneline(two_cycles)
+elif options.graph:
+	print two_cycles_graphviz(two_cycles)
+else:
+	print header
+	print two_cycles_adjacencies(two_cycles)
