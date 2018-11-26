@@ -1,0 +1,496 @@
+\documentclass[a4paper]{article}
+\usepackage{url}
+
+\pdfoutput=1
+\frenchspacing
+\parindent=1em
+
+\usepackage{amssymb}
+\usepackage{amsthm}
+  \newtheorem{lemma}{Lemma}
+  \newtheorem{prop}{Proposition}
+  \newtheorem{thm}{Theorem}
+  \newtheorem{cor}{Corollary}
+\theoremstyle{definition}
+  \newtheorem{defn}{Definition}[section]
+  \newtheorem{example}{Example}[section]
+\theoremstyle{remark}
+  \newtheorem*{remark}{Remark}
+
+\usepackage{amsmath}
+\usepackage{stmaryrd}
+\usepackage[round]{natbib}
+
+\let\definiendum\textbf
+
+\author{Robin Houston}
+\title{Superpermutations\\[0.4em]\large Notes on the lower bound\\[0.4em]\normalsize Version 0.1.0}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}\noindent\
+    Some ideas towards improving the lower bound
+    $
+        n! + (n-1)! + (n-2)! + (n-3)
+    $
+    for the length of a superpermutation on $n$ symbols.
+\end{abstract}
+
+Let $n \ge 3$ be an integer,\footnote{
+    The only reason to exclude the cases $n=1$ and $n=2$ globally is that it avoids the need to exclude them specifically later on: 1-cycles only exist for $n>1$, and 2-cycles only exist for $n>2$.
+} and let $N = \{1, \dots, n\}$.
+
+\section{General definitions}
+%
+This section is ludicrously terse, since its purpose is simply to fix particular terminology and notation for familiar concepts.
+
+\subsection{From words to superpermutations}
+A \definiendum{word} is a finite -- possibly empty -- sequence of elements of $N$. The set of all words is denoted $N^*$. Concatenation of words is denoted by juxtaposition. The \definiendum{length} of a word $u$ is the number of elements it contains, denoted by $|u|$. By abuse of notation, we identify each $c\in N$ with the corresponding word of length 1. If $u=xyz$ for words $u$, $x$, $y$, $z$, we say that $x$ is a \definiendum{prefix} of $u$, $y$ is a \definiendum{factor} of $u$, and $z$ is a \definiendum{suffix} of $u$. If furthermore $|x|<|u|$, we say $x$ is a \definiendum{proper prefix} of $u$. Let $u[i,j)$ denote the (unique, if it exists) word $b$ such that $u=xyz$ for words $x, y, z$ with $|x|=i$ and $|xy|=j$. (If $0\le i\le j\le|u|$ for integers $i$, $j$ then the word $u[i,j)$ exists and has length $(j-i)$. Every factor of $u$ can be written in this way, since if $u=xyz$ then $y=u[|x|, |xy|)$.)
+
+Two words $u$ and $v$ are \definiendum{cyclically equivalent}, denoted $u\sim v$, just when there exist words $x$ and $y$ such that $u=xy$ and $v=yx$. The \definiendum{cycle class} of a word $u$, denoted $[u]$, is the set $\{v\in N^*\;|\;v\sim u\}$.
+
+\begin{lemma}\label{lem:aperiodic}
+    If $u\sim v$, and $u$ (hence $v$) contains each element of $N$ at most once, then:
+    \begin{itemize}
+        \item If $u=v$ there are two pairs $(x, y)$ such that $u=xy$ and $v=yx$;
+        \item If $u\ne v$ there is one pair $(x, y)$ such that $u=xy$ and $v=yx$.
+    \end{itemize}
+\end{lemma}
+\begin{proof}
+    Suppose there are two different pairs $(x, y)$ and $(x', y')$, with $u=xy=x'y'$ and $v=yx=y'x'$. We wish to show that this can happen in only one way, and only if $u=v$.
+
+    If $x=x'$ then $y=y'$ and vice versa; so, since the pairs are different, we must have $x\ne x'$ and $y\ne y'$.
+
+    Since $x$ and $x'$ are both prefixes of $u$, one must be a prefix of the other. Suppose, without loss of generality by symmetry, that $x$ is a prefix of $x'$. It follows -- since $y$ and $y'$ are both prefixes of $v$ with $|y'|<|y|$ -- that $y'$ is a prefix of $y$.
+
+    If $|x|>0$ then $x$ has a first element, which is also the first element of $x'$. This element must occur in $v$ at two different positions, since $v=yx=y'x'$ and $y\ne y'$, contradicting the assumption that $v$ contains each element at most once.
+
+    Similarly, if $|y'|>0$ then $y'$ and $y$ have a common first element, which must occur in $u$ at two different places.
+
+    So the only way for there to be two different pairs $(x, y)$ and $(x', y')$ is for $x$ and $y'$ to both be empty. It follows that $y=x'=u=v$, which completely determines the two pairs and is possible only if $u=v$.
+\end{proof}
+
+\subsection{Directed and undirected graphs}
+\def\nodes{\mathrm{nodes}}
+\def\edges{\mathrm{edges}}
+\def\source{\mathrm{source}}
+\def\target{\mathrm{target}}
+Directed graphs: A (weighted) \definiendum{digraph} $G$ consists of a set $\nodes(G)$ of \definiendum{nodes} and a set $\edges(G)$ of \definiendum{edges}. Each edge $e\in\edges(G)$ has a \definiendum{source} $\source(e)\in\nodes(G)$, a \definiendum{target} $\target(e)\in\nodes(G)$, and a \definiendum{weight} $w(e)\in\mathbb{Z}_{\ge 0}$.
+%
+A \definiendum{walk} is a sequence alternating between nodes and edges, beginning and ending with a node, in which each edge is preceded by its source and followed by its target.
+%
+A \definiendum{path} is a walk all of whose nodes are distinct.
+%
+A \definiendum{cycle} is a walk whose first and last nodes are the same, and whose nodes are otherwise distinct.
+%
+The \definiendum{length} $|p|$ of a walk $p$ is the number of edges it contains; the \definiendum{weight} $w(p)$ of a walk $p$ is the sum of the weights of those edges.
+%
+A \definiendum{Hamiltonian path} is a path that visits all nodes.
+%
+A digraph is \definiendum{complete} if for every pair $x$, $y$ of nodes there is a unique edge with source $x$ and target $y$. We denote this edge $x\to y$.
+
+Undirected graphs: a \definiendum{graph} $H$ consists of a set $\nodes(H)$ of \definiendum{nodes} and a symmetric reflexive \definiendum{adjacency relation} $\mathord{\sim_H} \subseteq \nodes(H)\times\nodes(H)$.
+%
+We say there is an \definiendum{edge} between nodes $x$ and $y$ if $x\neq y$ and $x\sim_Hy$.
+%
+The \definiendum{connected components} of $H$ are the equivalence classes of the transitive closure of $\sim_H$.
+
+\section{Superpermutations and the permutation digraph}
+%
+\subsection{Permutations and superpermutations}
+A \definiendum{permutation} is a word that contains each element of $N$ precisely once -- and so has length $n$. The set of all permutations is denoted $P_n$, and $|P_n|=n!$. A \definiendum{superpermutation} is a word that has every permutation as a factor.
+
+\subsection{Overlap distance and the permutation digraph}
+Given two words $u$ and $v$, the \definiendum{overlap distance} $d(u,v)$ is defined to be the minimum value of $|z|$ over all triples of words $(x, y, z)$ for which $xy=u$ and $yz=v$. Observe that $0\le d(u,v)\le|v|$, that $d(u,u)=0$, that $d(u,w)\le d(u,v)+d(v,w)$, and that $d(u,v)\ne d(v,u)$ in general.
+
+Let the \definiendum{permutation digraph} $G_n$ be the complete digraph with $\nodes(G_n)=P_n$, and $w(u\to v) = d(u, v)$.
+
+\subsection{Using $G_n$ to find lower bounds}
+We are interested in lower bounds on the length of a superpermutation $s$. We shall show how to convert a superpermutation to a Hamiltonian path in $G_n$, which allows us to transfer a lower bound on the weight of a Hamiltonian path $p$ in $G_n$ to a lower bound on $|s|$, and also justifies us in considering a restricted family of such paths.
+
+\begin{defn}
+    An edge $u\to v$ in $G_n$ is \definiendum{improper} if there is a permutation $w$ different from both $u$ and $v$ such that $w(u\to w\to v) = w(u\to v)$. Otherwise it is \definiendum{proper}.
+
+    An improper edge $u\to v$ that decomposes as $u\to w\to v$ in this way is said to \definiendum{skip over} the permutation $w$.
+\end{defn}
+\begin{example}
+    For example, in $G_4$ the edge $1234\to 3412$ of weight 2 is improper, because it decomposes as \[
+        1234 \to 2341 \to 3412,
+    \]
+    which consists of two edges of weight 1.
+\end{example}
+\begin{defn}\label{def:well-behaved}
+    A path in $G_n$ is \definiendum{well-behaved} if, whenever it has an improper edge $u\to v$ that skips over some permutation $w$, the path does not visit $w$ before it visits $u$.
+\end{defn}
+
+\begin{lemma}\label{lemma:transfer}
+    Given a superpermutation $s$, we may construct a well-behaved Hamiltonian path $p$ in $G_n$ such that $w(p) \le |s|-n$. The path $p$ has the property that, for any edge $e: u\to v$ in the path, if there is any path $u\to v$ whose weight is 
+\end{lemma}
+\begin{proof}
+Let $s$ be a superpermutation. For each permutation $u$, let $aub$ be the unique factorisation of $s$ such that $u$ is not a factor of $b$. In other words, if $u$ occurs more than once in $s$ we choose its last occurrence. Let $i_q = |a|$, the index of $u$ in $s$. Make a sorted list of permutations $s_1, s_2, \dots, s_{n!}$, sorted by index so that $i_{s_j} < i_{s_k}$ iff $j < k$.
+
+Let the corresponding Hamiltonian path $p$ visit the nodes $s_1, s_2, \dots, s_{n!}$ in order. If $e_k$ is the edge $s_k \to s_{k+1}$ then $w(e_k) \le i_{k+1} - i_k$, since the factor $s[i_k, i_{k+1} + n)$ has $s_k$ as a prefix and $s_{k+1}$ as a suffix, hence
+\[
+    w(p) \le \sum_{k=1}^{n-1} i_{k+1} - i_k = i_n - i_1 \le |s| - n.
+\]
+
+If this path $p$ has an improper edge $s_k \to s_{k+1}$, the factor $s[i_k, i_{k+1} + n)$ contains some permutation other than $s_k$ and $s_{k+1}$ as a factor: call it $v$. Since we chose the last occurrence of $v$ in $s$ when defining $i_v$, we must have $i_v > i_{k+1}$. Hence the path $p$ is well-behaved, as required.
+\end{proof}
+
+If we can show that $w(p) \ge b$ for every well-behaved Hamiltonian path $p$ in $G_n$, we may use Lemma~\ref{lemma:transfer} to conclude that $|s|\ge b+n$ for every superpermutation $s$.
+
+\subsection{The structure of the permutation digraph}
+In this section the variables $c$ and $d$ always refer to elements of $N$, and the variables $u$ and $v$ always refer to elements of $N^*$.
+\subsubsection{1-cycles}
+Define $\pi_1(cu) = uc$ and conversely $\rho_1(uc)=cu$.
+
+\begin{lemma}\label{lem:pi1}
+Let $q, r\in N^*$. Then $q\sim r$ iff there exists $k\in\mathbb{Z}_{\ge 0}$ for which $\pi_1^k(q)=r$.
+\end{lemma}
+\begin{proof}
+If $q\sim r$ then, by definition, there exist $x, y\in N^*$ such that $q=xy$ and $r=yx$. Clearly $\pi_1^{|x|}(q)=r$. Conversely it is immediate that $z\sim\pi_1(z)$ for any $z\in N^*$, therefore
+\[
+    q \sim \pi_1(q) \sim \pi_1^2(q) \sim\cdots\sim \pi_1^k(q)
+\]
+for every $k$.
+\end{proof}
+
+Observe that every edge of weight 1 is of the form $q\to\pi_1(q)$ -- or equivalently of the form $\rho_1(q)\to q$ -- for some $q\in P_n$. So every permutation is the source of one such edge, and the target of another. Thus the set of weight-1 edges constitutes a cycle cover of $G_n$. We shall refer to these cycles of nodes connected by weight-1 edges as \definiendum{1-cycles}. Lemma~\ref{lem:pi1} shows that two permutations belong to the same 1-cycle just when they are cyclically equivalent, and we shall abuse notation and write $[u]$ to denote the 1-cycle whose set of nodes is $[u]$. Each 1-cycle contains $n$ nodes, and different 1-cycles are disjoint.
+
+\begin{defn}\label{def:covers}
+    A path $p$ is said to \definiendum{cover} the 1-cycle $[x]$ if $p$ visits every node of $[x]$.
+\end{defn}
+
+\subsubsection{2-cycles}
+For any $c, d, u$, define $\pi_2(cdu) = udc$ and conversely $\rho_2(udc)=cdu$.
+Every permutation $u$ is the source of two weight-2 edges, with targets $\pi_1^2(u)$ and $\pi_2(u)$ respectively; and similarly $u$ the target of two weight-2 edges with sources $\rho_1^2(u)$ and $\rho_2(u)$.
+
+The most important structures in $G_n$ are the \definiendum{2-cycles}, defined as follows. Let $cu$ be a permutation. For each such $cu$ there is a 2-cycle, denoted $[c/u]$, whose nodes are
+\[
+    \{ acb \;|\; a\in N^*, b\in N^*, ab \in [u] \}.
+\]
+The edges are:
+\begin{itemize}
+    \item $dv\to\pi_1(dv) = vd$, if $d\ne c$;
+    \item $cv\to\pi_2(cv)$.
+\end{itemize}
+
+\let\To\Rightarrow
+For example, if $n=4$ then $[1/234]$ is the following cycle:
+\begin{align*}
+    &2341 \to 3412 \to 4123 \to 1234\\
+    \To{} &3421 \to 4213 \to 2134 \to 1342\\
+    \To{} &4231 \to 2314 \to 3142 \to 1423\\
+    \To{} &2341
+\end{align*}
+where $\to$ denotes an edge of the form $u\to\pi_1(u)$, and $\To$ denotes an edge of the form $u\to\pi_2(u)$.
+
+\begin{defn}
+    The \definiendum{head} of the 2-cycle $[c/u]$ is $c$.
+\end{defn}
+\begin{remark}
+    Some observations about 2-cycles:
+    \begin{itemize}
+        \item $[c/u]=[c/v]$ iff $u\sim v$;
+        \item If $[c/u]$ and $[c/v]$ are 2-cycles, and $u\not\sim v$, then $[c/u]\cap[c/v]=\varnothing$;
+        \item If $v\in[c/u]$, and $w\sim v$, then $w\in[c/u]$. So the set of elements of $[c/u]$ is a union of 1-cycles.
+    \end{itemize}
+\end{remark}
+\begin{lemma}\label{lem:2-cycle-intersection}
+    Any two 2-cycles with different heads may be written as $[c/du]$ and $[d/cv]$ where $c\ne d$.
+    \begin{enumerate}
+        \item If $u=v$ then there are two 1-cycles whose nodes belong to both 2-cycles.
+        \item If $u\ne v$ but $u\sim v$ there is one 1-cycle whose nodes belong to both 2-cycles.
+        \item If $u\not\sim v$ then the 2-cycles are disjoint.
+    \end{enumerate}
+\end{lemma}
+\begin{proof}
+    The 1-cycles of $[c/du]$ are $[cxdy]$, where $yx=u$,
+    and the 1-cycles of $[d/cv]$ are $[cxdy]$ where $xy=v$.
+
+    Therefore we have a common 1-cycle of $[c/du]$ and $[d/cv]$
+    whenever we have words $x$ and $y$ such that $xy=v$ and $yx=u$.
+
+    By definition of $\sim$, this is possible only if $u\sim v$.
+    Lemma~\ref{lem:aperiodic} implies there is just one such pair $(x,y)$ if $u\ne v$, and just two if $u=v$.
+\end{proof}
+\def\tcd#1{\llbracket#1\rrbracket}
+\begin{defn}
+    Given a permutation $uc$, the \definiendum{2-cycle determined by $uc$}, denoted $\tcd{uc}$, is $[c/u]$.
+\end{defn}
+\begin{defn}\label{def:enter}
+    A path $p$ in $G_n$ is said to \definiendum{enter the 2-cycle $t$} if there is an edge $e: x\to y$ in $p$ with $w(e)>1$ and $t=\tcd y$.
+\end{defn}
+
+\begin{lemma}\label{lem:pi12}
+    If $u$ is a permutation, then
+    \[
+        \tcd{pi_1(u)} = \tcd{\pi_2(u)}.
+    \]
+\end{lemma}
+\begin{proof}
+Let $u = cdv$. Then $\pi_1(u) = dvc$, which determines the 2-cycle $[c/dv]$; and $pi_2(u) = vdc$, which determines the 2-cycle $[c/vd]$. But $[c/du] = [c/ud]$, since $du \sim ud$.
+\end{proof}
+
+\section{Lower bounds}
+In which we get to the point at last. The cost function is essentially the one defined by \citet{Anonymous}.
+
+\subsection{The cost function}
+\def\cost{\mathrm{cost}}
+
+\begin{defn}\label{def:cost}
+    Given a path \[
+        p = (x_0, e_1, x_1, \dots, e_{|p|}, x_{|p|})
+    \] in $G_n$, let \[
+        \cost(p) = C_0(p) + C_1(p) + C_2(p) - 2,
+    \]
+    where:
+    \begin{itemize}
+    \item $C_0(p)$ is the number of nodes visited by $p$, i.e.\ $C_0(p) = |p| + 1$.
+    \item $C_1(p)$ is the number of 1-cycles that are covered -- in the sense of Definition~\ref{def:covers} -- by the prefix of $p$ ending at $x_{|p|-1}$, i.e.\ by $p$ without its final node. If $|p|=0$ then $C_1(p)=0$.
+    \item $C_2(p)$ is the number of 2-cycles entered by $p$, in the sense of Definition~\ref{def:enter}.
+    \end{itemize}
+\end{defn}
+
+\begin{thm}\label{thm:cost}
+    For any path $p$ in $G_n$,
+    \[
+        w(p) \ge \cost(p).
+    \]
+\end{thm}
+\begin{proof}
+    We shall use induction on the path $p$.
+    If $|p|=0$, then $C_0(p)=1$, $C_1(p)=0$ and $C_2(p)=1$, hence
+    \[
+        \cost(p) = C_0(p) + C_1(p) + C_2(p) - 2 = 0.
+    \]
+    Let $p$ be a path to the node $x$ that has $w(p) \ge \cost(p)$. Let $e: x\to y$ be an edge of $G_n$, where $p$ does not visit $y$. We need to show that
+    \[
+        w(e) = w(pe) - w(p) \ge \cost(pe) - \cost(p) = (C_0(pe)-C_0(p)) + (C_1(pe)-C_1(p)) + (C_2(pe)-C_2(p)).
+    \]
+    Observe:
+    \begin{itemize}
+        \item It is always true that $C_0(pe)-C_0(p) = 1$.
+        \item $C_1(pe)-C_1(p)$ is 1 if $p$ covers $[x]$, and 0 otherwise.
+        \item $C_2(pe)-C_2(p)$ is 1 if $w(e)>1$ and $p$ does not enter $\tcd y$, and 0 otherwise.
+    \end{itemize}
+
+    Now consider the possibilities for the edge $e$:
+    \begin{itemize}
+        \item If $w(e) = 1$ then $y\in[x]$, so $p$ does not cover $[x]$ and $C_1(pe)-C_1(p)=0$. And $C_1(pe)-C_1(p) = 0$ by Definition~\ref{def:enter}.
+        \item The maximum possible value of $\cost(pe) - \cost(p)$ is 3, so if $w(e)\ge 3$ then there is nothing to prove.
+    \end{itemize}
+    This leaves the case $w(e)=2$, which is the interesting one. It suffices to show that, if $p$ covers $[x]$, then $p$ must also enter $\tcd y$. Suppose, then, that $p$ covers $[x]$. There are a priori two possibilities for $y$ given that $w(e)=2$: either $y=\pi_2(x)$ or $y=\pi_1^2(x)$. We can rule out the latter, however, since $[\pi_1^2(x)]=[x]$ and $p$ covers $[x]$. So $y=\pi_2(x)$.
+
+    We know that $p$ visits $\pi_1(x)$, again since $p$ covers $[x]$. And $p$ necessarily visits $\pi_1(x)$ earlier than it visits $x$, since $x$ is the last node of $p$. So $p$ must have visited $\pi_1(x)$ from some node other than $x$, therefore by an edge of weight ${}>1$. It follows that $p$ enters $\tcd{\pi_1(p)}$, which by Lemma~\ref{lem:pi12} is equal to $\tcd{\pi_2(p)} = \tcd{y}$, as required.
+\end{proof}
+\begin{lemma}\label{lem:Ham}
+    For any Hamiltonian path $p$ in $G_n$,
+    \[
+        \cost(p) = n! + (n-1)! + C_2(p) - 3
+    \]
+\end{lemma}
+\begin{proof}
+    A Hamiltonian path $p$ must, by definition, have $C_0(p)=n!$ and $C_1(p)=(n-1)!-1$.
+\end{proof}
+\begin{cor}\label{cor:Ham}
+    For any Hamiltonian path $p$ in $G_n$,
+    \[
+        w(p) \ge n! + (n-1)! + C_2(p) - 3.
+    \]
+\end{cor}
+\begin{remark}
+    Since a 2-cycle contains $n(n-1)$ nodes, and a Hamiltonian path must visit $n!$ nodes, we have the trivial bound $C_2(p)\ge(n-2)!$ for a Hamiltonian path $p$. Therefore Corollary~\ref{cor:Ham} implies immediately that
+    \[
+        w(p) \ge n! + (n-1)! + (n-2)! - 3,
+    \]
+    hence by Lemma~\ref{lemma:transfer} that
+    \[
+        |s| \ge n! + (n-1)! + (n-2)! + (n - 3)
+    \]
+    for any superpermutation $s$. We shall see later that this bound is not attainable.
+\end{remark}
+\subsection{Slack}
+\def\slack{\mathrm{slack}}
+In order to strengthen the lower bound, we must consider the situations that increase its weight above the floor determined by the cost function. So we define:
+\begin{defn}\label{def:slack}
+    The \definiendum{slack} of a path $p$ is the difference
+    \[
+        \slack(p) = w(p) - \cost(p)
+    \]
+    The \definiendum{slack} of an edge $e: x\to y$ of a path $p$ is
+    \[
+        \slack_p(e) = \slack(p_y) - \slack(p_x)
+    \]
+    where $p_x$ is the prefix of $p$ ending at $x$, and $p_y$ is the prefix of $p$ ending at $y$.
+\end{defn}
+
+It follows from Corollary~\ref{cor:Ham} that the weight of a Hamiltonian path $p$ depends only on:
+\begin{itemize}
+    \item The number of 2-cycles entered by $p$, and
+    \item How much slack $p$ contains, i.e.\ the value of $\slack(p)$.
+\end{itemize}
+
+\begin{remark}
+    The number of 2-cycles entered by $p$ is bounded by how those 2-cycles overlap each other. For example, the theoretical minimum $C_2(p)=(n-2)!$ is attainable only if each 2-cycle entered by $p$ is disjoint from every other.
+\end{remark}
+\begin{remark}
+    The known examples of low-weight Hamiltonian paths suggest there is a trade-off between the number of 2-cycles entered and the amount of slack. Paths that enter fewer 2-cycles seem to have more slack. In the next section we begin to quantify this.
+\end{remark}
+
+\section{Towards a stronger lower bound}\label{s:stronger}
+\subsection{Tight paths}
+
+\begin{defn}\label{def:tight}
+    \item A path or cycle $p$ is \definiendum{tight} if it has no slack, i.e.\ if $\slack(p)=0$.
+    \item An edge $e$ of a path $p$ is tight if $\slack_p(e)=0$.
+    \item If $p$ is a path and $S\subseteq\nodes(p)$, say $p$ is tight on $S$ if $\slack_p(e)=0$ for every $e\in\edges(p)$ with $\source(e)\in S$.
+\end{defn}
+
+\begin{lemma}\label{lem:tight-char}
+    Suppose $e: x\to y$ is a tight edge of the path $peq$, i.e.\ $p$ is the prefix of the path ending at $x$, and $q$ is the suffix of the path starting at $y$. Then precisely one of the following must hold:
+    \begin{itemize}
+        \item $w(e)=1$;
+        \item $w(e)=2$, and $p$ covers $[x]$, and $p$ enters $\tcd y$;
+        \item $w(e)=2$, and $p$ does not cover $[x]$, and $p$ does not enter $\tcd y$;
+        \item $w(e)=3$, and $p$ covers $[x]$, and $p$ does not enter $\tcd y$.
+    \end{itemize}
+\end{lemma}
+\begin{proof}
+    This follows from Definitions~\ref{def:cost}, \ref{def:slack} and~\ref{def:tight}.
+    TODO: more details
+\end{proof}
+
+\begin{lemma}\label{lem:tight-contra}
+Suppose $e: x\to y$ is an edge of a well-behaved Hamiltonian path $peq$, i.e.\ $p$ is the prefix of the path ending at $x$, and $q$ is the suffix of the path starting at $y$. The following cannot all be true:
+\begin{itemize}
+    \item $p$ visits $pi_1(x)$;
+    \item $p$ does not cover $[x]$;
+    \item $e$ is tight in $p$.
+\end{itemize}
+\end{lemma}
+\begin{proof}
+    Let us assume all these are true, and derive a contradiction. Since $p$ visits $\pi_1(x)$, we cannot have $y = \pi_1(x)$, hence $w(e) > 1$. Since $p$ does not cover $[x]$ and the edge $e$ is tight, from Lemma~\ref{lem:tight-char} we conclude that $w(e) = 2$ and $p$ does not enter $\tcd y$.
+
+    Since $p$ visits $\pi_1(x)$, because $p$ is well-behaved (Definition~\ref{def:well-behaved}) we cannot have $y = \pi_1^2(x)$, so we must have $y = \pi_2(x)$. But we know that $p$ must have visited $\pi_1(x)$ by an edge of weight ${} > 1$ -- since it visits $x$ later -- and therefore must have entered the 2-cycle $\tcd{\pi_1(x)} = \tcd{\pi_2(x)} = \tcd{y}$. This is a contradiction.
+\end{proof}
+
+\begin{lemma}\label{lem:contig}
+    Let $p$ be a well-behaved Hamiltonian path that is tight on some 1-cycle $[x]$. Every prefix of $p$ visits a contiguous (or empty) portion of $[x]$.
+\end{lemma}
+\begin{proof}
+    Suppose a well-behaved Hamiltonian path $p$ has a prefix $q$ that visits a non-contiguous portion of some 1-cycle $[x]$. We shall show that $p$ cannot be tight on $[x]$.
+
+    Let $S$ be the set of elements $w$ of $[x]$ such that:
+    \begin{itemize}
+        \item $w$ is not in $q$,
+        \item and $\pi_1(w)$ is in $q$.
+    \end{itemize}
+
+    Since $q$ visits a non-contiguous portion of the 1-cycle $[x]$, we have $|S| > 1$. Let $w$ be the first node of $p$ that belongs to $S$, and let $r$ be the prefix of $p$ ending at $w$. Since $S\subseteq[x]$, we have $[w]=[x]$.
+
+    We know that $S-\{w\}$ is non-empty, and that $r$ visits no element of $S-\{w\}$, thus $r$ does not cover $[x]$. We also know that $\pi_1(w)$ is in $q$, so it follows from Lemma~\ref{lem:tight-contra} that $p$ cannot be tight on $[x]$.
+\end{proof}
+
+\subsection{The 2-cycle graph of a path}\label{s:2-cycle-graph}
+\begin{defn}
+    The \definiendum{2-cycle graph} of a path $p$, denoted $H_p$, has as nodes the 2-cycles entered by $p$ in the sense of Definition~\ref{def:enter}, and an edge between $t$ and $t'$ if $t$ and $t'$ share one or two 1-cycles: see Lemma~\ref{lem:2-cycle-intersection}.
+\end{defn}
+
+\def\cc{\mathrm{cc}}
+\begin{defn}
+    Let $\cc(p)$ denote the number of connected components of $H_p$.
+\end{defn}
+\begin{lemma}\label{lem:few-ccs}
+If $p$ is a Hamiltonian path in $G_n$ then
+\[
+    C_2(p) \ge (n-2)! + (n-3)! - \frac{\cc(p)}{n-2}.
+\]
+\end{lemma}
+\begin{proof}
+    Order the nodes of $H_p$ as
+    \[
+        x_1, x_2, \dots, x_{C_2(p)}
+    \]
+    in such a way that, for every $1 < i \le C_2(p)$, if there is any node among
+    $x_{i+1},\dots,x_{C_2(p)}$ that is adjacent to some node in $x_1,\dots,x_{i-1}$,
+    then the node $x_i$ is adjacent in $H_p$ to some node in $x_1,\dots,x_{i-1}$.
+
+    Assign each 1-cycle of $G_n$ to the first 2-cycle in this list that contains that 1-cycle. A node that is not adjacent in $H_p$ to any of its predecessors will be assigned all $n-1$ of the 1-cycles that make up that 2-cycle; any other node, that is adjacent to at least one of its predecessors, will be assigned at most $n-2$ 1-cycles.
+
+    The number of nodes not adjacent to any predecessor is just $\cc(p)$, so counting 1-cycles we have:
+    \[
+        \cc(p) + (n-2)C_2(p) \ge (n-1)!
+    \]
+
+    Dividing by $n-2$ gives the claimed inequality, because
+    \begin{align*}
+        \frac{(n-1)!}{n-2} &= (n-1)(n-3)! \\
+        &= ((n-2)+1)(n-3)! \\
+        &= (n-2)! + (n-3)!
+    \end{align*}
+\end{proof}
+\begin{cor}\label{cor:few-ccs}
+    Let $p$ be a Hamiltonian path in $G_n$.
+    If the 2-cycle graph of $p$ has no more than $k(n-2)$ connected components, for some positive integer $k$, then
+    \[
+        w(p) \ge n! + (n-1)! + (n-2)! + (n-3)! - (3 + k) + \slack(p).
+    \]
+\end{cor}
+\begin{proof}
+    By Definition~\ref{def:slack} we have
+    \[
+        w(p) = \cost(p) + \slack(p),
+    \]
+    and by Lemma~\ref{lem:Ham} we have
+    \[
+        \cost(p) = n! + (n-1)! + C_2(p) - 3,
+    \]
+    hence \[
+        w(p) = n! + (n-1)! + C_2(p) - 3 + \slack(p),
+    \]
+    and by Lemma~\ref{lem:few-ccs},
+    \[
+        w(p) \ge n! + (n-1)! + (n-2)! + (n-3)! - \frac{\cc(p)}{n-2} - 3 + \slack(p).
+    \]
+    If $\cc(p)\le k(n-2)$ then $\frac{\cc(p)}{n-2}\le k$, and the claim follows.
+\end{proof}
+\begin{remark}
+In certain cases, this bound is known to be achievable.
+\begin{itemize}
+    \item \citet{Egan2018} shows that for every $n$ there is a Hamiltonian path $p$ of $G_n$ with $\cc(p)=1$ and $\slack(p)=0$ that has
+    \[
+        w(p) = n! + (n-1)! + (n-2)! + (n-3)! - 2,
+    \]
+    which Corollary~\ref{cor:few-ccs} shows is the lowest possible weight for a Hamiltonian path $p$ with $\cc(p)=1$.
+    \item For $n\le 6$ there are known to be Hamiltonian paths $p$ with $\cc(p)=n-2$, $\slack(p)=0$ and \[
+        w(p) = n! + (n-1)! + (n-2)! + (n-3)! - 3,
+    \]
+    which again is the lowest possible weight for a Hamiltonian path $p$ with $\cc(p)=n-2$.
+\end{itemize}
+\end{remark}
+
+\subsection{From 2-cycle graphs to paths}
+\begin{defn}
+    An edge of a 2-cycle graph, connecting $a$ and $b$, is \definiendum{simple} if $a$ and $b$ intersect on a single 2-cycle.
+    A 2-cycle graph is \definiendum{simple} if it is acyclic and all its edges are simple.
+    A 2-cycle graph is \definiendum{almost simple} if it fails to be simple in just one place; specifically:
+    \begin{itemize}
+        \item either it is acyclic and has a single non-simple edge,
+        \item or all its edges are simple, and it has a single cycle -- in the sense that there is a single edge such that removing that edge would leave an acyclic graph.
+    \end{itemize}
+\end{defn}
+The following is really useful for showing upper bounds, rather than lower bounds, and is not proved here. But, so it is not forgotten:
+\begin{prop}
+Some 2-cycle graphs can always be traversed by tight paths.
+
+\begin{itemize}
+    \item A simple, connected 2-cycle graph may be traversed by a tight cycle.
+    \item An almost simple, connected 2-cycle graph may be traversed by a tight path.
+\end{itemize}
+\end{prop}
+
+\bibliographystyle{plainnat}
+\bibliography{refs}
+\end{document}
