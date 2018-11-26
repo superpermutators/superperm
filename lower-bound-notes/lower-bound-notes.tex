@@ -146,17 +146,17 @@ In this section the variables $c$ and $d$ always refer to elements of $N$, and t
 Define $\pi_1(cu) = uc$ and conversely $\rho_1(uc)=cu$.
 
 \begin{lemma}\label{lem:pi1}
-Let $q, r\in N^*$. Then $q\sim r$ iff there exists $k\in\mathbb{Z}_{\ge 0}$ for which $\pi_1^k(q)=r$.
+Let $u, v\in N^*$. Then $u\sim v$ iff there exists $k\in\mathbb{Z}_{\ge 0}$ for which $\pi_1^k(u)=v$.
 \end{lemma}
 \begin{proof}
-If $q\sim r$ then, by definition, there exist $x, y\in N^*$ such that $q=xy$ and $r=yx$. Clearly $\pi_1^{|x|}(q)=r$. Conversely it is immediate that $z\sim\pi_1(z)$ for any $z\in N^*$, therefore
+If $u\sim v$ then, by definition, there exist $x, y\in N^*$ such that $u=xy$ and $v=yx$. Clearly $\pi_1^{|x|}(u)=v$. Conversely it is immediate that $z\sim\pi_1(z)$ for any $z\in N^*$, therefore
 \[
-    q \sim \pi_1(q) \sim \pi_1^2(q) \sim\cdots\sim \pi_1^k(q)
+    u \sim \pi_1(u) \sim \pi_1^2(u) \sim\cdots\sim \pi_1^k(u)
 \]
 for every $k$.
 \end{proof}
 
-Observe that every edge of weight 1 is of the form $q\to\pi_1(q)$ -- or equivalently of the form $\rho_1(q)\to q$ -- for some $q\in P_n$. So every permutation is the source of one such edge, and the target of another. Thus the set of weight-1 edges constitutes a cycle cover of $G_n$. We shall refer to these cycles of nodes connected by weight-1 edges as \definiendum{1-cycles}. Lemma~\ref{lem:pi1} shows that two permutations belong to the same 1-cycle just when they are cyclically equivalent, and we shall abuse notation and write $[u]$ to denote the 1-cycle whose set of nodes is $[u]$. Each 1-cycle contains $n$ nodes, and different 1-cycles are disjoint.
+Observe that every edge of weight 1 is of the form $u\to\pi_1(u)$ -- or equivalently of the form $\rho_1(u)\to u$ -- for some $u\in P_n$. So every permutation is the source of one such edge, and the target of another. Thus the set of weight-1 edges constitutes a cycle cover of $G_n$. We shall refer to these cycles of nodes connected by weight-1 edges as \definiendum{1-cycles}. Lemma~\ref{lem:pi1} shows that two permutations belong to the same 1-cycle just when they are cyclically equivalent, and we shall abuse notation and write $[u]$ to denote the 1-cycle whose set of nodes is $[u]$. Each 1-cycle contains $n$ nodes, and different 1-cycles are disjoint.
 
 \begin{defn}\label{def:covers}
     A path $p$ is said to \definiendum{cover} the 1-cycle $[x]$ if $p$ visits every node of $[x]$.
@@ -168,7 +168,7 @@ Every permutation $u$ is the source of two weight-2 edges, with targets $\pi_1^2
 
 The most important structures in $G_n$ are the \definiendum{2-cycles}, defined as follows. Let $cu$ be a permutation. For each such $cu$ there is a 2-cycle, denoted $[c/u]$, whose nodes are
 \[
-    \{ acb \;|\; a\in N^*, b\in N^*, ab \in [u] \}.
+    \{ xcy \;|\; x\in N^*, y\in N^*, xy \in [u] \}.
 \]
 The edges are:
 \begin{itemize}
