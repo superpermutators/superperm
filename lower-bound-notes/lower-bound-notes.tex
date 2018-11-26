@@ -128,7 +128,7 @@ We are interested in lower bounds on the length of a superpermutation $s$. We sh
     Given a superpermutation $s$, we may construct a well-behaved Hamiltonian path $p$ in $G_n$ such that $w(p) \le |s|-n$. The path $p$ has the property that, for any edge $e: u\to v$ in the path, if there is any path $u\to v$ whose weight is 
 \end{lemma}
 \begin{proof}
-Let $s$ be a superpermutation. For each permutation $u$, let $aub$ be the unique factorisation of $s$ such that $u$ is not a factor of $b$. In other words, if $u$ occurs more than once in $s$ we choose its last occurrence. Let $i_q = |a|$, the index of $u$ in $s$. Make a sorted list of permutations $s_1, s_2, \dots, s_{n!}$, sorted by index so that $i_{s_j} < i_{s_k}$ iff $j < k$.
+Let $s$ be a superpermutation. For each permutation $u$, let $aub$ be the unique factorisation of $s$ such that $u$ is not a factor of $b$. In other words, if $u$ occurs more than once in $s$ we choose its last occurrence. Let $i_u = |a|$, the index of $u$ in $s$. Make a sorted list of permutations $s_1, s_2, \dots, s_{n!}$, sorted by index so that $i_{s_j} < i_{s_k}$ iff $j < k$.
 
 Let the corresponding Hamiltonian path $p$ visit the nodes $s_1, s_2, \dots, s_{n!}$ in order. If $e_k$ is the edge $s_k \to s_{k+1}$ then $w(e_k) \le i_{k+1} - i_k$, since the factor $s[i_k, i_{k+1} + n)$ has $s_k$ as a prefix and $s_{k+1}$ as a suffix, hence
 \[
