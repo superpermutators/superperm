@@ -24,7 +24,7 @@
 \let\definiendum\textbf
 
 \author{Robin Houston}
-\title{Superpermutations\\[0.4em]\large Notes on the lower bound\\[0.4em]\normalsize Version 0.3.0}
+\title{Superpermutations\\[0.4em]\large Notes on the lower bound\\[0.4em]\normalsize Version 0.3.1}
 
 \begin{document}
 \maketitle
@@ -338,11 +338,11 @@ In order to strengthen the lower bound, we must consider the situations that inc
 \begin{defn}\label{def:slack}
     The \definiendum{slack} of a path $p$ is the difference
     \[
-        \slack(p) = w(p) - \cost(p)
+        \slack(p) = w(p) - \cost(p).
     \]
     The \definiendum{slack} of an edge $e: x\to y$ of a path $p$ is
     \[
-        \slack_p(e) = \slack(p_y) - \slack(p_x)
+        \slack_p(e) = \slack(p_y) - \slack(p_x),
     \]
     where $p_x$ is the prefix of $p$ ending at $x$, and $p_y$ is the prefix of $p$ ending at $y$.
 \end{defn}
