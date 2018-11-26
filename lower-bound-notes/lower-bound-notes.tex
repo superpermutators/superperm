@@ -24,7 +24,7 @@
 \let\definiendum\textbf
 
 \author{Robin Houston}
-\title{Superpermutations\\[0.4em]\large Notes on the lower bound\\[0.4em]\normalsize Version 0.2.0}
+\title{Superpermutations\\[0.4em]\large Notes on the lower bound\\[0.4em]\normalsize Version 0.3.0}
 
 \begin{document}
 \maketitle
@@ -94,11 +94,11 @@ Undirected graphs: a \definiendum{graph} $H$ consists of a set $\nodes(H)$ of \d
 %
 We say there is an \definiendum{edge} between nodes $x$ and $y$ if $x\neq y$ and $x\sim_Hy$.
 %
-The \definiendum{connected components} of $H$ are the equivalence classes of the transitive closure of $\sim_H$.
+A \definiendum{connected component} of $H$ is an equivalence class of the transitive closure of $\sim_H$.
 
 \section{Superpermutations and the permutation digraph}
 %
-\subsection{Permutations and superpermutations}
+\subsection{Permutations and superpermutations}\label{s:permutations-and-superpermutations}
 A \definiendum{permutation} is a word that contains each element of $N$ precisely once -- and so has length $n$. The set of all permutations is denoted $P_n$, and $|P_n|=n!$. A \definiendum{superpermutation} is a word that has every permutation as a factor.
 
 \subsection{Overlap distance and the permutation digraph}
@@ -125,12 +125,12 @@ We are interested in lower bounds on the length of a superpermutation $s$. We sh
 \end{defn}
 
 \begin{lemma}\label{lemma:transfer}
-    Given a superpermutation $s$, we may construct a well-behaved Hamiltonian path $p$ in $G_n$ such that $w(p) \le |s|-n$. The path $p$ has the property that, for any edge $e: u\to v$ in the path, if there is any path $u\to v$ whose weight is 
+    Given a superpermutation $s$, we may construct a well-behaved Hamiltonian path $p$ in $G_n$ such that $w(p) \le |s|-n$.
 \end{lemma}
 \begin{proof}
 Let $s$ be a superpermutation. For each permutation $u$, let $aub$ be the unique factorisation of $s$ such that $u$ is not a factor of $b$. In other words, if $u$ occurs more than once in $s$ we choose its last occurrence. Let $i_u = |a|$, the index of $u$ in $s$. Make a sorted list of permutations $s_1, s_2, \dots, s_{n!}$, sorted by index so that $i_{s_j} < i_{s_k}$ iff $j < k$.
 
-Let the corresponding Hamiltonian path $p$ visit the nodes $s_1, s_2, \dots, s_{n!}$ in order. If $e_k$ is the edge $s_k \to s_{k+1}$ then $w(e_k) \le i_{k+1} - i_k$, since the factor $s[i_k, i_{k+1} + n)$ has $s_k$ as a prefix and $s_{k+1}$ as a suffix, hence
+Let the corresponding Hamiltonian path $p$ visit the nodes $s_1, s_2, \dots, s_{n!}$ in order. If $e_k$ is the edge $s_k \to s_{k+1}$ then $w(e_k) \le i_{k+1} - i_k$, since the factor $s[i_k, i_{k+1} + n)$ has $s_k$ as a prefix and $s_{k+1}$ as a suffix. Hence
 \[
     w(p) \le \sum_{k=1}^{n-1} i_{k+1} - i_k = i_n - i_1 \le |s| - n.
 \]
@@ -141,11 +141,19 @@ If this path $p$ has an improper edge $s_k \to s_{k+1}$, the factor $s[i_k, i_{k
 If we can show that $w(p) \ge b$ for every well-behaved Hamiltonian path $p$ in $G_n$, we may use Lemma~\ref{lemma:transfer} to conclude that $|s|\ge b+n$ for every superpermutation $s$.
 
 \subsection{The structure of the permutation digraph}
-In this section the variables $c$ and $d$ always refer to elements of $N$, and the variables $u$ and $v$ always refer to elements of $N^*$.
 \subsubsection{1-cycles}
-Define $\pi_1(cu) = uc$ and conversely $\rho_1(uc)=cu$.
+\begin{defn}\label{def:pi1}
+    Define $\pi_1(cu) = uc$, for $c\in N$ and $u\in N^*$.
+\end{defn}
+\begin{lemma}\label{lem:pi1-bijection}
+    $\pi_1$ is a bijection on the set $N^+$ of non-empty words,
+    and restricts to a bijection on $P_n$.
+\end{lemma}
+\begin{proof}
+    Its inverse is $\pi_1^{-1}(uc)=cu$. It is immediate from the definition of `permutation' in Subsection~\ref{s:permutations-and-superpermutations} that $cu$ is a permutation whenever $uc$ is.
+\end{proof}
 
-\begin{lemma}\label{lem:pi1}
+\begin{lemma}\label{lem:pi1-sim}
 Let $u, v\in N^*$. Then $u\sim v$ iff there exists $k\in\mathbb{Z}_{\ge 0}$ for which $\pi_1^k(u)=v$.
 \end{lemma}
 \begin{proof}
@@ -156,35 +164,48 @@ If $u\sim v$ then, by definition, there exist $x, y\in N^*$ such that $u=xy$ and
 for every $k$.
 \end{proof}
 
-Observe that every edge of weight 1 is of the form $u\to\pi_1(u)$ -- or equivalently of the form $\rho_1(u)\to u$ -- for some $u\in P_n$. So every permutation is the source of one such edge, and the target of another. Thus the set of weight-1 edges constitutes a cycle cover of $G_n$. We shall refer to these cycles of nodes connected by weight-1 edges as \definiendum{1-cycles}. Lemma~\ref{lem:pi1} shows that two permutations belong to the same 1-cycle just when they are cyclically equivalent, and we shall abuse notation and write $[u]$ to denote the 1-cycle whose set of nodes is $[u]$. Each 1-cycle contains $n$ nodes, and different 1-cycles are disjoint.
+Observe that every edge of weight 1 is of the form $u\to\pi_1(u)$ for some $u\in P_n$. So every permutation is the source of one such edge, and the target of another. Thus the set of weight-1 edges constitutes a cycle cover of $G_n$. We shall refer to these cycles of nodes connected by weight-1 edges as \definiendum{1-cycles}. Lemma~\ref{lem:pi1-sim} shows that two permutations belong to the same 1-cycle just when they are cyclically equivalent, and we shall abuse notation and write $[u]$ to denote the 1-cycle whose set of nodes is $[u]$. Each 1-cycle contains $n$ nodes, and different 1-cycles are disjoint.
 
 \begin{defn}\label{def:covers}
     A path $p$ is said to \definiendum{cover} the 1-cycle $[x]$ if $p$ visits every node of $[x]$.
 \end{defn}
 
 \subsubsection{2-cycles}
-For any $c, d\in N$ and $u\in N^*$, define $\pi_2(cdu) = udc$ and conversely $\rho_2(udc)=cdu$.
-Every permutation $v$ is the source of two weight-2 edges, with targets $\pi_1^2(v)$ and $\pi_2(v)$ respectively; and similarly $v$ is the target of two weight-2 edges with sources $\rho_1^2(v)$ and $\rho_2(v)$.
+\begin{defn}
+    Let $\pi_2(cdu) = udc$ for $c, d\in N$ and $u\in N^*$.
+\end{defn}
+\begin{lemma}
+    $\pi_2$ is a bijection on the set of words that have length at least 2, and restricts to a bijection on $P_n$.
+\end{lemma}
+\begin{proof}
+    The inverse $\pi_2^{-1}(udc) = cdu$ exists for any word with at least two elements,
+    and it is immediate from the definition of `permutation` (Subsection~\ref{s:permutations-and-superpermutations}) that $udc$ is a permutation iff $cdu$ is.
+\end{proof}
+Every permutation $v$ is the source of two weight-2 edges, with targets $\pi_1^2(v)$ and $\pi_2(v)$ respectively; and similarly $v$ is the target of two weight-2 edges with sources $\pi_1^{-2}(v)$ and $\pi_2^{-1}(v)$.
 
-The most important structures in $G_n$ are the \definiendum{2-cycles}, defined as follows. Let $cu$ be a permutation. For each such $cu$ there is a 2-cycle, denoted $[c/u]$, whose nodes are
-\[
-    \{ xcy \;|\; x\in N^*, y\in N^*, xy \in [u] \}.
-\]
-The edges are:
-\begin{itemize}
-    \item $dv\to\pi_1(dv) = vd$, if $d\ne c$;
-    \item $cv\to\pi_2(cv)$.
-\end{itemize}
-
+The most important structures in $G_n$ are the \definiendum{2-cycles}, defined as follows.
+\begin{defn}
+    Let $cu$ be a permutation. For each such $cu$ there is a 2-cycle, denoted $[c/u]$, whose nodes are
+    \[
+        \{ xcy \;|\; x\in N^*, y\in N^*, xy \in [u] \}.
+    \]
+    The edges are:
+    \begin{itemize}
+        \item $dv\to\pi_1(dv) = vd$, if $d\ne c$;
+        \item $cv\to\pi_2(cv)$.
+    \end{itemize}
+\end{defn}
 \let\To\Rightarrow
-For example, if $n=4$ then $[1/234]$ is the following cycle:
-\begin{align*}
-    &2341 \to 3412 \to 4123 \to 1234\\
-    \To{} &3421 \to 4213 \to 2134 \to 1342\\
-    \To{} &4231 \to 2314 \to 3142 \to 1423\\
-    \To{} &2341
-\end{align*}
-where $\to$ denotes an edge of the form $u\to\pi_1(u)$, and $\To$ denotes an edge of the form $u\to\pi_2(u)$.
+\begin{example}
+    If $n=4$ then $[1/234]$ is the following cycle:
+    \begin{align*}
+        &2341 \to 3412 \to 4123 \to 1234\\
+        \To{} &3421 \to 4213 \to 2134 \to 1342\\
+        \To{} &4231 \to 2314 \to 3142 \to 1423\\
+        \To{} &2341
+    \end{align*}
+    where $\to$ denotes an edge of the form $u\to\pi_1(u)$, and $\To$ denotes an edge of the form $u\to\pi_2(u)$.
+\end{example}
 
 \begin{defn}
     The \definiendum{head} of the 2-cycle $[c/u]$ is $c$.
@@ -226,11 +247,11 @@ where $\to$ denotes an edge of the form $u\to\pi_1(u)$, and $\To$ denotes an edg
 \begin{lemma}\label{lem:pi12}
     If $u$ is a permutation, then
     \[
-        \tcd{pi_1(u)} = \tcd{\pi_2(u)}.
+        \tcd{\pi_1(u)} = \tcd{\pi_2(u)}.
     \]
 \end{lemma}
 \begin{proof}
-Let $u = cdv$. Then $\pi_1(u) = dvc$, which determines the 2-cycle $[c/dv]$; and $pi_2(u) = vdc$, which determines the 2-cycle $[c/vd]$. But $[c/du] = [c/ud]$, since $du \sim ud$.
+Let $u = cdv$. Then $\pi_1(u) = dvc$, which determines the 2-cycle $[c/dv]$; and $\pi_2(u) = vdc$, which determines the 2-cycle $[c/vd]$. But $[c/du] = [c/ud]$, since $du \sim ud$.
 \end{proof}
 
 \section{Lower bounds}
@@ -283,7 +304,7 @@ In which we get to the point at last. The cost function is essentially the one d
     \end{itemize}
     This leaves the case $w(e)=2$, which is the interesting one. It suffices to show that, if $p$ covers $[x]$, then $p$ must also enter $\tcd y$. Suppose, then, that $p$ covers $[x]$. There are a priori two possibilities for $y$ given that $w(e)=2$: either $y=\pi_2(x)$ or $y=\pi_1^2(x)$. We can rule out the latter, however, since $[\pi_1^2(x)]=[x]$ and $p$ covers $[x]$. So $y=\pi_2(x)$.
 
-    We know that $p$ visits $\pi_1(x)$, again since $p$ covers $[x]$. And $p$ necessarily visits $\pi_1(x)$ earlier than it visits $x$, since $x$ is the last node of $p$. So $p$ must have visited $\pi_1(x)$ from some node other than $x$, therefore by an edge of weight ${}>1$. It follows that $p$ enters $\tcd{\pi_1(p)}$, which by Lemma~\ref{lem:pi12} is equal to $\tcd{\pi_2(p)} = \tcd{y}$, as required.
+    We know that $p$ visits $\pi_1(x)$, again since $p$ covers $[x]$. And $p$ necessarily visits $\pi_1(x)$ earlier than it visits $x$, since $x$ is the last node of $p$. So $p$ must have visited $\pi_1(x)$ from some node other than $x$, therefore by an edge of weight $>1$. It follows that $p$ enters $\tcd{\pi_1(x)}$, which by Lemma~\ref{lem:pi12} is equal to $\tcd{\pi_2(x)} = \tcd{y}$, as required.
 \end{proof}
 \begin{lemma}\label{lem:Ham}
     For any Hamiltonian path $p$ in $G_n$,
@@ -365,7 +386,7 @@ It follows from Corollary~\ref{cor:Ham} that the weight of a Hamiltonian path $p
 \begin{lemma}\label{lem:tight-contra}
 Suppose $e: x\to y$ is an edge of a well-behaved Hamiltonian path $peq$, i.e.\ $p$ is the prefix of the path ending at $x$, and $q$ is the suffix of the path starting at $y$. The following cannot all be true:
 \begin{itemize}
-    \item $p$ visits $pi_1(x)$;
+    \item $p$ visits $\pi_1(x)$;
     \item $p$ does not cover $[x]$;
     \item $e$ is tight in $p$.
 \end{itemize}
@@ -373,7 +394,7 @@ Suppose $e: x\to y$ is an edge of a well-behaved Hamiltonian path $peq$, i.e.\ $
 \begin{proof}
     Let us assume all these are true, and derive a contradiction. Since $p$ visits $\pi_1(x)$, we cannot have $y = \pi_1(x)$, hence $w(e) > 1$. Since $p$ does not cover $[x]$ and the edge $e$ is tight, from Lemma~\ref{lem:tight-char} we conclude that $w(e) = 2$ and $p$ does not enter $\tcd y$.
 
-    Since $p$ visits $\pi_1(x)$, because $p$ is well-behaved (Definition~\ref{def:well-behaved}) we cannot have $y = \pi_1^2(x)$, so we must have $y = \pi_2(x)$. But we know that $p$ must have visited $\pi_1(x)$ by an edge of weight ${} > 1$ -- since it visits $x$ later -- and therefore must have entered the 2-cycle $\tcd{\pi_1(x)} = \tcd{\pi_2(x)} = \tcd{y}$. This is a contradiction.
+    Since $p$ visits $\pi_1(x)$, because $p$ is well-behaved (Definition~\ref{def:well-behaved}) we cannot have $y = \pi_1^2(x)$, so we must have $y = \pi_2(x)$. But we know that $p$ must have visited $\pi_1(x)$ by an edge of weight $> 1$ -- since it visits $x$ later -- and therefore must have entered the 2-cycle $\tcd{\pi_1(x)} = \tcd{\pi_2(x)} = \tcd{y}$. This is a contradiction.
 \end{proof}
 
 \begin{lemma}\label{lem:contig}
