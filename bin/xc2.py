@@ -149,7 +149,7 @@ def shuffle(s):
 def double_3cycle(n):
 	"""
 	Return an exact cover instance whose solutions represent
-	superpermutations with two disjoint traversed 3-cycles, and
+	superpermutations with two traversed 3-cycles, and
 	the rest of the 2-cycles attached in a tree.
 	"""
 
@@ -165,6 +165,29 @@ def double_3cycle(n):
 			secondary.update(partial_two_cycle.secondary_constraints())
 
 	return (m, secondary)
+
+def triple_3cycle(n):
+	"""
+	Return an exact cover instance whose solutions represent
+	superpermutations with two traversed 3-cycles, and
+	the rest of the 2-cycles attached in a tree.
+	"""
+
+	m = []
+	secondary = set()
+	three_cycles = set(ThreeCycle(SYMBOLS[:n]).one_cycles()).union(
+		ThreeCycle(SYMBOLS[1] + SYMBOLS[2] + SYMBOLS[0] + SYMBOLS[3:n]).one_cycles()
+	).union(
+		ThreeCycle(SYMBOLS[2] + SYMBOLS[0] + SYMBOLS[1] + SYMBOLS[3:n]).one_cycles()
+	)
+
+	for partial_two_cycle in partial_two_cycles(n):
+		if not partial_two_cycle.intersection(three_cycles):
+			m.append(partial_two_cycle)
+			secondary.update(partial_two_cycle.secondary_constraints())
+
+	return (m, secondary)
+
 
 class BadSolution(Exception):
 	def __init__(self):
@@ -252,6 +275,7 @@ def solution_as_superpermutation(n, solution):
 
 n = int(sys.argv[1])
 matrix, secondary = double_3cycle(n)
+# matrix, secondary = triple_3cycle(n)
 for solution in exactcover.Coverings(matrix, secondary):
 	try:
 		print solution_as_superpermutation(n, solution)
