@@ -156,7 +156,7 @@ def double_3cycle(n):
 	m = []
 	secondary = set()
 	three_cycles = set(ThreeCycle(SYMBOLS[:n]).one_cycles()).union(
-		ThreeCycle(SYMBOLS[1] + SYMBOLS[2] + SYMBOLS[0] + SYMBOLS[3:n]).one_cycles()
+		ThreeCycle(SYMBOLS[1:n-3] + SYMBOLS[0] + SYMBOLS[n-3:n]).one_cycles()
 	)
 
 	for partial_two_cycle in partial_two_cycles(n):
@@ -166,20 +166,23 @@ def double_3cycle(n):
 
 	return (m, secondary)
 
-def triple_3cycle(n):
+def single_4cycle(n):
 	"""
 	Return an exact cover instance whose solutions represent
-	superpermutations with two traversed 3-cycles, and
+	superpermutations with a single traversed 4-cycle, and
 	the rest of the 2-cycles attached in a tree.
 	"""
 
 	m = []
 	secondary = set()
-	three_cycles = set(ThreeCycle(SYMBOLS[:n]).one_cycles()).union(
-		ThreeCycle(SYMBOLS[1] + SYMBOLS[2] + SYMBOLS[0] + SYMBOLS[3:n]).one_cycles()
-	).union(
-		ThreeCycle(SYMBOLS[2] + SYMBOLS[0] + SYMBOLS[1] + SYMBOLS[3:n]).one_cycles()
-	)
+	three_cycles = set()
+
+	a = SYMBOLS[:n-3]
+	b = SYMBOLS[n-3:n]
+	for i in range(len(a)):
+		three_cycles = three_cycles.union(
+			ThreeCycle(a[i:] + a[:i] + b).one_cycles()
+		)
 
 	for partial_two_cycle in partial_two_cycles(n):
 		if not partial_two_cycle.intersection(three_cycles):
@@ -274,8 +277,8 @@ def solution_as_superpermutation(n, solution):
 	return "".join(s)
 
 n = int(sys.argv[1])
-matrix, secondary = double_3cycle(n)
-# matrix, secondary = triple_3cycle(n)
+# matrix, secondary = double_3cycle(n)
+matrix, secondary = single_4cycle(n)
 for solution in exactcover.Coverings(matrix, secondary):
 	try:
 		print solution_as_superpermutation(n, solution)
