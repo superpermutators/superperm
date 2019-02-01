@@ -11,7 +11,7 @@ parser.add_option("-g", "--graph", action="store_true", help="output the results
 parser.add_option("", "--oneline", action="store_true", help="output the results in one-line format")
 
 (options, args) = parser.parse_args()
-if options.graph and options.compact:
+if options.graph and options.oneline:
 	parser.error("You can’t specify both --graph and --oneline")
 if len(args) != 1: parser.error("Wrong number of arguments")
 
