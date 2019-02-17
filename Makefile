@@ -7,3 +7,9 @@ tsp/%.tsp: atsp/%.atsp
 
 atsp/%.atsp:
 	bin/mkatsp.py $* > "$@"
+
+necklace/%.gtsp:
+	bin/mkatsp.py --necklace $* > "$@"
+
+bracelet/%.gtsp:
+	bin/mkatsp.py --bracelet $* > "$@"
