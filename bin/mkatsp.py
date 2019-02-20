@@ -80,10 +80,10 @@ def print_classes(normalise):
 
 if options.necklace:
     print "NAME: supernecklace %d" % (N,)
-    print "TYPE: GTSP"
+    print "TYPE: AGTSP"
 elif options.bracelet:
     print "NAME: superbracelet %d" % (N,)
-    print "TYPE: GTSP"
+    print "TYPE: AGTSP"
 else:
     print "NAME : superperm %d" % (N,)
     print "TYPE : ATSP"
