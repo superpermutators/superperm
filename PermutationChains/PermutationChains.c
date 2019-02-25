@@ -2016,6 +2016,30 @@ for (int i=n-2;i>=0;i--)
 
 }
 
+void excludeMultiContacts(struct loop *tcl)
+{
+exclusionsStack[nExclusionsStack++]=-1;
+nLoopContacts=0;
+nMultiContacts=0;
+traverseLoopCount = tcl->freeCount;
+if (traverseLoopCount && PCsolSize<PCsolTarget) traverseLoopContacts(tcl);
+for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
+
+for (int i=0;i<nMultiContacts;i++)
+	{
+	int texcl=multiContacts[i];
+	if (excludeTCfromPC(texcl))
+		{
+		exclusionsStack[nExclusionsStack++]=texcl;
+		}
+	else
+		{
+		printf("excludeMultiContacts() Abandoning exclusion of 2-cycle %d\n",texcl);
+		exit(EXIT_FAILURE);
+		};
+	};
+}
+
 //	Add part of a 2-cycle to the solution
 //
 //	We assume this will only be called when adding the fixed kernel to the solution, so
@@ -2102,33 +2126,10 @@ initLoop0(tcl);
 for (int i=0;i<noc;i++) addToLoop(tcl,topLoopList[i]);
 if (tcl->freeCount > 0 || topLevelLoopCount==noc)
 	{
-	//	Check for 2-cycles that make multiple contacts with this loop
-
-	exclusionsStack[nExclusionsStack++]=-1;
-	nLoopContacts=0;
-	nMultiContacts=0;
-	traverseLoopCount = tcl->freeCount;
-	if (traverseLoopCount && PCsolSize<PCsolTarget) traverseLoopContacts(tcl);
-	for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
+	//	Exclude any 2-cycles that make multiple contacts with this loop
 	
-	for (int i=0;i<nMultiContacts;i++)
-		{
-		int texcl=multiContacts[i];
-		#if DEBUG_PC
-		if (debug)
-			printf("addPartialTCtoPC() Excluding 2-cycle %d because it has multiple contacts with loop formed from 2-cycle %d\n",texcl,t);
-		#endif
-		if (excludeTCfromPC(texcl))
-			{
-			exclusionsStack[nExclusionsStack++]=texcl;
-			}
-		else
-			{
-			printf("addPartialTCtoPC() Abandoning exclusion of 2-cycle %d, and addition of 2-cycle %d\n",texcl,t);
-			exit(EXIT_FAILURE);
-			};
-		};
-		
+	excludeMultiContacts(tcl);
+			
 	//	Having successfully incorporated all these loops, we need to replace them in the list of top loops
 	
 	struct loop *c0 = tcl->firstChild, *c=c0;
@@ -3679,6 +3680,7 @@ if (verbose) checkLoopTable();
 if (lastAnchor)
 	{
 	for (int i=0;i<nSTC-1;i++)
+	if ((!nsk) || (!stcIncomplete[i]))
 		{
 		int t=stcIndex[i];
 		if ((symmPairs && t==findSymm(stcIndex[nSTC-1],n)) || 
@@ -3691,7 +3693,7 @@ if (lastAnchor)
 //	Exclude anything with double contacts with roots
 
 for (int k=0;k<nSTC;k++)
-if (!stcIncomplete[k])
+if ((!nsk) || (!stcIncomplete[k]))
 	{
 	int t=stcIndex[k];
 	for (int i=0;i<tcN.nvsi[t];i++)
@@ -3704,17 +3706,15 @@ if (!stcIncomplete[k])
 				{
 				//	Unwind unviable
 				
-				printf("Unwinding unviable exclusions\n");
-				for (int j=i;j>=0;j--)
-					{
-					tc = tcN.vsi[t][j];
-					if (--PCcontacts[tc] == 1 && j!=i) unexcludeTCfromPC(tc);
-					};
+				printf("Unviable exclusions\n");
+				exit(EXIT_FAILURE);
 				};
 			};
 		};
 	};
 for (int t=0;t<nTC;t++) PCcontacts[t]=0;
+
+excludeMultiContacts(stcLoop);
 
 int spLen = fn + fn1 + fn2 + fn3 + n - 4;
 
