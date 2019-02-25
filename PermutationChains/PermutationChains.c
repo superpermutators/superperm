@@ -3,6 +3,7 @@
 //
 //  Created by Greg Egan on 24 February 2019.
 //
+//	V1.1	25 February 2019	Added option for Robin Houston's non-standard kernels
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,6 +30,7 @@ Basic utility functions
 Symmetry operations
 Loop operations
 Search operations
+Nonstandard kernel specification
 Main program
 
 */
@@ -108,7 +110,7 @@ int ocNumber;		//	The 1-cycle's index number in the list.
 //	the n permutations in this 1-cycle.
 //
 //	The first permutation in this list is the canonical order for the 1-cycle,
-//	and then succesive ones are left-shifted.
+//	and then successive ones are left-shifted.
 
 int *twoCycleNumbers;
 
@@ -184,6 +186,16 @@ static int trackPartial=FALSE;		//	Show each new largest partial solution
 //	Choice of kernel
 
 static int ffc=FALSE;				//	Use the first 4-cycle as the kernel (default is first 3-cycle)
+static int nsk=FALSE;				//	Use a non-standard kernel
+
+static int nskCount=0;				//	Number of entries in non-standard kernel specifier
+static int *nskSpec=NULL;			//	Non-standard kernel specifier.
+									//	This consists of a sequence of digits from 1 to n-1
+									//	giving the number of one-cycles to traverse, joined by weight-2 edges,
+									//	before then using a weight-3 edge.  A code of -1 indicates a weight-4
+									//	edge.
+static int nskNOC=0;				//	Count of 1-cycles covered by kernel
+static int nskScore=0;				//	Score for the kernel
 
 //	Choice of anchor points on kernel
 
@@ -212,6 +224,7 @@ static int treesOnly=FALSE;			//	Filter solutions to only output strict trees in
 //	File names
 //	----------
 
+static char nskString[128];
 static char optionsDescription[128];
 static char superPermsOutputFile[128];
 static char twoCyclesOutputFile[128];
@@ -280,6 +293,14 @@ static int *stcIndex=NULL;
 //	Inverse of this:  for each 2-cycle, its position in the kernel, or -1
 
 static char *stcInverse=NULL;
+
+//	Flags for when the two-cycles in the kernel are incomplete
+
+static char *stcIncomplete=NULL;
+
+//	Offsets and one-cycle counts for the incomplete 2-cycles in the kernel
+
+static int *stcOffs=NULL, *stcNOC=NULL;
 
 //	A list of permutations in the kernel that are followed by edges of weight 3 or 4
 
@@ -462,6 +483,10 @@ static int *PCsol=NULL;
 
 static int *PCorbit=NULL;
 
+//	Lists of offsets and counts, to allow for incomplete 2-cycles
+
+static int *PCoffs=NULL, *PCcount=NULL;
+
 //	=======================
 //	Basic utility functions
 //	=======================
@@ -636,7 +661,6 @@ for (int r=0;r<n-1;r++)
 		exit(EXIT_FAILURE);
 		};
 	};
-qsort(res,n-1,sizeof(int),compare1);
 }
 
 //	The weight 1 successor of a permutation:  left rotation
@@ -691,6 +715,65 @@ void successor4(int *perm, int *s, int n)
 {
 for (int k=0;k<n-4;k++) s[k]=perm[k+4];
 for (int k=n-4;k<n;k++) s[k]=perm[n-1-k];
+}
+
+//	Given a permutation index number, find the 2-cycle where this permutation appears at the start
+//	of a 1-cycle (i.e. just after an edge of weight 2) and the offset from the notional
+//	start of the 2-cycle, which is the first 1-cycle in oneForTwo[]
+
+int twoCycleFromPerm(int perm, int *offs)
+{
+static int pred[MAX_N], pred2[MAX_N], oc[MAX_N];
+
+//	Get the weight-2 predecessor of this permutation
+
+predecessor2(p0+n*perm,pred,n);
+
+//	This will be one of the permutations in the 2-cycle followed by a weight-2 edge
+
+for (int k=0;k<n;k++)
+	{
+	pred2[k]=pred[k];
+	oc[k]=p0[n*perm+k];
+	};
+
+//	Put a copy in canonical form to find the 2-cycle
+
+rClassMin(pred2+1,n-1);
+int tc = searchTwoCycles(pred2,n);
+if (tc<0)
+	{
+	printf("Unable to find the 2-cycle containing permutation #%d\n",perm);
+	exit(EXIT_FAILURE);
+	};
+	
+//	Find the offset from the start of the 2-cycle in oneForTwo[]
+
+rClassMin(oc,n);
+int oci = searchOneCycles(oc,n);
+if (oci<0)
+	{
+	printf("Unable to find the 1-cycle containing permutation #%d\n",perm);
+	exit(EXIT_FAILURE);
+	};
+	
+*offs=-1;
+for (int z=0;z<n-1;z++)
+	{
+	if (oneForTwo[tc*(n-1)+z]==oci)
+		{
+		*offs=z;
+		break;
+		};
+	};
+
+if (*offs < 0)
+	{
+	printf("Unable to find the 1-cycle #%d in the 2-cycle #%d, though both supposedly contain permutation #%d\n",
+		oci,tc,perm);
+	};
+
+return tc;
 }
 
 //	Intersection type between two 2-cycles
@@ -964,9 +1047,10 @@ free(nn->nvsi);
 free(nn->nvdi);
 }
 
-//	Given a list of 2-cycle index numbers, output the corresponding superpermutation
+//	Given a list of 2-cycle index numbers, offsets and counts in the solution arrays
+//	output the corresponding superpermutation
 
-void printSuperPerm(FILE *f, int *tcnums, int ntc)
+void printSuperPerm(FILE *f)
 {
 static int *ps=NULL;
 if (ps==NULL)
@@ -980,11 +1064,12 @@ for (int i=0;i<fn;i++) ps[i]=1;
 
 //	Next, modify this according to the list of 2-cycles
 
-for (int i=0;i<ntc;i++)
+for (int i=0;i<PCsolSize;i++)
 	{
-	int tc=tcnums[i];
-	for (int j=0;j<n-1;j++)
+	int tc=PCsol[i];
+	for (int j0=0;j0<PCcount[i];j0++)
 		{
+		int j = (PCoffs[i]+j0) % (n-1);
 		int oc = oneForTwo[tc*(n-1)+j];
 		int s = oneForTwoStartPerms[tc*(n-1)+j];
 		int p = permsForOne[oc*n+s];
@@ -1432,6 +1517,11 @@ if (lp->firstChild)
 		printLoop(c,lev+1,++ii,lp->childCount);
 		c = c->nextSib;
 		if (c==c0) break;
+		if (ii > lp->childCount)
+			{
+			printf("Sibling list has not come full circle after expected %d children\n",lp->childCount);
+			exit(EXIT_FAILURE);
+			};
 		};
 	};
 if (ii != lp->childCount)
@@ -1669,6 +1759,7 @@ while ((t0=exclusionsStack[--nExclusionsStack])>=0)
 void dropTCfromPC(int skipLoopStuff);
 
 struct loop **topLoopList=NULL;
+#define UNWIND_TMP for (int i=0;i<n-1;i++) topLoopList[i]->tempFlag = FALSE;
 
 int addTCtoPC(int t, int orbit)
 {
@@ -1676,8 +1767,6 @@ int addTCtoPC(int t, int orbit)
 if (debug)
 	printf("Adding 2-cycle %d to solution ...\n",t);
 #endif
-
-#define UNWIND_TMP for (int i=0;i<n-1;i++) topLoopList[i]->tempFlag = FALSE;
 
 int *oft = oneForTwo+t*(n-1);
 for (int i=0;i<n-1;i++)
@@ -1763,6 +1852,8 @@ for (int i=0;i<n-1;i++)
 //	Add 2-cycle to solution
 
 PCorbit[PCsolSize]=orbit;
+PCoffs[PCsolSize]=0;
+PCcount[PCsolSize]=n-1;
 PCsol[PCsolSize++]=t;
 PCpoolSize--;
 PCexclusions[t]++;
@@ -1925,6 +2016,140 @@ for (int i=n-2;i>=0;i--)
 
 }
 
+//	Add part of a 2-cycle to the solution
+//
+//	We assume this will only be called when adding the fixed kernel to the solution, so
+//	we don't allow it be unwound, we just fail hard if there are any problems.
+
+int addPartialTCtoPC(int t, int orbit, int offs, int noc)
+{
+#if DEBUG_PC
+if (debug)
+	printf("Adding part of 2-cycle %d to solution (offs=%d, 1-cycle count=%d) ...\n",t,offs,noc);
+#endif
+
+if (PCexclusions[t]!=0)
+	{
+	printf("addPartialTCtoPC(%d) attempting to add an excluded 2-cycle\n",t);
+	exit(EXIT_FAILURE);
+	};
+
+int *oft = oneForTwo+t*(n-1);
+
+for (int i0=0;i0<noc;i0++)
+	{
+	int i = (offs+i0)%(n-1);
+	int oc=oft[i];
+	topLoopList[i0]=topLoop(oneCycleTable+oc);
+	
+	//	If we hit the same loop twice, unwind and quit
+	
+	if (topLoopList[i0]->tempFlag)
+		{
+		printf("Addition of partial 2-cycle %d hits a top-level loop more than once\n",t);
+		exit(EXIT_FAILURE);
+		};
+	topLoopList[i0]->tempFlag = TRUE;
+	};
+
+//	Adjust edge status and free perm counts for all 1-cycles affected by this (partial) 2-cycle
+
+int *ofp = oneForTwoStartPerms+t*(n-1);
+for (int i0=0;i0<n-1;i0++)
+	{
+	int i = (offs+i0)%(n-1);
+	
+	int oc=oft[i];
+	int p=ofp[i];
+	struct oneCycle *oco = oneCycleTable+oc;
+
+	if (oco->edgeStatus[p]!=0)
+		{
+		printf("addPartialTCtoPC(%d) attempting to use the same edge twice\n",t);
+		exit(EXIT_FAILURE);
+		};
+
+	oco->edgeStatus[p]=i0<noc?1:2;
+	decFreeOC(oco);
+	#if DEBUG_PC
+	if (debug)
+		printf("addPartialTCtoPC(%d) Free count for 1-cycle %d reduced to %d, by excluding edge %d\n",
+			t,oc,oco->ownerLoop->freeCount,p);
+	#endif
+	};
+	
+//	Add partial 2-cycle to solution
+
+PCorbit[PCsolSize]=orbit;
+PCoffs[PCsolSize]=offs;
+PCcount[PCsolSize]=noc;
+PCsol[PCsolSize++]=t;
+PCpoolSize--;
+PCexclusions[t]++;
+
+for (int i=0;i<noc;i++) topLoopList[i]->tempFlag = FALSE;
+
+#if DEBUG_PC
+if (debug)
+	printf("Continued adding partial 2-cycle %d to solution, leaving solution size %d, pool size %d\n",t,PCsolSize,PCpoolSize);
+#endif
+
+//	Swallow up all the top-level loops visited by this 2-cycle under a new one.
+
+struct loop *tcl = &loopTable[loopTableUsed++];
+initLoop0(tcl);
+
+for (int i=0;i<noc;i++) addToLoop(tcl,topLoopList[i]);
+if (tcl->freeCount > 0 || topLevelLoopCount==noc)
+	{
+	//	Check for 2-cycles that make multiple contacts with this loop
+
+	exclusionsStack[nExclusionsStack++]=-1;
+	nLoopContacts=0;
+	nMultiContacts=0;
+	traverseLoopCount = tcl->freeCount;
+	if (traverseLoopCount && PCsolSize<PCsolTarget) traverseLoopContacts(tcl);
+	for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
+	
+	for (int i=0;i<nMultiContacts;i++)
+		{
+		int texcl=multiContacts[i];
+		#if DEBUG_PC
+		if (debug)
+			printf("addPartialTCtoPC() Excluding 2-cycle %d because it has multiple contacts with loop formed from 2-cycle %d\n",texcl,t);
+		#endif
+		if (excludeTCfromPC(texcl))
+			{
+			exclusionsStack[nExclusionsStack++]=texcl;
+			}
+		else
+			{
+			printf("addPartialTCtoPC() Abandoning exclusion of 2-cycle %d, and addition of 2-cycle %d\n",texcl,t);
+			exit(EXIT_FAILURE);
+			};
+		};
+		
+	//	Having successfully incorporated all these loops, we need to replace them in the list of top loops
+	
+	struct loop *c0 = tcl->firstChild, *c=c0;
+	while (TRUE)
+		{
+		c->nextTop->prevTop = c->prevTop;
+		c->prevTop->nextTop = c->nextTop;
+		c = c->nextSib;
+		if (c==c0) break;
+		};
+	LINK_LOOP(tcl)
+	topLevelLoopCount -= noc-1;
+	}
+else
+	{
+	printf("Abandoning addition of 2-cycle %d, as its freeCount is zero\n",t);
+	exit(EXIT_FAILURE);
+	};
+return TRUE;
+}
+
 void showPCsol()
 {
 int count=0, soc=0, prevOrb=-1;
@@ -1967,19 +2192,22 @@ if (tcnums==NULL)
 	};
 for (int q=0;q<PCsolSize;q++) tcnums[q]=PCsol[q];
 
-int cc = splitCC(tcnums,PCsolSize,tcnumsCC,ccOffs,ccSize);
-if (cc!=nSTC) return;
-
-for (int k=0;k<cc;k++)
+if (!nsk)
 	{
-	qsort(tcnumsCC+ccOffs[k],ccSize[k],sizeof(int),compare1);
-	int matches=0;
-	for (int j=0;j<nSTC;j++)
+	int cc = splitCC(tcnums,PCsolSize,tcnumsCC,ccOffs,ccSize);
+	if (cc!=nSTC) return;
+
+	for (int k=0;k<cc;k++)
 		{
-		if (bsearch(&stcIndex[j], tcnumsCC+ccOffs[k], ccSize[k], sizeof(int), compare1)) matches++;
+		qsort(tcnumsCC+ccOffs[k],ccSize[k],sizeof(int),compare1);
+		int matches=0;
+		for (int j=0;j<nSTC;j++)
+			{
+			if (bsearch(&stcIndex[j], tcnumsCC+ccOffs[k], ccSize[k], sizeof(int), compare1)) matches++;
+			};
+		if (matches!=1) return;
+		if (treesOnly && !isTree(tcnumsCC+ccOffs[k],ccSize[k],n)) return;
 		};
-	if (matches!=1) return;
-	if (treesOnly && !isTree(tcnumsCC+ccOffs[k],ccSize[k],n)) return;
 	};
 
 qsort(tcnums,PCsolSize,sizeof(int),compare1);
@@ -2008,7 +2236,7 @@ if (f==NULL)
 	printf("Error opening file %s to append\n",superPermsOutputFile);
 	exit(EXIT_FAILURE);
 	};
-printSuperPerm(f,tcnums,PCsolSize);
+printSuperPerm(f);
 fclose(f);
 
 PCsolCount++;
@@ -2232,6 +2460,55 @@ if (debug)
 return;
 }
 
+//	================================
+//	Nonstandard kernel specification
+//	================================
+
+//	Parse a non-standard kernel specification
+
+int parseNSK(const char *str)
+{
+const char *nskChars = str+strlen("nsk");
+
+nskCount=(int)strlen(nskChars);
+nskNOC=0;
+nskScore = 0;
+
+if (nskCount==0) return FALSE; 
+
+CHECK_MEM( nskSpec = (int *)malloc(nskCount*sizeof(int)) )
+
+int nskOK = TRUE;
+for (int k=0;k<nskCount;k++)
+	{
+	if (nskChars[k]>='1' && nskChars[k]<'0'+n)
+		{
+		nskSpec[k] = nskChars[k]-'0';
+		nskNOC+=nskSpec[k];
+		}
+	else if (nskChars[k]==' ' || nskChars[k]=='-') nskSpec[k]=-1;
+	else
+		{
+		printf("Illegal character '%c' in non-standard kernel specification, must be digit from 1 to n-1,\nor a space or - for a weight-4 edge (enclose whole option in quotes to use a space)\n",nskChars[k]);
+		nskOK=FALSE;
+		};
+	};
+
+if (nskOK)
+	{
+	strcpy(nskString,str);
+	for (int z=0;z<strlen(nskString);z++) if (nskString[z]==' ') nskString[z]='-';
+	
+	nskScore = nskNOC - (n-2)*nskCount;
+	if (nskScore % (n-2) != 0)
+		{
+		printf("Kernel score of %d is not a multiple of n-2=%d\n",nskScore,n-2);
+		return FALSE;
+		};
+	};
+return nskOK;
+}
+
 //	============
 //	Main program
 //	============
@@ -2282,6 +2559,13 @@ for (int i=1;i<argc;i++)
 //	Choice of kernel
 	
 	else if (strcmp(argv[i],"ffc")==0) ffc=TRUE;
+	else if (strncmp(argv[i],"nsk",strlen("nsk"))==0)
+		{
+		//	Parse specification for a nonstandard kernel
+		
+		if (parseNSK(argv[i])) nsk=TRUE;
+		else ok=FALSE;
+		}
 	
 //	Choice of anchor points on kernel
 	
@@ -2316,7 +2600,7 @@ if (countNA<minNA || countNA>maxNA)
 	printf("Expected between %d and %d numerical arguments\n",minNA,maxNA);
 	ok=FALSE;
 	};
-
+	
 //	Only allow one particular choice of orbit
 
 int noc=0;
@@ -2635,7 +2919,7 @@ setupNeighbours(&tcN, tcMat, nTC, verbose);
 //	-------------------------------
 	
 //	Default to the first 3-cycle, which contains (n-2) 2-cycles;
-//	if we choice the first 4-cycle, it contains (n-3)(n-2) 2-cycles
+//	if we chose the first 4-cycle, it contains (n-3)(n-2) 2-cycles
 
 //	Number of 3-cycles in kernel:
 
@@ -2645,7 +2929,13 @@ else n3C=1;
 
 //	Number of 2-cycles in kernel:
 
-nSTC = n3C*(n-2);
+if (nsk)
+	{
+	//	Non-standard kernel
+	nSTC=0;
+	for (int k=0;k<nskCount;k++) if (nskSpec[k]>0) nSTC++;
+	}
+else nSTC = n3C*(n-2);
 
 //	Standard 2-cycles as digits
 	
@@ -2660,83 +2950,188 @@ CHECK_MEM( stcIndex = malloc((nSTC)*sizeof(int)) )
 CHECK_MEM( stcInverse = malloc(nTC*sizeof(char)) )
 for (int k=0;k<nTC;k++) stcInverse[k]=-1;
 
-//	Construct the standard 2-cycles
-
-int stcBase[MAX_N][MAX_N];
-for (int b=0;b<n3C;b++)
-	{
-	int q=0;
-	for (int j=1;j<=n-3;j++)
-		{
-		if (j==b+1) stcBase[b][q++]=n-2;
-		stcBase[b][q++]=j;
-		};
-	rClassMin(&stcBase[b][0],n-2);
-	};
-
-printf("\nFirst %d standard 2-cycles, to be used in the kernel:\n",nSTC);
-int before = n-2;
-for (int k=0;k<nSTC;k++)
-	{
-	STC[k*n]=n;
-	int b=k/(n-2);
-	
-	int b0=-1;
-	for (int b1=0;b1<n-2;b1++) if (before==stcBase[b][b1]) {b0=b1; break;}
-	before = stcBase[b][(b0+1)%(n-2)];
-	
-	int q=1;
-	for (int j=1;j<=n-2;j++)
-		{
-		int j0=stcBase[b][j-1];
-		if (j0==before) STC[k*n+(q++)]=n-1;
-		STC[k*n+(q++)]=j0;
-		};
-		
-	rClassMin(STC+k*n+1,n-1);
-	stcIndex[k]=searchTwoCycles(STC+k*n,n);
-	if (stcIndex[k]<0)
-		{
-		printf("Failed to find index for a standard 2-cycle:\n");
-		printInt(stdout,STC+k*n,n,"\n");
-		exit(EXIT_FAILURE);
-		};
-	stcInverse[stcIndex[k]]=k;
-	if (verbose)
-		{
-		printf("Matched standard 2-cycle %d to index %d\n",k,stcIndex[k]);
-		};
-	};
-printBlock(stdout,STC,n,nSTC);
-
-//	Determine which permutations in the kernel are followed by edges of weight 3 or 4
-
 CHECK_MEM( kernelW34Perms = (int *)malloc(nSTC*sizeof(int)) )
 CHECK_MEM( kernelW34Weights = (int *)malloc(nSTC*sizeof(int)) )
 
-int p=0;					//	Start from permutation #0, 1234...n
-int nw=0;
-for (int i=0;i<n3C;i++)		//	Loop for however many 3-cycles are in the kernel
+if (!nsk)
 	{
-	for (int q=0;q<n-2;q++)
+	//	Construct the standard 2-cycles
+
+	int stcBase[MAX_N][MAX_N];
+	for (int b=0;b<n3C;b++)
 		{
-		for (int j=0;j<n-1;j++)
+		int q=0;
+		for (int j=1;j<=n-3;j++)
 			{
-			for (int k=0;k<n-1;k++) p = w1s[p];	//	Weight 1 edges, until we'd close the 1-cycle
-			if (j==n-2) break;
-			p = w2s[p];							//	Weight 2 edges, until we'd close the 2-cycle
+			if (j==b+1) stcBase[b][q++]=n-2;
+			stcBase[b][q++]=j;
 			};
-		if (q==n-3) break;						//	Weight 3 edges, until we'd close the 3-cycle
+		rClassMin(&stcBase[b][0],n-2);
+		};
+
+	printf("\nFirst %d standard 2-cycles, to be used in the kernel:\n",nSTC);
+	int before = n-2;
+	for (int k=0;k<nSTC;k++)
+		{
+		STC[k*n]=n;
+		int b=k/(n-2);
 		
+		int b0=-1;
+		for (int b1=0;b1<n-2;b1++) if (before==stcBase[b][b1]) {b0=b1; break;}
+		before = stcBase[b][(b0+1)%(n-2)];
+		
+		int q=1;
+		for (int j=1;j<=n-2;j++)
+			{
+			int j0=stcBase[b][j-1];
+			if (j0==before) STC[k*n+(q++)]=n-1;
+			STC[k*n+(q++)]=j0;
+			};
+			
+		rClassMin(STC+k*n+1,n-1);
+		stcIndex[k]=searchTwoCycles(STC+k*n,n);
+		if (stcIndex[k]<0)
+			{
+			printf("Failed to find index for a standard 2-cycle:\n");
+			printInt(stdout,STC+k*n,n,"\n");
+			exit(EXIT_FAILURE);
+			};
+		stcInverse[stcIndex[k]]=k;
+		if (verbose)
+			{
+			printf("Matched standard 2-cycle %d to index %d\n",k,stcIndex[k]);
+			};
+		};
+	printBlock(stdout,STC,n,nSTC);
+	
+	//	Determine which permutations in the kernel are followed by edges of weight 3 or 4
+
+	int p=0;					//	Start from permutation #0, 1234...n
+	int nw=0;
+	for (int i=0;i<n3C;i++)		//	Loop for however many 3-cycles are in the kernel
+		{
+		for (int q=0;q<n-2;q++)
+			{
+			for (int j=0;j<n-1;j++)
+				{
+				for (int k=0;k<n-1;k++) p = w1s[p];	//	Weight 1 edges, until we'd close the 1-cycle
+				if (j==n-2) break;
+				p = w2s[p];							//	Weight 2 edges, until we'd close the 2-cycle
+				};
+			if (q==n-3) break;						//	Weight 3 edges, until we'd close the 3-cycle
+			
+			kernelW34Perms[nw] = p;
+			kernelW34Weights[nw] = 3;
+			p = w3s[p];
+			nw++;
+			};
 		kernelW34Perms[nw] = p;
-		kernelW34Weights[nw] = 3;
-		p = w3s[p];
+		kernelW34Weights[nw] = 4;
+		p = w4s[p];
 		nw++;
 		};
-	kernelW34Perms[nw] = p;
-	kernelW34Weights[nw] = 4;
-	p = w4s[p];
-	nw++;
+	}
+else
+	{
+	//	Non-standard kernel
+	
+	CHECK_MEM( stcIncomplete = (char *)malloc(nSTC*sizeof(char)) )
+	CHECK_MEM( stcOffs = (int *)malloc(nSTC*sizeof(int)) )
+	CHECK_MEM( stcNOC = (int *)malloc(nSTC*sizeof(int)) )
+
+	int p=0;					//	Start from permutation #0, 1234...n
+	int nw=0;					//	Count up edges of weights 3 or 4 in kernel
+	int ntc=0;					//	Count up 2-cycles, complete or otherwise
+	
+	if (verbose)
+		{
+		printf("Non-standard kernel permutations:\n{\n");
+		printInt(stdout,p0,n,",\n");
+		};
+	
+	for (int z=0;z<nskCount;z++)
+	if (nskSpec[z]>0)
+		{
+		int tc=-1, offs=-1;
+		
+		tc = twoCycleFromPerm(p,&offs);
+		
+		if ((stcIncomplete[ntc] = (nskSpec[z]!=n-1)))
+			{
+			//	We have an INCOMPLETE 2-cycle in the kernel here, starting from permutation p
+			//	and containing nskSpec[k] 1-cycles.
+			
+			stcOffs[ntc] = offs;
+			stcNOC[ntc] = nskSpec[z];
+			};
+			
+		stcIndex[ntc] = tc;
+		stcInverse[tc] = ntc;
+		ntc++;
+		
+		for (int j=0;j<nskSpec[z];j++)
+			{
+			for (int k=0;k<n-1;k++)
+				{
+				p = w1s[p];	//	Weight 1 edges, until we'd close the 1-cycle
+				if (verbose) printInt(stdout,p0+p*n,n,",\n");
+				};
+			if (j==nskSpec[z]-1) break;
+			p = w2s[p];							//	Weight 2 edges
+			if (verbose) printInt(stdout,p0+p*n,n,",\n");
+			};
+		
+		if (z!=nskCount-1 && nskSpec[z+1]>0)	//	Weight 3 edge, unless we're at the end, or have a weight-4 edge next
+			{
+			kernelW34Perms[nw] = p;
+			kernelW34Weights[nw] = 3;
+			p = w3s[p];
+			if (verbose) printInt(stdout,p0+p*n,n,",\n");
+			nw++;
+			};
+		}
+	else
+		{
+		//	Specified a weight-4 edge
+		
+		kernelW34Perms[nw] = p;
+		kernelW34Weights[nw] = 4;
+		p = w4s[p];
+		if (verbose) printInt(stdout,p0+p*n,n,",\n");
+		nw++;
+		};
+	
+	if (verbose) printf("}\n");
+		
+	//	Give details of kernel
+	
+	printf("Non-standard kernel covers %d 1-cycles, and has score of %d\n",nskNOC,nskScore);
+	
+	if (verbose)
+		{
+		printf("Non-standard kernel 2-cycle details: \n");
+		for (int k=0;k<nSTC;k++)
+			{
+			if (stcIncomplete[k])
+				{
+				printf("Incomplete 2-cycle #%d: ",stcIndex[k]);
+				printInt(stdout,twoCycles+stcIndex[k]*n,n,"\n");
+				printf("  with %d 1-cycles (starting from offset=%d):\n",stcNOC[k],stcOffs[k]);
+				for (int z=0;z<stcNOC[k];z++)
+					{
+					int y = (stcOffs[k]+z)%(n-1);
+					printf("  ");
+					printInt(stdout,oneCycles+oneForTwo[stcIndex[k]*(n-1)+y]*n,n,"");
+					printf(" oneForTwoStartPerm[]=%d\n",oneForTwoStartPerms[stcIndex[k]*(n-1)+y]);
+					};
+				}
+			else
+				{
+				printf("Complete 2-cycle #%d: ",stcIndex[k]);
+				printInt(stdout,twoCycles+stcIndex[k]*n,n,"\n");
+				};
+			};
+		};
 	};
 	
 if (verbose)
@@ -2748,333 +3143,336 @@ if (verbose)
 		};
 	};
 
-//	Set up orbits
-//	-------------
-
-
-//	First, find the group of automorphisms that stabilise the set of standard 2-cycles we have selected,
-//	which will either be the first 3-cycle or the first 4-cycle.
-//
-//	Each automorphism is described by (n+1) integers, with the first being +1/-1 with -1 for reversal,
-//	and the remaining n integers being a digit map, giving the substitute digits for 1...n.
-//
-//	If we choose the option "littleGroup", we restrict the stabiliser group.  For odd n, we just remove all
-//	the reversals. For even n, this needs a bespoke approach.
-
-static int aut[MAX_N+1];
-int *stabiliserGroup = NULL;
-int nStabiliserGroup = 0;
-
-int littleGroup6[]={1,1,2,3,4,5,6,		-1,3,2,1,4,5,6,		-1,1,4,3,2,5,6,		1,3,4,1,2,5,6};
-int littleGroup8[]={1,1,2,3,4,5,6,7,8,	1,3,4,5,6,1,2,7,8,	1,5,6,1,2,3,4,7,8,
-					-1,1,6,5,4,3,2,7,8, -1,5,4,3,2,1,6,7,8,	-1,3,2,1,6,5,4,7,8};
-int *lG=NULL;
-if (littleGroup)
+if (useOrbits)
 	{
-	if (n==6)
+	//	Set up orbits
+	//	-------------
+
+
+	//	First, find the group of automorphisms that stabilise the set of standard 2-cycles we have selected,
+	//	which will either be the first 3-cycle or the first 4-cycle.
+	//
+	//	Each automorphism is described by (n+1) integers, with the first being +1/-1 with -1 for reversal,
+	//	and the remaining n integers being a digit map, giving the substitute digits for 1...n.
+	//
+	//	If we choose the option "littleGroup", we restrict the stabiliser group.  For odd n, we just remove all
+	//	the reversals. For even n, this needs a bespoke approach.
+
+	static int aut[MAX_N+1];
+	int *stabiliserGroup = NULL;
+	int nStabiliserGroup = 0;
+
+	int littleGroup6[]={1,1,2,3,4,5,6,		-1,3,2,1,4,5,6,		-1,1,4,3,2,5,6,		1,3,4,1,2,5,6};
+	int littleGroup8[]={1,1,2,3,4,5,6,7,8,	1,3,4,5,6,1,2,7,8,	1,5,6,1,2,3,4,7,8,
+						-1,1,6,5,4,3,2,7,8, -1,5,4,3,2,1,6,7,8,	-1,3,2,1,6,5,4,7,8};
+	int *lG=NULL;
+	if (littleGroup)
 		{
-		nCompareInt=7;
-		qsort(littleGroup6,4,7*sizeof(int),compareInt);
-		lG = littleGroup6;
-		}
-	else if (n==8)
-		{
-		nCompareInt=9;
-		qsort(littleGroup8,6,9*sizeof(int),compareInt);
-		lG = littleGroup8;
-		}
-	else if (n%2==0)
-		{
-		printf("Little group not supported for n=%d\n",n);
-		exit(EXIT_FAILURE);
-		};
-	};
-int limStab7FFC[] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
-//					 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 
-	
-int *lS=NULL;
-if (limStab)
-	{
-	if (ffc)
-		{
-		if (n==7)
+		if (n==6)
 			{
-			lS = limStab7FFC;
+			nCompareInt=7;
+			qsort(littleGroup6,4,7*sizeof(int),compareInt);
+			lG = littleGroup6;
+			}
+		else if (n==8)
+			{
+			nCompareInt=9;
+			qsort(littleGroup8,6,9*sizeof(int),compareInt);
+			lG = littleGroup8;
+			}
+		else if (n%2==0)
+			{
+			printf("Little group not supported for n=%d\n",n);
+			exit(EXIT_FAILURE);
 			};
 		};
-	};
-
-for (int pass=0;pass<2;pass++)
-	{
-	nStabiliserGroup = 0;
-	
-	for (int rev=1;rev>=-1;rev-=2)
-	for (int p=0;p<fn1;p++)
+	int limStab7FFC[] = { 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1};
+	//					 01 02 03 04 05 06 07 08 09 10 11 12 13 14 15 16 17 18 19 20 
+		
+	int *lS=NULL;
+	if (limStab)
 		{
-		aut[0]=rev;
-		aut[n]=n;
-		for (int z=0;z<n-1;z++) aut[z+1]=p1[p*(n-1)+z];
-
-		if (littleGroup)
+		if (ffc)
 			{
-			if (n%2==1 && !ffc)
+			if (n==7)
 				{
-				if (rev<0) continue;
-				}
-			else
-				{
-				if (searchBlock(lG,n+1,n-2,aut)<0) continue;
+				lS = limStab7FFC;
 				};
 			};
+		};
 
-		int stab=TRUE;
-		for (int k=0;k<nSTC;k++)
+	for (int pass=0;pass<2;pass++)
+		{
+		nStabiliserGroup = 0;
+		
+		for (int rev=1;rev>=-1;rev-=2)
+		for (int p=0;p<fn1;p++)
 			{
-			int ak = actAutoTC(stcIndex[k],aut);
-			if (ak<0)
+			aut[0]=rev;
+			aut[n]=n;
+			for (int z=0;z<n-1;z++) aut[z+1]=p1[p*(n-1)+z];
+
+			if (littleGroup)
 				{
-				printf("Cannot find 2-cycle corresponding to action of automorphism\n");
-				exit(EXIT_FAILURE);
-				};
-			if (stcInverse[ak]<0)
-				{
-				stab=FALSE;
-				break;
-				};
-			};
-		if (stab)
-			{
-			if (limStab)
-				{
-				if (lS)
+				if (n%2==1 && !ffc)
 					{
-					for (int k=0;k<nSTC;k++)
-					if (lS[k]!=0)
-						{
-						int ak = actAutoTC(stcIndex[k],aut);
-						int sak = stcInverse[ak];
-						if (lS[k]!=lS[sak])
-							{
-							stab=FALSE;
-							break;
-							};
-						};
+					if (rev<0) continue;
 					}
 				else
 					{
-					printf("Option limStab not defined for this choice of n and kernel\n");
-					exit(EXIT_FAILURE);
+					if (searchBlock(lG,n+1,n-2,aut)<0) continue;
 					};
-				if (!stab) continue;
 				};
-			if (pass==1)
+
+			int stab=TRUE;
+			for (int k=0;k<nSTC;k++)
 				{
-				for (int z=0;z<n+1;z++) stabiliserGroup[nStabiliserGroup*(n+1)+z] = aut[z];
-				};
-			nStabiliserGroup++;
-			};
-		};
-		
-	if (pass==0)
-		{
-		CHECK_MEM( stabiliserGroup = (int *)malloc(nStabiliserGroup * (n+1) * sizeof(int)) )
-		};
-	};
-	
-if (verbose)
-	{
-	printf("%s group for first %d standard 2-cycles is:\n",littleGroup?"Reduced stabiliser":"Stabiliser",nSTC);
-	for (int i=0;i<nStabiliserGroup;i++)
-		{
-		printf("%4d ",i);
-		printInt(stdout,stabiliserGroup+i*(n+1),n+1,"\n");
-		printf("    Action on the 2-cycles: ");
-		for (int k=0;k<nSTC;k++) printf("%d ",stcInverse[actAutoTC(stcIndex[k],stabiliserGroup+i*(n+1))]);
-		printf("\n");
-		};
-	};
-	
-//	We now want to compute all orbits of 2-cycles under whatever groups we have
-
-int nGroups = 1;
-int *Groups[] = {stabiliserGroup};
-int groupSizes[] = {nStabiliserGroup};
-
-if (blocks)
-	{
-	groupSizes[0]=n-2;
-	}
-else if (symmPairs)
-	{
-	groupSizes[0]=2;
-	};
-
-nOrbits=0;
-int *orbitSizeTallies=NULL;
-int maxOrbitSize=0;
-
-//	Track which orbit each 2-cycle belongs to, for each group
-
-int *orbitInverse = (int *)malloc(nGroups*nTC*sizeof(int));
-CHECK_MEM(orbitInverse)
-
-for (int pass=0;pass<2;pass++)
-	{
-	nOrbits=0;
-	for (int z=0;z<nGroups*nTC;z++) orbitInverse[z]=-1;
-	
-	for (int g=0;g<nGroups;g++)
-		{
-		for (int t=0;t<nTC;t++)
-		if (orbitInverse[t*nGroups+g]<0)
-			{
-			int orbitSize=0;
-			for (int h=0;h<groupSizes[g];h++)
-				{
-				int at = 0;
-				if (blocks)
-					{
-					at=getBlockEntry(t,h%(n-2)+1);
-					}
-				else if (symmPairs)
-					{
-					if (h==0) at=t; else at=findSymm(t,n);
-					}
-				else at = actAutoTC(t,Groups[g]+h*(n+1));
-				
-				if (at < 0)
+				int ak = actAutoTC(stcIndex[k],aut);
+				if (ak<0)
 					{
 					printf("Cannot find 2-cycle corresponding to action of automorphism\n");
 					exit(EXIT_FAILURE);
 					};
-				if (orbitInverse[at*nGroups+g]<0)
+				if (stcInverse[ak]<0)
 					{
-					orbitInverse[at*nGroups+g] = nOrbits;
-					orbitSize++;
-					}
-				else
-					{
-					if (orbitInverse[at*nGroups+g] != nOrbits)
-						{
-						printf("Group %d, group element %d, two-cycle %d (image %d) in clashing orbits:  %d and %d\n",
-							g,h,t,at,nOrbits,orbitInverse[at*nGroups+g]);
-						exit(EXIT_FAILURE);
-						};
-					};
-				};
-			if (orbitSize > maxOrbitSize) maxOrbitSize = orbitSize;
-			if (pass==1)
-				{
-				orbitSizes[nOrbits] = orbitSize;
-				orbitSizeTallies[orbitSize]++;
-				};
-			nOrbits++;
-			};
-		};
-	
-	if (pass==0)
-		{
-		CHECK_MEM( orbitSizes = (int *)malloc(nOrbits * sizeof(int)) )
-		CHECK_MEM( orbitSizeTallies = (int *)malloc((maxOrbitSize+1) * sizeof(int)) )
-		for (int z=1;z<=maxOrbitSize;z++) orbitSizeTallies[z]=0;
-		};
-	};
-	
-printf("Found %d orbits for %d groups:\n",nOrbits,nGroups);
-for (int z=1;z<=maxOrbitSize;z++)
-	if (orbitSizeTallies[z]>0)
-		printf("%d of size %d\n",orbitSizeTallies[z],z);
-printf("\n");
-
-//	Store the actual orbits
-
-if (verbose) printf("Orbits of 2-cycles are:\n");
-
-orbits = (int **)malloc(nOrbits * sizeof(int *));
-CHECK_MEM(orbits)
-int *orbitGroups = (int *)malloc(nOrbits * sizeof(int));
-CHECK_MEM(orbitGroups)
-
-for (int i=0;i<nOrbits;i++)
-	{
-	CHECK_MEM( orbits[i] = (int *)malloc(orbitSizes[i]*sizeof(int)) )
-	
-	int offs=0;
-	for (int t=0;t<nTC;t++)
-	for (int g=0;g<nGroups;g++)
-		if (orbitInverse[t*nGroups+g]==i)
-			{
-			if (offs==orbitSizes[i])
-				{
-				printf("Miscalculation in orbit size (size greater than expected)\n");
-				exit(EXIT_FAILURE);
-				};
-			orbits[i][offs++]=t;
-			orbitGroups[i]=g;
-			};
-			
-	if (offs!=orbitSizes[i])
-		{
-		printf("Miscalculation in orbit size (size less than expected)\n");
-		exit(EXIT_FAILURE);
-		};
-	};
-if (verbose) printf("\n");
-
-//	See which orbits are unique and self-disjoint
-
-orbitOK = (char *)malloc(nOrbits * sizeof(char));
-CHECK_MEM(orbitOK)
-okOrbits = (int *)malloc(nOrbits * sizeof(int));
-CHECK_MEM(okOrbits)
-nOrbitsOK = 0;
-
-for (int i=0;i<nOrbits;i++)
-	{
-	int ok = selfDisj(orbits[i],orbitSizes[i]);
-	if ((blocks||(symmPairs&&(!fixedPoints))) && orbitSizes[i]==1) ok=FALSE;
-	if (fullSymm && orbitSizes[i]!=groupSizes[0]) ok=FALSE;
-	if (ok)
-		{
-		for (int j=0;j<i;j++)
-			{
-			if (orbitSizes[j]==orbitSizes[i])
-				{
-				nCompareInt = orbitSizes[i];
-				if (compareInt(orbits[i],orbits[j])==0)
-					{
-					ok=FALSE;
+					stab=FALSE;
 					break;
 					};
 				};
+			if (stab)
+				{
+				if (limStab)
+					{
+					if (lS)
+						{
+						for (int k=0;k<nSTC;k++)
+						if (lS[k]!=0)
+							{
+							int ak = actAutoTC(stcIndex[k],aut);
+							int sak = stcInverse[ak];
+							if (lS[k]!=lS[sak])
+								{
+								stab=FALSE;
+								break;
+								};
+							};
+						}
+					else
+						{
+						printf("Option limStab not defined for this choice of n and kernel\n");
+						exit(EXIT_FAILURE);
+						};
+					if (!stab) continue;
+					};
+				if (pass==1)
+					{
+					for (int z=0;z<n+1;z++) stabiliserGroup[nStabiliserGroup*(n+1)+z] = aut[z];
+					};
+				nStabiliserGroup++;
+				};
 			};
-		orbitOK[i]=ok;
-		if (ok)	okOrbits[nOrbitsOK++]=i;
+			
+		if (pass==0)
+			{
+			CHECK_MEM( stabiliserGroup = (int *)malloc(nStabiliserGroup * (n+1) * sizeof(int)) )
+			};
 		};
-	};
-	
-printf("%d unique, self-disjoint orbits\n",nOrbitsOK);
-
-if (verbose)
-	{
-	for (int j=0;j<nOrbitsOK;j++)
+		
+	if (verbose)
 		{
-		int i=okOrbits[j];
-		printf("Group %d Orbit %d (original %d)] ",orbitGroups[i], j, i);
-		for (int k=0;k<orbitSizes[i];k++) printf("%d ",orbits[i][k]);
-		printf("\n");
+		printf("%s group for first %d standard 2-cycles is:\n",littleGroup?"Reduced stabiliser":"Stabiliser",nSTC);
+		for (int i=0;i<nStabiliserGroup;i++)
+			{
+			printf("%4d ",i);
+			printInt(stdout,stabiliserGroup+i*(n+1),n+1,"\n");
+			printf("    Action on the 2-cycles: ");
+			for (int k=0;k<nSTC;k++) printf("%d ",stcInverse[actAutoTC(stcIndex[k],stabiliserGroup+i*(n+1))]);
+			printf("\n");
+			};
 		};
-	};
-	
-//	For each 2-cycle, list the orbits it belongs to
+		
+	//	We now want to compute all orbits of 2-cycles under whatever groups we have
 
-CHECK_MEM( orbitNumbersTC = (int **)malloc(nTC*sizeof(int *)) )
-CHECK_MEM( numOrbitsTC = (int *)malloc(nTC*sizeof(int)) )
-for (int i=0;i<nTC;i++)
-	{
-	numOrbitsTC[i]=0;
-	CHECK_MEM( orbitNumbersTC[i] = (int *)malloc(nGroups * sizeof(int)) )
-	};
+	int nGroups = 1;
+	int *Groups[] = {stabiliserGroup};
+	int groupSizes[] = {nStabiliserGroup};
+
+	if (blocks)
+		{
+		groupSizes[0]=n-2;
+		}
+	else if (symmPairs)
+		{
+		groupSizes[0]=2;
+		};
+
+	nOrbits=0;
+	int *orbitSizeTallies=NULL;
+	int maxOrbitSize=0;
+
+	//	Track which orbit each 2-cycle belongs to, for each group
+
+	int *orbitInverse = (int *)malloc(nGroups*nTC*sizeof(int));
+	CHECK_MEM(orbitInverse)
+
+	for (int pass=0;pass<2;pass++)
+		{
+		nOrbits=0;
+		for (int z=0;z<nGroups*nTC;z++) orbitInverse[z]=-1;
+		
+		for (int g=0;g<nGroups;g++)
+			{
+			for (int t=0;t<nTC;t++)
+			if (orbitInverse[t*nGroups+g]<0)
+				{
+				int orbitSize=0;
+				for (int h=0;h<groupSizes[g];h++)
+					{
+					int at = 0;
+					if (blocks)
+						{
+						at=getBlockEntry(t,h%(n-2)+1);
+						}
+					else if (symmPairs)
+						{
+						if (h==0) at=t; else at=findSymm(t,n);
+						}
+					else at = actAutoTC(t,Groups[g]+h*(n+1));
+					
+					if (at < 0)
+						{
+						printf("Cannot find 2-cycle corresponding to action of automorphism\n");
+						exit(EXIT_FAILURE);
+						};
+					if (orbitInverse[at*nGroups+g]<0)
+						{
+						orbitInverse[at*nGroups+g] = nOrbits;
+						orbitSize++;
+						}
+					else
+						{
+						if (orbitInverse[at*nGroups+g] != nOrbits)
+							{
+							printf("Group %d, group element %d, two-cycle %d (image %d) in clashing orbits:  %d and %d\n",
+								g,h,t,at,nOrbits,orbitInverse[at*nGroups+g]);
+							exit(EXIT_FAILURE);
+							};
+						};
+					};
+				if (orbitSize > maxOrbitSize) maxOrbitSize = orbitSize;
+				if (pass==1)
+					{
+					orbitSizes[nOrbits] = orbitSize;
+					orbitSizeTallies[orbitSize]++;
+					};
+				nOrbits++;
+				};
+			};
+		
+		if (pass==0)
+			{
+			CHECK_MEM( orbitSizes = (int *)malloc(nOrbits * sizeof(int)) )
+			CHECK_MEM( orbitSizeTallies = (int *)malloc((maxOrbitSize+1) * sizeof(int)) )
+			for (int z=1;z<=maxOrbitSize;z++) orbitSizeTallies[z]=0;
+			};
+		};
+		
+	printf("Found %d orbits for %d groups:\n",nOrbits,nGroups);
+	for (int z=1;z<=maxOrbitSize;z++)
+		if (orbitSizeTallies[z]>0)
+			printf("%d of size %d\n",orbitSizeTallies[z],z);
+	printf("\n");
+
+	//	Store the actual orbits
+
+	if (verbose) printf("Orbits of 2-cycles are:\n");
+
+	orbits = (int **)malloc(nOrbits * sizeof(int *));
+	CHECK_MEM(orbits)
+	int *orbitGroups = (int *)malloc(nOrbits * sizeof(int));
+	CHECK_MEM(orbitGroups)
+
+	for (int i=0;i<nOrbits;i++)
+		{
+		CHECK_MEM( orbits[i] = (int *)malloc(orbitSizes[i]*sizeof(int)) )
+		
+		int offs=0;
+		for (int t=0;t<nTC;t++)
+		for (int g=0;g<nGroups;g++)
+			if (orbitInverse[t*nGroups+g]==i)
+				{
+				if (offs==orbitSizes[i])
+					{
+					printf("Miscalculation in orbit size (size greater than expected)\n");
+					exit(EXIT_FAILURE);
+					};
+				orbits[i][offs++]=t;
+				orbitGroups[i]=g;
+				};
+				
+		if (offs!=orbitSizes[i])
+			{
+			printf("Miscalculation in orbit size (size less than expected)\n");
+			exit(EXIT_FAILURE);
+			};
+		};
+	if (verbose) printf("\n");
+
+	//	See which orbits are unique and self-disjoint
+
+	orbitOK = (char *)malloc(nOrbits * sizeof(char));
+	CHECK_MEM(orbitOK)
+	okOrbits = (int *)malloc(nOrbits * sizeof(int));
+	CHECK_MEM(okOrbits)
+	nOrbitsOK = 0;
+
+	for (int i=0;i<nOrbits;i++)
+		{
+		int ok = selfDisj(orbits[i],orbitSizes[i]);
+		if ((blocks||(symmPairs&&(!fixedPoints))) && orbitSizes[i]==1) ok=FALSE;
+		if (fullSymm && orbitSizes[i]!=groupSizes[0]) ok=FALSE;
+		if (ok)
+			{
+			for (int j=0;j<i;j++)
+				{
+				if (orbitSizes[j]==orbitSizes[i])
+					{
+					nCompareInt = orbitSizes[i];
+					if (compareInt(orbits[i],orbits[j])==0)
+						{
+						ok=FALSE;
+						break;
+						};
+					};
+				};
+			orbitOK[i]=ok;
+			if (ok)	okOrbits[nOrbitsOK++]=i;
+			};
+		};
+		
+	printf("%d unique, self-disjoint orbits\n",nOrbitsOK);
+
+	if (verbose)
+		{
+		for (int j=0;j<nOrbitsOK;j++)
+			{
+			int i=okOrbits[j];
+			printf("Group %d Orbit %d (original %d)] ",orbitGroups[i], j, i);
+			for (int k=0;k<orbitSizes[i];k++) printf("%d ",orbits[i][k]);
+			printf("\n");
+			};
+		};
+		
+	//	For each 2-cycle, list the orbits it belongs to
+
+	CHECK_MEM( orbitNumbersTC = (int **)malloc(nTC*sizeof(int *)) )
+	CHECK_MEM( numOrbitsTC = (int *)malloc(nTC*sizeof(int)) )
+	for (int i=0;i<nTC;i++)
+		{
+		numOrbitsTC[i]=0;
+		CHECK_MEM( orbitNumbersTC[i] = (int *)malloc(nGroups * sizeof(int)) )
+		};
+
 	for (int j=0;j<nOrbitsOK;j++)
 		{
 		int i=okOrbits[j];
@@ -3086,7 +3484,7 @@ for (int i=0;i<nTC;i++)
 		};
 		
 	//	Sort by size of orbit
-	
+
 	for (int tc=0;tc<nTC;tc++)
 		{
 		int norbs=numOrbitsTC[tc];
@@ -3107,6 +3505,23 @@ for (int i=0;i<nTC;i++)
 			};
 		};
 		
+	PCavailOrbits=nOrbits;
+	CHECK_MEM( PCorbitExclusions = (int *)malloc(nOrbits*sizeof(int)) )
+	for (int t=0;t<nOrbits;t++) PCorbitExclusions[t]=0;
+
+	CHECK_MEM( PCorbitSlots = (int *)malloc(nOrbits*sizeof(int)) )
+	for (int t=0;t<nOrbits;t++) PCorbitSlots[t]=orbitSizes[t];
+
+	CHECK_MEM( PCorbitBlocks = (int *)malloc(nOrbits*sizeof(int)) )
+	for (int t=0;t<nOrbits;t++) PCorbitBlocks[t]=0;
+	nPCorbitBlocks=0;
+	}
+else
+	{
+	PCavailOrbits=0;
+	nPCorbitBlocks=0;
+	};
+	
 //	Set up table of all 1-cycles
 
 CHECK_MEM( oneCycleTable = (struct oneCycle *)malloc(n1C*sizeof(struct oneCycle)) )
@@ -3120,16 +3535,6 @@ for (int t=0;t<nTC;t++) PCexclusions[t]=0;
 CHECK_MEM( PCcontacts = (int *)malloc(nTC*sizeof(int)) )
 for (int t=0;t<nTC;t++) PCcontacts[t]=0;
 
-PCavailOrbits=nOrbits;
-CHECK_MEM( PCorbitExclusions = (int *)malloc(nOrbits*sizeof(int)) )
-for (int t=0;t<nOrbits;t++) PCorbitExclusions[t]=0;
-
-CHECK_MEM( PCorbitSlots = (int *)malloc(nOrbits*sizeof(int)) )
-for (int t=0;t<nOrbits;t++) PCorbitSlots[t]=orbitSizes[t];
-
-CHECK_MEM( PCorbitBlocks = (int *)malloc(nOrbits*sizeof(int)) )
-for (int t=0;t<nOrbits;t++) PCorbitBlocks[t]=0;
-nPCorbitBlocks=0;
 
 CHECK_MEM( loopContacts = (int *)malloc(nTC*sizeof(int)) )
 CHECK_MEM( multiContacts = (int *)malloc(nTC*sizeof(int)) )
@@ -3186,8 +3591,11 @@ PCsolSize=0;
 PClargestSolSeen=0;
 CHECK_MEM( PCsol = (int *)malloc(nTC*sizeof(int)) )
 CHECK_MEM( PCorbit = (int *)malloc(nTC*sizeof(int)) )
+CHECK_MEM( PCoffs = (int *)malloc(nTC*sizeof(int)) )
+CHECK_MEM( PCcount = (int *)malloc(nTC*sizeof(int)) )
 
-PCsolTarget = ffc ? ((n-1)*(fn3-(n-3)) + nSTC) : ((n-1)*fn3 - 1);
+if (nsk) PCsolTarget = (fn1 - nskNOC)/(n-2) + nSTC;
+else PCsolTarget = ffc ? ((n-1)*(fn3-(n-3)) + nSTC) : ((n-1)*fn3 - 1);
 
 //	Set up a pool of loops we can draw on
 
@@ -3216,19 +3624,26 @@ topLevelLoopCount = n1C;
 
 if (verbose) checkLoopTable();
 
-//	Add standard 2-cycles to solution
+//	Add kernel's 2-cycles to solution
 
 for (int i=0;i<nSTC;i++)
 	{
 	int si=stcIndex[i];
 	int stcOrb=-1;
+	
+	if (useOrbits)
 	for (int k=0;k<numOrbitsTC[si];k++)
 		{
 		int orb=orbitNumbersTC[si][k];
 		stcOrb=orb;
 		printf("Starting 2-cycle %d lies in orbit %d\n",si,stcOrb);
 		};
-	if (!addTCtoPC(si,stcOrb))
+		
+	if (nsk && stcIncomplete[i])
+		{
+		addPartialTCtoPC(si,stcOrb,stcOffs[i],stcNOC[i]);
+		}
+	else if (!addTCtoPC(si,stcOrb))
 		{
 		printf("Unable to add 2-cycle %d to solution\n",si);
 		exit(EXIT_FAILURE);
@@ -3276,6 +3691,7 @@ if (lastAnchor)
 //	Exclude anything with double contacts with roots
 
 for (int k=0;k<nSTC;k++)
+if (!stcIncomplete[k])
 	{
 	int t=stcIndex[k];
 	for (int i=0;i<tcN.nvsi[t];i++)
@@ -3302,11 +3718,13 @@ for (int t=0;t<nTC;t++) PCcontacts[t]=0;
 
 int spLen = fn + fn1 + fn2 + fn3 + n - 4;
 
+if (nsk) spLen -= (nskScore/(n-2) - 1);
+
 //	Open files for results
 
 FILE *f;
 sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s",
-	ffc?"_FFC":"_FTC",
+	nsk?nskString:(ffc?"FFC":"FTC"),
 	
 	stabiliser?"_STAB":"",
 	limStab?"_LIMSTAB":"",
@@ -3322,9 +3740,9 @@ sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s",
 	
 	treesOnly?"_TreesOnly":""
 );
-sprintf(twoCyclesOutputFile,"%d_%d_twoCycles%s.txt",
+sprintf(twoCyclesOutputFile,"%d_%d_twoCycles_%s.txt",
 	n, spLen, optionsDescription);
-sprintf(superPermsOutputFile,"%d_%d%s.txt",
+sprintf(superPermsOutputFile,"%d_%d_%s.txt",
 	n, spLen, optionsDescription);
 	
 f = fopen(twoCyclesOutputFile,"wa");

@@ -1,8 +1,9 @@
 Readme.txt
 ==========
 
-Author:	Greg Egan
-Date:	24 February 2019
+Author:			Greg Egan
+Date:			24 February 2019
+Version 1.1:	25 February 2019, describes new "nsk" option that implements Robin Houston's non-standard kernels
 
 Building and testing
 --------------------
@@ -65,6 +66,7 @@ Options that control what is shown on the console (default is just to count each
 Options for the choice of kernel (default is the first 3-cycle):
 
 	ffc									Use the first 4-cycle as the kernel
+	nsk<specifier>						Use a non-standard kernel.  The details are discussed below.
 
 Options for the choice of anchor points on the kernel (default is to allow trees anchored anywhere on the kernel):
 
@@ -87,6 +89,22 @@ Options for how to handle orbits:
 Options to filter solutions:
 
 	treesOnly							Filter solutions to only output strict trees in the 2-cycle graph
+	
+Non-standard kernels
+--------------------
+
+A non-standard kernel is specified by a list of the numbers of complete 1-cycles, separated by weight-2
+edges, before using either a weight-3 edge (if the next digit follows directly after), or a weight-4 edge
+(if a space or a dash separates the digits; if you want to use a space, you will need to enclose the whole option
+in quotation marks.)
+
+For example:
+
+	SuperPermutations 6 nsk5555-555355
+	
+uses a kernel with four complete 2-cycles (each with 5 1-cycles separated by weight-2 edges), then a weight-4
+edge to a section with three complete 2-cycles, then 3 consecutive 1-cycles, then a weight-3 edge to two complete
+2-cycles.
 	
 Specifics of symmetry options
 -----------------------------
