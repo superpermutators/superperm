@@ -194,8 +194,6 @@ static int *nskSpec=NULL;			//	Non-standard kernel specifier.
 									//	giving the number of one-cycles to traverse, joined by weight-2 edges,
 									//	before then using a weight-3 edge.  A code of -1 indicates a weight-4
 									//	edge.
-static int nskNOC=0;				//	Count of 1-cycles covered by kernel
-static int nskScore=0;				//	Score for the kernel
 
 //	Choice of anchor points on kernel
 
@@ -337,6 +335,16 @@ static int *oneForTwoStartPerms=NULL;
 //	For each 1-cycle, the index numbers of the permutations it contains
 
 static int *permsForOne=NULL;
+
+//	Non-standard kernel details
+//	---------------------------
+
+static int nskNOC=0;				//	Count of 1-cycles covered by kernel
+static int nskNOP=0;				//	Count of permutations covered by kernel
+static int nskScore=0;				//	Score for the kernel	
+static int *nskPerms=NULL;			//	List of all permutations
+static int *nskAuto=NULL;			//	Automorphism for symmetry of non-standard kernels
+static int nskPalindrome=FALSE;		//	Is the kernel palindromic?
 
 //	Orbit details
 //	-------------
@@ -1102,7 +1110,7 @@ fprintf(f,"\n");
 //	Symmetry operations
 //	===================
 
-//	Act with a general automorphism on a 2-cycle or a 1-cycle
+//	Act with a general automorphism on a 2-cycle
 
 //	Each automorphism is described by (n+1) integers, with the first being +1/-1 with -1 for reversal,
 //	and the remaining n integers being a digit map, giving the substitute digits for 1...n.
@@ -1133,6 +1141,33 @@ if (autoMorphism[0]<0)
 	
 rClassMin(swapped+1,n-1);
 return searchTwoCycles(swapped,n);
+}
+
+//	Act with a general automorphism on a permutation
+
+int actAutoP(int p, int *autoMorphism)
+{
+static int swapped[MAX_N], rev[MAX_N];
+
+//	Use the automorphism permutation to swap the digits
+
+for (int z=0;z<n;z++)
+	{
+	int d=*(p0+n*p+z);
+	swapped[z]=autoMorphism[d];
+	};
+	
+//	If specified, reverse all the digits
+	
+if (autoMorphism[0]<0)
+	{
+	for (int z=0;z<n;z++) rev[z]=swapped[n-1-z];
+	return searchPermutations(rev,n);
+	};
+	
+//	Unswapped version
+	
+return searchPermutations(swapped,n);
 }
 
 //	For n=5, swap 1 and 3, and reverse the last n-1 digits
@@ -1247,6 +1282,7 @@ return searchTwoCycles(rev,n);
 
 int findSymm(int tc, int n)
 {
+if (nsk && nskPalindrome) return actAutoTC(tc,nskAuto);
 if (n==5) return fiveSymm(tc,n);
 else if (n==7) return sevenSymm(tc,n);
 else if (n==8) return eightSymm(tc,n);
@@ -3039,10 +3075,16 @@ else
 	CHECK_MEM( stcIncomplete = (char *)malloc(nSTC*sizeof(char)) )
 	CHECK_MEM( stcOffs = (int *)malloc(nSTC*sizeof(int)) )
 	CHECK_MEM( stcNOC = (int *)malloc(nSTC*sizeof(int)) )
+	
+	nskNOP = nskNOC*n;
+	CHECK_MEM( nskPerms = (int *)malloc(nskNOP*sizeof(int)) )
+	CHECK_MEM( nskAuto = (int *)malloc((n+1)*sizeof(int)) )
 
 	int p=0;					//	Start from permutation #0, 1234...n
 	int nw=0;					//	Count up edges of weights 3 or 4 in kernel
 	int ntc=0;					//	Count up 2-cycles, complete or otherwise
+	int np=0;					//	Count up permutations
+	nskPerms[np++] = 0;
 	
 	if (verbose)
 		{
@@ -3075,11 +3117,13 @@ else
 			for (int k=0;k<n-1;k++)
 				{
 				p = w1s[p];	//	Weight 1 edges, until we'd close the 1-cycle
-				if (verbose) printInt(stdout,p0+p*n,n,",\n");
+				nskPerms[np++] = p;
+				if (verbose) printInt(stdout,p0+p*n,n,np==nskNOP?"\n":",\n");
 				};
 			if (j==nskSpec[z]-1) break;
 			p = w2s[p];							//	Weight 2 edges
-			if (verbose) printInt(stdout,p0+p*n,n,",\n");
+			nskPerms[np++] = p;
+			if (verbose) printInt(stdout,p0+p*n,n,np==nskNOP?"\n":",\n");
 			};
 		
 		if (z!=nskCount-1 && nskSpec[z+1]>0)	//	Weight 3 edge, unless we're at the end, or have a weight-4 edge next
@@ -3087,7 +3131,8 @@ else
 			kernelW34Perms[nw] = p;
 			kernelW34Weights[nw] = 3;
 			p = w3s[p];
-			if (verbose) printInt(stdout,p0+p*n,n,",\n");
+			nskPerms[np++] = p;
+			if (verbose) printInt(stdout,p0+p*n,n,np==nskNOP?"\n":",\n");
 			nw++;
 			};
 		}
@@ -3098,11 +3143,46 @@ else
 		kernelW34Perms[nw] = p;
 		kernelW34Weights[nw] = 4;
 		p = w4s[p];
-		if (verbose) printInt(stdout,p0+p*n,n,",\n");
+		nskPerms[np++] = p;
+		if (verbose) printInt(stdout,p0+p*n,n,np==nskNOP?"\n":",\n");
 		nw++;
 		};
 	
 	if (verbose) printf("}\n");
+	
+	if (np!=nskNOP)
+		{
+		printf("Did not find the expected number of permutations in the kernel\n");
+		exit(EXIT_FAILURE);
+		};
+		
+	//	See if kernel is palindromic
+	
+	//	Set up the automorphism that would reverse it, if it is
+	
+	nskAuto[0]=-1;
+	for (int k=1;k<=n;k++) nskAuto[k] = p0[nskPerms[nskNOP-1]*n + n - k];
+	
+	nskPalindrome = TRUE;
+	for (int i=0;i<nskNOP;i++)
+		{
+		if (nskPerms[nskNOP-1-i] != actAutoP(nskPerms[i],nskAuto))
+			{
+			nskPalindrome=FALSE;
+			break;
+			};
+		};
+		
+	if (nskPalindrome)
+		{
+		printf("Kernel is palindromic, and can be reversed with the automorphism: ");
+		printInt(stdout,nskAuto,n+1,"\n");
+		}
+	else if (symmPairs)
+		{
+		printf("Kernel is NOT palindromic, so cannot use the symmPairs option\n");
+		exit(EXIT_FAILURE);
+		};
 		
 	//	Give details of kernel
 	
@@ -3202,93 +3282,96 @@ if (useOrbits)
 			};
 		};
 
-	for (int pass=0;pass<2;pass++)
+	if (!blocks && !symmPairs)
 		{
-		nStabiliserGroup = 0;
-		
-		for (int rev=1;rev>=-1;rev-=2)
-		for (int p=0;p<fn1;p++)
+		for (int pass=0;pass<2;pass++)
 			{
-			aut[0]=rev;
-			aut[n]=n;
-			for (int z=0;z<n-1;z++) aut[z+1]=p1[p*(n-1)+z];
+			nStabiliserGroup = 0;
+			
+			for (int rev=1;rev>=-1;rev-=2)
+			for (int p=0;p<fn1;p++)
+				{
+				aut[0]=rev;
+				aut[n]=n;
+				for (int z=0;z<n-1;z++) aut[z+1]=p1[p*(n-1)+z];
 
-			if (littleGroup)
-				{
-				if (n%2==1 && !ffc)
+				if (littleGroup)
 					{
-					if (rev<0) continue;
-					}
-				else
-					{
-					if (searchBlock(lG,n+1,n-2,aut)<0) continue;
-					};
-				};
-
-			int stab=TRUE;
-			for (int k=0;k<nSTC;k++)
-				{
-				int ak = actAutoTC(stcIndex[k],aut);
-				if (ak<0)
-					{
-					printf("Cannot find 2-cycle corresponding to action of automorphism\n");
-					exit(EXIT_FAILURE);
-					};
-				if (stcInverse[ak]<0)
-					{
-					stab=FALSE;
-					break;
-					};
-				};
-			if (stab)
-				{
-				if (limStab)
-					{
-					if (lS)
+					if (n%2==1 && !ffc)
 						{
-						for (int k=0;k<nSTC;k++)
-						if (lS[k]!=0)
-							{
-							int ak = actAutoTC(stcIndex[k],aut);
-							int sak = stcInverse[ak];
-							if (lS[k]!=lS[sak])
-								{
-								stab=FALSE;
-								break;
-								};
-							};
+						if (rev<0) continue;
 						}
 					else
 						{
-						printf("Option limStab not defined for this choice of n and kernel\n");
+						if (searchBlock(lG,n+1,n-2,aut)<0) continue;
+						};
+					};
+
+				int stab=TRUE;
+				for (int k=0;k<nSTC;k++)
+					{
+					int ak = actAutoTC(stcIndex[k],aut);
+					if (ak<0)
+						{
+						printf("Cannot find 2-cycle corresponding to action of automorphism\n");
 						exit(EXIT_FAILURE);
 						};
-					if (!stab) continue;
+					if (stcInverse[ak]<0)
+						{
+						stab=FALSE;
+						break;
+						};
 					};
-				if (pass==1)
+				if (stab)
 					{
-					for (int z=0;z<n+1;z++) stabiliserGroup[nStabiliserGroup*(n+1)+z] = aut[z];
+					if (limStab)
+						{
+						if (lS)
+							{
+							for (int k=0;k<nSTC;k++)
+							if (lS[k]!=0)
+								{
+								int ak = actAutoTC(stcIndex[k],aut);
+								int sak = stcInverse[ak];
+								if (lS[k]!=lS[sak])
+									{
+									stab=FALSE;
+									break;
+									};
+								};
+							}
+						else
+							{
+							printf("Option limStab not defined for this choice of n and kernel\n");
+							exit(EXIT_FAILURE);
+							};
+						if (!stab) continue;
+						};
+					if (pass==1)
+						{
+						for (int z=0;z<n+1;z++) stabiliserGroup[nStabiliserGroup*(n+1)+z] = aut[z];
+						};
+					nStabiliserGroup++;
 					};
-				nStabiliserGroup++;
+				};
+				
+			if (pass==0)
+				{
+				CHECK_MEM( stabiliserGroup = (int *)malloc(nStabiliserGroup * (n+1) * sizeof(int)) )
 				};
 			};
 			
-		if (pass==0)
+		if (verbose)
 			{
-			CHECK_MEM( stabiliserGroup = (int *)malloc(nStabiliserGroup * (n+1) * sizeof(int)) )
-			};
-		};
-		
-	if (verbose)
-		{
-		printf("%s group for first %d standard 2-cycles is:\n",littleGroup?"Reduced stabiliser":"Stabiliser",nSTC);
-		for (int i=0;i<nStabiliserGroup;i++)
-			{
-			printf("%4d ",i);
-			printInt(stdout,stabiliserGroup+i*(n+1),n+1,"\n");
-			printf("    Action on the 2-cycles: ");
-			for (int k=0;k<nSTC;k++) printf("%d ",stcInverse[actAutoTC(stcIndex[k],stabiliserGroup+i*(n+1))]);
-			printf("\n");
+			printf("%s group for first %d standard 2-cycles is:\n",littleGroup?"Reduced stabiliser":"Stabiliser",nSTC);
+			for (int i=0;i<nStabiliserGroup;i++)
+				{
+				printf("%4d ",i);
+				printInt(stdout,stabiliserGroup+i*(n+1),n+1,"\n");
+				printf("    Action on the 2-cycles: ");
+				for (int k=0;k<nSTC;k++) printf("%d ",stcInverse[actAutoTC(stcIndex[k],stabiliserGroup+i*(n+1))]);
+				printf("\n");
+				};
 			};
 		};
 		
@@ -3430,8 +3513,8 @@ if (useOrbits)
 	for (int i=0;i<nOrbits;i++)
 		{
 		int ok = selfDisj(orbits[i],orbitSizes[i]);
-		if ((blocks||(symmPairs&&(!fixedPoints))) && orbitSizes[i]==1) ok=FALSE;
-		if (fullSymm && orbitSizes[i]!=groupSizes[0]) ok=FALSE;
+		if ((blocks||(symmPairs && (!fixedPoints))) && orbitSizes[i]==1) ok=FALSE;
+		if (fullSymm && (!fixedPoints) && orbitSizes[i]!=groupSizes[0]) ok=FALSE;
 		if (ok)
 			{
 			for (int j=0;j<i;j++)
@@ -3704,9 +3787,7 @@ if ((!nsk) || (!stcIncomplete[k]))
 			printf("Excluding 2-cycle %d because it has 2 contacts with standard 2-cycles\n",tc);
 			if (!excludeTCfromPC(tc))
 				{
-				//	Unwind unviable
-				
-				printf("Unviable exclusions\n");
+				printf("Exclusion of 2-cycle %d is unviable\n",tc);
 				exit(EXIT_FAILURE);
 				};
 			};

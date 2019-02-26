@@ -105,6 +105,10 @@ For example:
 uses a kernel with four complete 2-cycles (each with 5 1-cycles separated by weight-2 edges), then a weight-4
 edge to a section with three complete 2-cycles, then 3 consecutive 1-cycles, then a weight-3 edge to two complete
 2-cycles.
+
+Non-standard kernels will generally lack the kind of symmetries of the standard kernels. However, if you supply
+a palindromic non-standard kernel, you can use the "symmPairs" symmetry option, which will apply the symmetry
+that maps the kernel back into itself in reversed order.
 	
 Specifics of symmetry options
 -----------------------------
@@ -116,9 +120,9 @@ The 2-fold symmetry used by the "symmPairs" option is defined somewhat arbitrari
 
 * n=5, 3-cycle kernel
 
-Apply the cycle (1 3) to the permutations and reverse.  This exchanges two of the 2-cycles in the kernel and leaves one fixed.
-Choosing the options "symmPairs fullSymm" for n=5 will reduce the solution set from the usual 6 to just 2, which are both
-invariant under this symmetry.
+Apply the cycle (1 3) to the permutations and reverse.  This exchanges two of the 2-cycles in the kernel and leaves one
+fixed.  Choosing the options "symmPairs fullSymm" for n=5 will reduce the solution set from the usual 6 to just 2, which
+are both invariant under this symmetry.
 
 * n=7, 3-cycle kernel
 
@@ -127,6 +131,10 @@ Apply the cycles (1 2)(3 5) to the permutations and reverse.  This exchanges two
 * n=7, 4-cycle kernel
 
 Apply the cycle (1 3) to the permutations and reverse.
+
+* Palindromic non-standard kernels
+
+Apply the symmetry that maps the kernel back into itself in reversed order.
 
 limStab
 -------
