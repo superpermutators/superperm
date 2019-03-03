@@ -170,7 +170,7 @@ Files written
 
 Each search produces two results file, one containing the superpermutations (one per line), and the other
 containing a list of 2-cycles on which the solution is based, as n-tuples of digits, grouped into lists with
-curly braces {}.  These filesd have names of the form:
+curly braces {}.  These files have names of the form:
 
 	<n>_<len>(_options).txt
 	<n>_<len>_twoCycles(_options).txt

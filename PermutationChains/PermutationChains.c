@@ -4,6 +4,7 @@
 //  Created by Greg Egan on 24 February 2019.
 //
 //	V1.1	25 February 2019	Added option for Robin Houston's non-standard kernels
+//	V1.2	 3 March 2019		Allow use of full stabiliser subgroup for non-standard kernels
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -222,11 +223,15 @@ static int treesOnly=FALSE;			//	Filter solutions to only output strict trees in
 //	File names
 //	----------
 
-static char nskString[128];
-static char optionsDescription[128];
-static char superPermsOutputFile[128];
-static char twoCyclesOutputFile[128];
-static char flagsFile[128];
+#define MAX_FILENAME 512
+static char nskString[MAX_FILENAME];
+static char optionsDescription[MAX_FILENAME];
+static char superPermsOutputFile[MAX_FILENAME];
+static char twoCyclesOutputFile[MAX_FILENAME];
+static char flagsFile[MAX_FILENAME];
+
+static int superPermsOutputFileOpened=FALSE;
+static int twoCyclesOutputFileOpened=FALSE;
 
 //	Flag data parameters
 //	--------------------
@@ -2252,11 +2257,16 @@ qsort(tcnums,PCsolSize,sizeof(int),compare1);
 printf("Found SOLUTION %d (size %d) among %d provisional solutions:\n",PCsolCount+1,PCsolSize,PCprovCount);
 if (showSols) showPCsol();
 
-FILE *f = fopen(twoCyclesOutputFile,"aa");
+FILE *f = fopen(twoCyclesOutputFile,twoCyclesOutputFileOpened?"aa":"wa");
 if (f==NULL)
 	{
-	printf("Error opening file %s to append\n",twoCyclesOutputFile);
+	printf("Error opening file %s\n",twoCyclesOutputFile);
 	exit(EXIT_FAILURE);
+	};
+if (!twoCyclesOutputFileOpened)
+	{
+	fprintf(f,"{\n");
+	twoCyclesOutputFileOpened=TRUE;
 	};
 if (PCsolCount>0) fprintf(f,",\n");
 fprintf(f,"{");
@@ -2267,12 +2277,13 @@ for (int q=0;q<PCsolSize;q++)
 fprintf(f,"}\n");
 fclose(f);
 
-fopen(superPermsOutputFile,"aa");
+fopen(superPermsOutputFile,superPermsOutputFileOpened?"aa":"wa");
 if (f==NULL)
 	{
-	printf("Error opening file %s to append\n",superPermsOutputFile);
+	printf("Error opening file %s\n",superPermsOutputFile);
 	exit(EXIT_FAILURE);
 	};
+superPermsOutputFileOpened=TRUE;
 printSuperPerm(f);
 fclose(f);
 
@@ -3186,6 +3197,19 @@ else
 		
 	//	Give details of kernel
 	
+	//	First check that kernel is valid, containing no repeated permutations
+	
+	qsort(nskPerms,nskNOP,sizeof(int),compare1);
+	for (int k=1;k<nskNOP;k++)
+		{
+		if (nskPerms[k]==nskPerms[k-1])
+			{
+			printf("Non-standard kernel contains repeated permutation: ");
+			printInt(stdout,p0+n*nskPerms[k],n,"\n");
+			exit(EXIT_FAILURE);
+			};
+		};
+	
 	printf("Non-standard kernel covers %d 1-cycles, and has score of %d\n",nskNOC,nskScore);
 	
 	if (verbose)
@@ -3306,20 +3330,39 @@ if (useOrbits)
 						if (searchBlock(lG,n+1,n-2,aut)<0) continue;
 						};
 					};
+			
 
 				int stab=TRUE;
-				for (int k=0;k<nSTC;k++)
+				if (nsk)
 					{
-					int ak = actAutoTC(stcIndex[k],aut);
-					if (ak<0)
+					//	Act with automorphism on the individual permutations of a non-standard kernel
+					
+					for (int k=0;k<nskNOP;k++)
 						{
-						printf("Cannot find 2-cycle corresponding to action of automorphism\n");
-						exit(EXIT_FAILURE);
+						int ak = actAutoP(nskPerms[k],aut);
+						if (!bsearch(&ak,nskPerms,nskNOP,sizeof(int),compare1))
+							{
+							stab=FALSE;
+							break;
+							};
 						};
-					if (stcInverse[ak]<0)
+					}
+				else
+					{
+					//	Act with automorphism on the full 2-cycles that mke up a standard kernel
+					for (int k=0;k<nSTC;k++)
 						{
-						stab=FALSE;
-						break;
+						int ak = actAutoTC(stcIndex[k],aut);
+						if (ak<0)
+							{
+							printf("Cannot find 2-cycle corresponding to action of automorphism\n");
+							exit(EXIT_FAILURE);
+							};
+						if (stcInverse[ak]<0)
+							{
+							stab=FALSE;
+							break;
+							};
 						};
 					};
 				if (stab)
@@ -3363,7 +3406,7 @@ if (useOrbits)
 			
 		if (verbose)
 			{
-			printf("%s group for first %d standard 2-cycles is:\n",littleGroup?"Reduced stabiliser":"Stabiliser",nSTC);
+			printf("%s group for the kernel is:\n",littleGroup?"Reduced stabiliser":"Stabiliser");
 			for (int i=0;i<nStabiliserGroup;i++)
 				{
 				printf("%4d ",i);
@@ -3826,23 +3869,9 @@ sprintf(twoCyclesOutputFile,"%d_%d_twoCycles_%s.txt",
 sprintf(superPermsOutputFile,"%d_%d_%s.txt",
 	n, spLen, optionsDescription);
 	
-f = fopen(twoCyclesOutputFile,"wa");
-if (f==NULL)
-	{
-	printf("Error opening results file %s to write\n",twoCyclesOutputFile);
-	exit(EXIT_FAILURE);
-	};
-fprintf(f,"{\n");
-fclose(f);
-
-f = fopen(superPermsOutputFile,"wa");
-if (f==NULL)
-	{
-	printf("Error opening results file %s to write\n",superPermsOutputFile);
-	exit(EXIT_FAILURE);
-	};
-fclose(f);
-
+twoCyclesOutputFileOpened=FALSE;
+superPermsOutputFileOpened=FALSE;
+	
 //	Search for solutions
 
 printf("\nSearching for solutions of size %d ...\n",PCsolTarget);
@@ -3850,14 +3879,17 @@ PCsolCount=0;
 PCprovCount=0;
 searchPC(0);
 
-f = fopen(twoCyclesOutputFile,"aa");
-if (f==NULL)
+if (twoCyclesOutputFileOpened)
 	{
-	printf("Error opening results file %s to append\n",twoCyclesOutputFile);
-	exit(EXIT_FAILURE);
+	f = fopen(twoCyclesOutputFile,"aa");
+	if (f==NULL)
+		{
+		printf("Error opening results file %s to append\n",twoCyclesOutputFile);
+		exit(EXIT_FAILURE);
+		};
+	fprintf(f,"}\n");
+	fclose(f);
 	};
-fprintf(f,"}\n");
-fclose(f);
 	
 return 0;
 }
