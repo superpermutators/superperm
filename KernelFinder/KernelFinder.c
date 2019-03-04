@@ -551,7 +551,7 @@ if (currentKernelScore >= minimumScore && currentKernelScore % (kernelN-2) == 0 
 	fclose(fout);
 	};
 	
-if (ekl==maxKernelLength) return;
+if (ekl>=maxKernelLength) return;
 
 int maxMore = maxKernelLength - ekl;
 
