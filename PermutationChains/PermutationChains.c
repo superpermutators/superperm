@@ -5,6 +5,7 @@
 //
 //	V1.1	25 February 2019	Added option for Robin Houston's non-standard kernels
 //	V1.2	 3 March 2019		Allow use of full stabiliser subgroup for non-standard kernels
+//	V1.3	 9 March 2019		Sped up symmPairs with fullSymm by excluding 2-cycles that would connect paired trees
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -304,6 +305,10 @@ static char *stcIncomplete=NULL;
 //	Offsets and one-cycle counts for the incomplete 2-cycles in the kernel
 
 static int *stcOffs=NULL, *stcNOC=NULL;
+
+//	The loop that takes in the wole kernel
+
+struct loop *stcLoop=NULL;
 
 //	A list of permutations in the kernel that are followed by edges of weight 3 or 4
 
@@ -1535,6 +1540,19 @@ while (x)
 return y;
 }
 
+//	Get the top loop associated with a loop
+
+struct loop *topLoopLoop(struct loop *lp)
+{
+struct loop *x = lp, *y=NULL;
+while (x)
+	{
+	y = x;
+	x = x->parentLoop;
+	};
+return y;
+}
+
 #define LINK_LOOP(x) \
 	x->nextTop = loopHeader.nextTop; \
 	loopHeader.nextTop = x; \
@@ -1802,7 +1820,14 @@ void dropTCfromPC(int skipLoopStuff);
 struct loop **topLoopList=NULL;
 #define UNWIND_TMP for (int i=0;i<n-1;i++) topLoopList[i]->tempFlag = FALSE;
 
-int addTCtoPC(int t, int orbit)
+#define TIDY_CONTACTS \
+if (nLoopContacts!=0) \
+	{ \
+	for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0; \
+	nLoopContacts=0; \
+	}; \
+
+int addTCtoPC(int t, int orbit, int symmPairNumber)
 {
 #if DEBUG_PC
 if (debug)
@@ -1824,6 +1849,7 @@ for (int i=0;i<n-1;i++)
 			printf("Unwinding addition of 2-cycle %d, as it hits a top-level loop more than once\n",t);
 		#endif
 		for (int j=i-1;j>=0;j--) topLoopList[j]->tempFlag = FALSE;
+		TIDY_CONTACTS
 		return FALSE;
 		};
 	topLoopList[i]->tempFlag = TRUE;
@@ -1841,6 +1867,7 @@ if (nPCorbitBlocks!=0)
 				printf("Two-cycle %d would complete blocked orbit %d, so disallowing it\n",t,norb);
 			#endif
 			UNWIND_TMP
+			TIDY_CONTACTS
 			return FALSE;
 			};
 		};
@@ -1878,6 +1905,7 @@ for (int i=0;i<n-1;i++)
 			unexcludeTCfromPC(t0);
 			};
 		UNWIND_TMP
+		TIDY_CONTACTS
 		return FALSE;
 		};
 	
@@ -1913,39 +1941,83 @@ struct loop *tcl = &loopTable[loopTableUsed++];
 initLoop0(tcl);
 
 for (int i=0;i<n-1;i++) addToLoop(tcl,topLoopList[i]);
-if (tcl->freeCount > 0 || topLevelLoopCount==n-1)
+int done=topLevelLoopCount==n-1;
+if (tcl->freeCount > 0 || done)
 	{
 	//	Check for 2-cycles that make multiple contacts with this loop
 
 	exclusionsStack[nExclusionsStack++]=-1;
-	nLoopContacts=0;
-	nMultiContacts=0;
-	traverseLoopCount = tcl->freeCount;
-	if (traverseLoopCount && PCsolSize<PCsolTarget) traverseLoopContacts(tcl);
-	for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
 	
-	for (int i=0;i<nMultiContacts;i++)
+	if (!done)
 		{
-		int texcl=multiContacts[i];
+		int nmc=0;
+		if (symmPairNumber>=0 && topLoopLoop(stcLoop)==tcl) symmPairNumber=-1;
+		
 		#if DEBUG_PC
 		if (debug)
-			printf("addTCtoPC() Excluding 2-cycle %d because it has multiple contacts with loop formed from 2-cycle %d\n",texcl,t);
-		#endif
-		if (excludeTCfromPC(texcl))
 			{
-			exclusionsStack[nExclusionsStack++]=texcl;
+			printf("addTCtoPC() called with symmPairNumber=%d, orbit=%d, loop owns stcLoop=%s\n",
+				symmPairNumber, orbit, topLoopLoop(stcLoop)==tcl?"Yes":"No");
+		
+			int resPC=FALSE;
+			for (int z=0;z<nTC;z++)
+			if (PCcontacts[z]!=0)
+				{
+				resPC=TRUE;
+				break;
+				};
+			if (resPC)
+				{
+				printf("Residual nonzero PCcontacts\n");
+				if (symmPairNumber!=1)
+					{
+					exit(EXIT_FAILURE);
+					};
+				};
+			};
+		#endif
+		
+		if (symmPairNumber==1)
+			{
+			nmc=nMultiContacts;
 			}
 		else
 			{
+			nLoopContacts=0;
+			nMultiContacts=0;
+			};
+		traverseLoopCount = tcl->freeCount;
+		traverseLoopContacts(tcl);
+		if (symmPairNumber!=0)
+			{
+			for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
+			nLoopContacts=0;
+			};
+		
+		for (int i=nmc;i<nMultiContacts;i++)
+			{
+			int texcl=multiContacts[i];
 			#if DEBUG_PC
 			if (debug)
-				printf("addTCtoPC() Abandoning exclusion of 2-cycle %d, and hence unwinding addition of 2-cycle %d\n",texcl,t);
+				printf("addTCtoPC() Excluding 2-cycle %d because it has multiple contacts with loop formed from 2-cycle %d (symmPairNumber=%d)\n",texcl,t,symmPairNumber);
 			#endif
-			unwindExclusionsStack();
-			dissolveLoop(tcl);
-			loopTableUsed--;
-			dropTCfromPC(TRUE);
-			return FALSE;
+			if (excludeTCfromPC(texcl))
+				{
+				exclusionsStack[nExclusionsStack++]=texcl;
+				}
+			else
+				{
+				#if DEBUG_PC
+				if (debug)
+					printf("addTCtoPC() Abandoning exclusion of 2-cycle %d, and hence unwinding addition of 2-cycle %d\n",texcl,t);
+				#endif
+				unwindExclusionsStack();
+				dissolveLoop(tcl);
+				loopTableUsed--;
+				dropTCfromPC(TRUE);
+				TIDY_CONTACTS
+				return FALSE;
+				};
 			};
 		};
 		
@@ -1971,12 +2043,13 @@ else
 	dissolveLoop(tcl);
 	loopTableUsed--;
 	dropTCfromPC(TRUE);
+	TIDY_CONTACTS
 	return FALSE;
 	};
 
-excludeOrbitsTC(t);
 if (useOrbits)
 	{
+	excludeOrbitsTC(t);
 	for (int k=0;k<numOrbitsTC[t];k++)
 		{
 		int norb = orbitNumbersTC[t][k];
@@ -2029,7 +2102,6 @@ if (!skipLoopStuff)
 			#endif
 			};
 		};
-		
 	};
 
 #if DEBUG_PC
@@ -2065,6 +2137,7 @@ nMultiContacts=0;
 traverseLoopCount = tcl->freeCount;
 if (traverseLoopCount && PCsolSize<PCsolTarget) traverseLoopContacts(tcl);
 for (int i=0;i<nLoopContacts;i++) PCcontacts[loopContacts[i]]=0;
+nLoopContacts=0;
 
 for (int i=0;i<nMultiContacts;i++)
 	{
@@ -2372,15 +2445,18 @@ if (PCsolSize==PCsolTarget)
 	
 if (PCsolSize > PCsolTarget) return;
 if (PCsolSize+PCpoolSize < PCsolTarget) return;
-if (topLevelLoopCount - (n-2)*(PCsolTarget-PCsolSize) > 1) return;
+if (fullSymm && PCavailOrbits==0) return;
 
 #if DEBUG_PC
 if (debug)
 	{
 	printf("In searchPC()\n");
-	checkLoopTable();
+//	checkLoopTable();
 	};
 #endif
+
+lookForOrbit = useOrbits && PCavailOrbits!=0;
+int oneLoopEnough=((!lookForOrbit)||fullSymm);
 
 //	Find the loop with the smallest freeCount
 
@@ -2397,6 +2473,7 @@ while (lp != &loopHeader)
 		minFreeCount = f;
 		nMinL = 1;
 		minL[0] = lp;
+		if (f==1 && oneLoopEnough) break;		//	A single loop with 1 free is all we need
 		}
 	else if (f == minFreeCount)
 		{
@@ -2405,9 +2482,6 @@ while (lp != &loopHeader)
 	lp = lp->nextTop;
 	};
 	
-if (fullSymm && PCavailOrbits==0) return;
-
-lookForOrbit = useOrbits && PCavailOrbits!=0;
 traverseLoopTwoCycle=-1;
 int res=-1;
 
@@ -2420,8 +2494,6 @@ for (int j=0;j<nMinL;j++)
 
 if (res<0 && lookForOrbit)
 	{
-	if (fullSymm) return;
-	
 	//	Can't find a whole orbit that works with this loop, so have to fall back to a single 2-cycle
 	
 	lookForOrbit=FALSE;
@@ -2437,10 +2509,11 @@ if (lookForOrbit)
 	int nOrbit=res;
 	int nsize = orbitSizes[nOrbit];
 	int completed=TRUE;
+	int spn = (nsize==2 && fullSymm && (!fixedPoints));
 	for (int z=0;z<nsize;z++)
 		{
 		int t=orbits[nOrbit][z];
-		if (!addTCtoPC(t,nOrbit))
+		if (!addTCtoPC(t,nOrbit, spn?(z):(-1)))
 			{
 			//	We hit a problem, so we need to unwind any previous additions
 			
@@ -2483,7 +2556,7 @@ else
 		printf("Chose 2-cycle %d to add at level %d\n",t,lev);
 	#endif
 	
-	if (addTCtoPC(t,-1))
+	if (addTCtoPC(t,-1,-1))
 		{
 		searchPC(lev+1);
 		dropTCfromPC(FALSE);
@@ -3770,7 +3843,7 @@ for (int i=0;i<nSTC;i++)
 		{
 		addPartialTCtoPC(si,stcOrb,stcOffs[i],stcNOC[i]);
 		}
-	else if (!addTCtoPC(si,stcOrb))
+	else if (!addTCtoPC(si,stcOrb,-1))
 		{
 		printf("Unable to add 2-cycle %d to solution\n",si);
 		exit(EXIT_FAILURE);
@@ -3779,7 +3852,7 @@ for (int i=0;i<nSTC;i++)
 	
 //	Incorporate the loops we just formed into a single, larger loop
 
-struct loop *stcLoop = &loopTable[loopTableUsed++];
+stcLoop = &loopTable[loopTableUsed++];
 initLoop0(stcLoop);
 
 struct loop *s=loopHeader.nextTop;
@@ -3862,8 +3935,7 @@ sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s",
 	fullSymm?"_FS":"",
 	fixedPoints?"_FP":"",
 	
-	treesOnly?"_TreesOnly":""
-);
+	treesOnly?"_TreesOnly":"");
 sprintf(twoCyclesOutputFile,"%d_%d_twoCycles_%s.txt",
 	n, spLen, optionsDescription);
 sprintf(superPermsOutputFile,"%d_%d_%s.txt",
