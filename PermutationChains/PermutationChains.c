@@ -6,6 +6,8 @@
 //	V1.1	25 February 2019	Added option for Robin Houston's non-standard kernels
 //	V1.2	 3 March 2019		Allow use of full stabiliser subgroup for non-standard kernels
 //	V1.3	 9 March 2019		Sped up symmPairs with fullSymm by excluding 2-cycles that would connect paired trees
+//	V1.3.1	10 March 2019		Further slight speed increase for symmPairs/fullSymm when there are fixed points to
+//								exclude
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -3912,6 +3914,22 @@ if ((!nsk) || (!stcIncomplete[k]))
 for (int t=0;t<nTC;t++) PCcontacts[t]=0;
 
 excludeMultiContacts(stcLoop);
+
+//	Maybe exclude 2-cycles in no orbits
+
+if (useOrbits && fullSymm && (!fixedPoints))
+	{
+	for (int tc=0;tc<nTC;tc++)
+	if (numOrbitsTC[tc]==0)
+		{
+		printf("Excluding 2-cycle %d because it does not lie in any of the selected orbits\n",tc);
+		if (!excludeTCfromPC(tc))
+			{
+			printf("Exclusion of 2-cycle %d is unviable\n",tc);
+			exit(EXIT_FAILURE);
+			};
+		};
+	};
 
 int spLen = fn + fn1 + fn2 + fn3 + n - 4;
 
