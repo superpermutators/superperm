@@ -106,3 +106,6 @@ concorde -o "$SUPERPERM_DIR"/concorde/out/6.out "$SUPERPERM_DIR"/tsp/6.tsp
 * The directory `superpermutations` contains various known superpermutations that are interesting for some reason.
 
 * Want to see what's in the superpermutations? Check out the `demutator` directory. (Be wary of the C code.)
+
+* To search for "supernecklaces" and "superbracelets" (strings which contain
+  each permutation only up to rotation and/or reflection), run `make necklace/6.gtsp` or `make bracelet/6.gtsp`. The resulting input files can be solved using the GLKH solver, available from http://webhotel4.ruc.dk/~keld/research/GLKH/ .
