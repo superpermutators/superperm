@@ -12,29 +12,29 @@ n = int(n_str)
 sorted_perm = list(SYMBOLS[:n])
 
 def split_superperm(superperm):
-    counts = {}
-    for i in range(n):
-        counts[sorted_perm[i]] = 0
+    counts = [0 for i in range(n)]
     duplicates = 0
     for i in range(n):
-        counts[superperm[i]] += 1
-        if counts[superperm[i]] > 1:
+        j = SYMBOLS.index(superperm[i])
+        counts[j] += 1
+        if counts[j] == 2:
             duplicates += 1
     if duplicates == 0: print superperm[0:n]
     else: print "..."
     for i in range(1, len(superperm) - n + 1):
         old_char = superperm[i-1]
-        p = superperm[i : i + n]
-        new_char = p[-1]
+        new_char = superperm[i+n-1]
         if old_char != new_char:
-            counts[old_char] -= 1
-            counts[new_char] += 1
-            # permutationness may have changed
-            if counts[old_char] == 1:
+            old = SYMBOLS.index(old_char)
+            new = SYMBOLS.index(new_char)
+            counts[old] -= 1
+            counts[new] += 1
+            # number of duplicates may have changed
+            if counts[old] == 1:
                 duplicates -= 1
-            if counts[new_char] == 2:
+            if counts[new] == 2:
                 duplicates += 1
-        if duplicates == 0: print p
+        if duplicates == 0: print superperm[i : i + n]
         else: print "..."
 
 if len(sys.argv) > 2:
