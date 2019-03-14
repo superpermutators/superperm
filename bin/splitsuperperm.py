@@ -52,12 +52,28 @@ def split_superperm(superperm, opts):
             print p
 
 
+def split_file(file, opts):
+    for line in file:
+        # strip comments
+        if line.find('#') > -1:
+            line = line[:line.find('#')]
+        line = line.strip()
+        if len(line) == 0:
+            continue
+        split_superperm(line, opts)
+
 parser = argparse.ArgumentParser(description='Find permutations in a string')
 parser.add_argument('-c', '--count', action='store_true')
+parser.add_argument('-s', '--string')
+parser.add_argument('file', nargs='*')
 opts = parser.parse_args()
 
-if len(sys.argv) > 1:
-    split_superperm(sys.argv[1], opts)
+if opts.string:
+    split_superperm(opts.string, opts)
+elif len(opts.file) > 0:
+    for f in opts.file:
+        with open(f) as file:
+            split_file(file, opts)
 else:
-    split_superperm(sys.stdin.read().strip(), opts)
+    split_file(sys.stdin, opts)
 
