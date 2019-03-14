@@ -12,6 +12,7 @@ n = int(n_str)
 sorted_perm = list(SYMBOLS[:n])
 
 def split_superperm(superperm):
+    perms = set()
     counts = [0 for i in range(n)]
     duplicates = 0
     for i in range(n):
@@ -19,7 +20,7 @@ def split_superperm(superperm):
         counts[j] += 1
         if counts[j] == 2:
             duplicates += 1
-    if duplicates == 0: print superperm[0:n]
+    if duplicates == 0: perms.add(superperm[0:n])
     else: print "..."
     for i in range(1, len(superperm) - n + 1):
         old_char = superperm[i-1]
@@ -34,8 +35,8 @@ def split_superperm(superperm):
                 duplicates -= 1
             if counts[new] == 2:
                 duplicates += 1
-        if duplicates == 0: print superperm[i : i + n]
-        else: print "..."
+        if duplicates == 0: perms.add(superperm[i : i + n])
+    print len(perms)
 
 if len(sys.argv) > 2:
     split_superperm(sys.argv[2])
