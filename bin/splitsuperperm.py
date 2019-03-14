@@ -9,15 +9,9 @@ import sys
 SYMBOLS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def permutations(n, superperm):
-    counts = [0 for i in range(n)]
+    yield superperm[0:n] # The first length-n substring should be a permutation
+    counts = [1 for i in range(n)]
     duplicates = 0
-    for i in range(n):
-        j = SYMBOLS.index(superperm[i])
-        counts[j] += 1
-        if counts[j] == 2:
-            duplicates += 1
-    if duplicates == 0: yield superperm[0:n]
-    else: yield "..."
     for i in range(1, len(superperm) - n + 1):
         old_char = superperm[i-1]
         new_char = superperm[i+n-1]
@@ -34,23 +28,36 @@ def permutations(n, superperm):
         if duplicates == 0: yield superperm[i : i + n]
         else: yield '...'
 
+
+def infer_n(superperm):
+    """ The first n elements should be a permutation, so we can infer n """
+    seen = set()
+    for i, c in enumerate(superperm):
+        if c in seen:
+            return i
+        else:
+            seen.add(c)
+    return i
+
+
 def split_superperm(superperm, opts):
+    n = infer_n(superperm)
     if opts.count:
-        perms = set(p for p in permutations(opts.n, superperm) if p != '...')
+        perms = set(p for p in permutations(n, superperm) if p != '...')
         perm_count = len(perms)
-        expected = math.factorial(opts.n)
+        expected = math.factorial(n)
         print '{}{}'.format(perm_count, '*' if perm_count == expected else '')
     else:
-        for p in permutations(opts.n, superperm):
+        for p in permutations(n, superperm):
             print p
+
 
 parser = argparse.ArgumentParser(description='Find permutations in a string')
 parser.add_argument('-c', '--count', action='store_true')
-parser.add_argument('n', type=int)
 opts = parser.parse_args()
 
-if len(sys.argv) > 2:
-    split_superperm(sys.argv[2], opts)
+if len(sys.argv) > 1:
+    split_superperm(sys.argv[1], opts)
 else:
     split_superperm(sys.stdin.read().strip(), opts)
 
