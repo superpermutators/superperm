@@ -10,20 +10,18 @@ SYMBOLS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 def permutations(n, superperm):
     yield superperm[0:n] # The first length-n substring should be a permutation
-    counts = [1 for i in range(n)]
+    counts = {SYMBOLS[i]: 1 for i in range(n)}
     duplicates = 0
     for i in range(1, len(superperm) - n + 1):
         old_char = superperm[i-1]
         new_char = superperm[i+n-1]
         if old_char != new_char:
-            old = SYMBOLS.index(old_char)
-            new = SYMBOLS.index(new_char)
-            counts[old] -= 1
-            counts[new] += 1
+            counts[old_char] -= 1
+            counts[new_char] += 1
             # number of duplicates may have changed
-            if counts[old] == 1:
+            if counts[old_char] == 1:
                 duplicates -= 1
-            if counts[new] == 2:
+            if counts[new_char] == 2:
                 duplicates += 1
         if duplicates == 0: yield superperm[i : i + n]
         else: yield '...'
