@@ -90,6 +90,12 @@ Options to filter solutions:
 
 	treesOnly							Filter solutions to only output strict trees in the 2-cycle graph
 	
+Options for the structure of solutions:
+
+	coverFirst							Attempt to cover the 1-cycles not in the kernel with disjoint 2-cycles first.
+										For non-standard kernels that include partial 2-cycles, the whole of the
+										2-cycle is excluded from the set to be covered.
+	
 Non-standard kernels
 --------------------
 

@@ -8,10 +8,13 @@
 //	V1.3	 9 March 2019		Sped up symmPairs with fullSymm by excluding 2-cycles that would connect paired trees
 //	V1.3.1	10 March 2019		Further slight speed increase for symmPairs/fullSymm when there are fixed points to
 //								exclude
+//	V1.4	11 March 2019		Reorganised freeCount tracking
+//	V2		15 March 2019		Added coverFirst option
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 /*
 
@@ -35,6 +38,7 @@ Symmetry operations
 Loop operations
 Search operations
 Nonstandard kernel specification
+Dancing Links routines for coverFirst option
 Main program
 
 */
@@ -136,10 +140,6 @@ struct loop *ownerLoop;
 
 struct loop
 {
-//	flag saying we have temporarily assigned this loop to a larger loop
-
-int tempFlag;
-
 //	parentLoop is NULL if there is no larger loop into which this has been incorporated;
 //	otherwise it points upwards in the tree of loops.
 
@@ -171,6 +171,32 @@ struct oneCycle *oc;
 
 struct loop *nextTop, *prevTop;
 };
+
+//	DXL structures
+
+struct unit
+{
+struct unit *L, *R, *U, *D, *C;
+int S, Row, Col;
+};
+
+struct DXL
+{
+struct unit h, hMin;
+struct unit *allCols, *allRows, *allColsMin;
+struct unit **objects;
+int maxLevels;
+int maxDepthReached, minColsLeft, lowestSolChanged;
+int dxlSolCount;
+};
+
+struct cSize
+{
+int Col, S;
+};
+
+
+
 
 //	================
 //	Global variables
@@ -218,6 +244,10 @@ static int useOrbits=FALSE;			//	Set TRUE if any orbits option is chosen
 
 static int fixedPoints=FALSE;		//	Include single-point orbits
 static int fullSymm=FALSE;			//	Require the solution to consist entirely of orbits
+
+//	Structure solution by covering all 1-cycles first
+
+static int coverFirst=FALSE;
 
 //	Maybe filter solutions
 
@@ -506,6 +536,13 @@ static int *PCorbit=NULL;
 //	Lists of offsets and counts, to allow for incomplete 2-cycles
 
 static int *PCoffs=NULL, *PCcount=NULL;
+
+//	DXL setup
+
+static int *subTC=NULL;
+static int *subsetsList=NULL;
+struct DXL dxlA;
+static int DXLsolStart=0;
 
 //	=======================
 //	Basic utility functions
@@ -1118,6 +1155,31 @@ for (int k=0;k<fn-1;k++)
 fprintf(f,"\n");
 }
 
+//	Upper bound on the size of an independent set with v vertices and e edges
+
+#define maxIndep(r, v, e) \
+if (v==0) r=0; \
+else if (e==0) r=v; \
+else if (e<=v-1) r=v-1; \
+else if (e<=2*v-3) r=v-2; \
+else r=(int)floor((1.0+sqrt(1.0+4.0*v*(v-1.0)-8.0*e))/2.0);
+
+//	Compute from scratch the current number of edges in the double-intersections graph
+//	for all available 2-cycles.
+
+int doubleIntEdges()
+{
+int res=0;
+for (int i=0;i<nTC;i++)
+if (PCexclusions[i]==0)
+for (int k=0;k<tcN.nvdi[i];k++)
+	{
+	int j=tcN.vdi[i][k];
+	if (j>i && PCexclusions[j]==0) res++;
+	};
+return res;
+}
+
 //	===================
 //	Symmetry operations
 //	===================
@@ -1415,7 +1477,6 @@ return 0;
 
 void initLoop0(struct loop *lp)
 {
-lp->tempFlag = FALSE;
 lp->parentLoop = NULL;
 lp->nextSib = lp->prevSib = lp;
 lp->firstChild = NULL;
@@ -1432,7 +1493,6 @@ lp->freeCount = 0;
 
 void initLoopOC(struct loop *lp, struct oneCycle *oc)
 {
-lp->tempFlag = FALSE;
 lp->parentLoop = NULL;
 lp->nextSib = lp->prevSib = lp;
 lp->firstChild = NULL;
@@ -1526,7 +1586,7 @@ while (x)
 	y = x;
 	x = x->parentLoop;
 	};
-return (y->freeCount > 0 || y->tempFlag);
+return (y->freeCount > 0);
 }
 
 //	Get the top loop associated with a 1-cycle
@@ -1670,7 +1730,7 @@ if (PCexclusions[t]++ == 0)
 		int oc=oft[i];
 		int p=ofp[i];
 		struct oneCycle *oco = oneCycleTable+oc;
-		oco->edgeStatus[p]=2;
+		
 		#if DEBUG_PC
 		if (debug)
 			{
@@ -1680,22 +1740,27 @@ if (PCexclusions[t]++ == 0)
 				t,oc,oco->ownerLoop->freeCount-1);
 			};
 		#endif
+		
 		if (!decFreeOC(oco))
 			{
 			#if DEBUG_PC
 			if (debug)
 				{
-				printf("Unwinding unviable exclusion of 2-cycle %d, because loop owning 1-cycle %d hit freeCount 0\n",t,oco->ocNumber);
+				printf("Unwinding unviable exclusion of 2-cycle %d, because loop owning 1-cycle %d hit freeCount 0\n",
+					t,oco->ocNumber);
 				checkLoopTable();
 				};
 			#endif
-			for (int j=i;j>=0;j--)
+			
+			incFreeOC(oco);
+			for (int j=i-1;j>=0;j--)
 				{
 				oc=oft[j];
 				p=ofp[j];
 				oco = oneCycleTable+oc;
 				oco->edgeStatus[p]=0;
 				incFreeOC(oco);
+				
 				#if DEBUG_PC
 				if (debug)
 					printf("excludeTCfromPC(%d) Free count for 1-cycle %d increased to %d by freeing edge %d\n",
@@ -1705,6 +1770,8 @@ if (PCexclusions[t]++ == 0)
 			PCexclusions[t]--;
 			return FALSE;
 			};
+			
+		oco->edgeStatus[p]=2;
 		};
 		
 	PCpoolSize--;
@@ -1819,9 +1886,6 @@ while ((t0=exclusionsStack[--nExclusionsStack])>=0)
 
 void dropTCfromPC(int skipLoopStuff);
 
-struct loop **topLoopList=NULL;
-#define UNWIND_TMP for (int i=0;i<n-1;i++) topLoopList[i]->tempFlag = FALSE;
-
 #define TIDY_CONTACTS \
 if (nLoopContacts!=0) \
 	{ \
@@ -1836,27 +1900,6 @@ if (debug)
 	printf("Adding 2-cycle %d to solution ...\n",t);
 #endif
 
-int *oft = oneForTwo+t*(n-1);
-for (int i=0;i<n-1;i++)
-	{
-	int oc=oft[i];
-	topLoopList[i]=topLoop(oneCycleTable+oc);
-	
-	//	If we hit the same loop twice, unwind and quit
-	
-	if (topLoopList[i]->tempFlag)
-		{
-		#if DEBUG_PC
-		if (debug)
-			printf("Unwinding addition of 2-cycle %d, as it hits a top-level loop more than once\n",t);
-		#endif
-		for (int j=i-1;j>=0;j--) topLoopList[j]->tempFlag = FALSE;
-		TIDY_CONTACTS
-		return FALSE;
-		};
-	topLoopList[i]->tempFlag = TRUE;
-	};
-
 if (nPCorbitBlocks!=0)
 	{
 	for (int k=0;k<numOrbitsTC[t];k++)
@@ -1868,7 +1911,6 @@ if (nPCorbitBlocks!=0)
 			if (debug)
 				printf("Two-cycle %d would complete blocked orbit %d, so disallowing it\n",t,norb);
 			#endif
-			UNWIND_TMP
 			TIDY_CONTACTS
 			return FALSE;
 			};
@@ -1877,14 +1919,13 @@ if (nPCorbitBlocks!=0)
 
 //	Adjust edge status and free perm counts for all 1-cycles affected by this 2-cycle
 
+int *oft = oneForTwo+t*(n-1);
 int *ofp = oneForTwoStartPerms+t*(n-1);
 for (int i=0;i<n-1;i++)
 	{
-	int oc=oft[i];
 	int p=ofp[i];
-	struct oneCycle *oco = oneCycleTable+oc;
-	int t0 = oco->twoCycleNumbers[(p+1)%n];
-	if (!excludeTCfromPC(t0))
+	struct oneCycle *oco = oneCycleTable+oft[i];
+	if (!excludeTCfromPC( oco->twoCycleNumbers[(p+1)%n] ))
 		{
 		#if DEBUG_PC
 		if (debug)
@@ -1893,30 +1934,27 @@ for (int i=0;i<n-1;i++)
 		
 		for (int j=i-1;j>=0;j--)
 			{
-			oc=oft[j];
 			p=ofp[j];
-			oco = oneCycleTable+oc;
+			oco = oneCycleTable+oft[j];
 			oco->edgeStatus[p]=0;
-			incFreeOC(oco);
+			unexcludeTCfromPC( oco->twoCycleNumbers[(p+1)%n] );
+			
 			#if DEBUG_PC
 			if (debug)
 				printf("addTCtoPC(%d) Free count for 1-cycle %d increased to %d by freeing edge %d\n",
-					t,oc,oco->ownerLoop->freeCount,p);
+					t,oft[j],oco->ownerLoop->freeCount,p);
 			#endif
-			t0 = oco->twoCycleNumbers[(p+1)%n];
-			unexcludeTCfromPC(t0);
 			};
-		UNWIND_TMP
 		TIDY_CONTACTS
 		return FALSE;
 		};
-	
+		
 	oco->edgeStatus[p]=1;
-	decFreeOC(oco);
+
 	#if DEBUG_PC
 	if (debug)
 		printf("addTCtoPC(%d) Free count for 1-cycle %d reduced to %d, by excluding edge %d\n",
-			t,oc,oco->ownerLoop->freeCount,p);
+			t,oft[i],oco->ownerLoop->freeCount,p);
 	#endif
 	};
 	
@@ -1929,20 +1967,23 @@ PCsol[PCsolSize++]=t;
 PCpoolSize--;
 PCexclusions[t]++;
 
-UNWIND_TMP
-
 #if DEBUG_PC
 if (debug)
 	printf("Continued adding 2-cycle %d to solution, leaving solution size %d, pool size %d\n",t,PCsolSize,PCpoolSize);
 #endif
-
 
 //	Swallow up all the top-level loops visited by this 2-cycle under a new one.
 
 struct loop *tcl = &loopTable[loopTableUsed++];
 initLoop0(tcl);
 
-for (int i=0;i<n-1;i++) addToLoop(tcl,topLoopList[i]);
+for (int i=0;i<n-1;i++)
+	{
+	struct oneCycle *oco = oneCycleTable+oft[i];
+	addToLoop(tcl,topLoop(oco));
+	decFreeOC(oco);
+	};
+
 int done=topLevelLoopCount==n-1;
 if (tcl->freeCount > 0 || done)
 	{
@@ -2174,43 +2215,24 @@ if (PCexclusions[t]!=0)
 	exit(EXIT_FAILURE);
 	};
 
-int *oft = oneForTwo+t*(n-1);
-
-for (int i0=0;i0<noc;i0++)
-	{
-	int i = (offs+i0)%(n-1);
-	int oc=oft[i];
-	topLoopList[i0]=topLoop(oneCycleTable+oc);
-	
-	//	If we hit the same loop twice, unwind and quit
-	
-	if (topLoopList[i0]->tempFlag)
-		{
-		printf("Addition of partial 2-cycle %d hits a top-level loop more than once\n",t);
-		exit(EXIT_FAILURE);
-		};
-	topLoopList[i0]->tempFlag = TRUE;
-	};
-
 //	Adjust edge status and free perm counts for all 1-cycles affected by this (partial) 2-cycle
 
+int *oft = oneForTwo+t*(n-1);
 int *ofp = oneForTwoStartPerms+t*(n-1);
 for (int i0=0;i0<n-1;i0++)
 	{
 	int i = (offs+i0)%(n-1);
-	
 	int oc=oft[i];
 	int p=ofp[i];
 	struct oneCycle *oco = oneCycleTable+oc;
-
 	if (oco->edgeStatus[p]!=0)
 		{
 		printf("addPartialTCtoPC(%d) attempting to use the same edge twice\n",t);
 		exit(EXIT_FAILURE);
 		};
-
 	oco->edgeStatus[p]=i0<noc?1:2;
 	decFreeOC(oco);
+	
 	#if DEBUG_PC
 	if (debug)
 		printf("addPartialTCtoPC(%d) Free count for 1-cycle %d reduced to %d, by excluding edge %d\n",
@@ -2227,8 +2249,6 @@ PCsol[PCsolSize++]=t;
 PCpoolSize--;
 PCexclusions[t]++;
 
-for (int i=0;i<noc;i++) topLoopList[i]->tempFlag = FALSE;
-
 #if DEBUG_PC
 if (debug)
 	printf("Continued adding partial 2-cycle %d to solution, leaving solution size %d, pool size %d\n",t,PCsolSize,PCpoolSize);
@@ -2239,7 +2259,13 @@ if (debug)
 struct loop *tcl = &loopTable[loopTableUsed++];
 initLoop0(tcl);
 
-for (int i=0;i<noc;i++) addToLoop(tcl,topLoopList[i]);
+for (int i0=0;i0<noc;i0++)
+	{
+	int i = (offs+i0)%(n-1);
+	int oc=oft[i];
+	addToLoop(tcl,topLoop(oneCycleTable+oc));
+	};
+
 if (tcl->freeCount > 0 || topLevelLoopCount==noc)
 	{
 	//	Exclude any 2-cycles that make multiple contacts with this loop
@@ -2428,7 +2454,8 @@ void searchPC(int lev)
 {
 #if DEBUG_PC
 if (debug)
-	printf("Searching for solutions with lev=%d, pool size=%d, solution size=%d\n",lev,PCpoolSize,PCsolSize);
+	printf("Searching for solutions with lev=%d, PCsolSize=%d, PCpoolSize=%d, PCsolTarget=%d\n",
+		lev,PCsolSize,PCpoolSize,PCsolTarget);
 #endif
 
 if (trackPartial && PCsolSize > PClargestSolSeen)
@@ -2438,16 +2465,17 @@ if (trackPartial && PCsolSize > PClargestSolSeen)
 	showPCsol();
 	PClargestSolSeen = PCsolSize;
 	};
-
-if (PCsolSize==PCsolTarget)
+	
+//	How many more 2-cycles are needed?
+	
+int needed = PCsolTarget-PCsolSize;
+if (needed==0)
 	{
 	handlePCsol();
 	return;
 	};
 	
-if (PCsolSize > PCsolTarget) return;
-if (PCsolSize+PCpoolSize < PCsolTarget) return;
-if (fullSymm && PCavailOrbits==0) return;
+if (needed<0 || PCpoolSize<needed || (fullSymm && (PCavailOrbits==0))) return;
 
 #if DEBUG_PC
 if (debug)
@@ -2632,6 +2660,529 @@ if (nskOK)
 return nskOK;
 }
 
+//	============================================
+//	Dancing Links routines for coverFirst option
+//	============================================
+
+void handleDXLSol(struct DXL *dxl, struct unit **objects, int k);
+
+//	Unlink an object horizontally
+
+void unlinkH(struct unit *u)
+{
+u->R->L = u->L;
+u->L->R = u->R;
+}
+
+//	Relink an object horizontally (assuming it still has pointers to its old neighbours)
+
+void relinkH(struct unit *u)
+{
+u->R->L = u;
+u->L->R = u;
+}
+
+//	Unlink an object vertically
+
+void unlinkV(struct unit *u)
+{
+u->U->D = u->D;
+u->D->U = u->U;
+}
+
+//	Relink an object vertically (assuming it still has pointers to its old neighbours)
+
+void relinkV(struct unit *u)
+{
+u->U->D = u;
+u->D->U = u;
+}
+
+//	Compare single integers
+
+int compare(const void *ii0, const void *jj0)
+{
+int *ii=(int *)ii0, *jj=(int *)jj0;
+if (*ii < *jj) return -1;
+if (*ii > *jj) return 1;
+return 0;
+}
+
+//	Compare columns size objects
+
+int compareCS(const void *ii0, const void *jj0)
+{
+struct cSize *c1 = (struct cSize *) ii0;
+struct cSize *c2 = (struct cSize *) jj0;
+if (c1->S < c2->S) return -1;
+if (c1->S > c2->S) return 1;
+if (c1->Col < c2->Col) return -1;
+if (c1->Col > c2->Col) return 1;
+return 0; 
+}
+
+int compareUnits(const struct unit *c1, const struct unit *c2)
+{
+if (c1->S < c2->S) return -1;
+if (c1->S > c2->S) return 1;
+if (c1->Col < c2->Col) return -1;
+if (c1->Col > c2->Col) return 1;
+return 0; 
+}
+
+//	Ensure the correct position in the linked list of columns by size
+
+void maybeGoLeft(struct DXL *dxl, int col)
+{
+struct unit *a=&dxl->allColsMin[col], *b;
+a->S = dxl->allCols[col].S;
+b = a->L;
+if (compareUnits(a,b)<0)
+	{
+	unlinkH(a);
+	while (compareUnits(a,b)<0) b = b->L;
+	a->L = b;
+	a->R = b->R;
+	b->R->L = a;
+	b->R = a;
+	};
+}
+
+void maybeGoRight(struct DXL *dxl, int col)
+{
+struct unit *a=&dxl->allColsMin[col], *b;
+a->S = dxl->allCols[col].S;
+b = a->R;
+if (b!=&dxl->hMin && compareUnits(a,b)>0)
+	{
+	unlinkH(a);
+	while (b!=&dxl->hMin && compareUnits(a,b)>0) b = b->R;
+	a->R = b;
+	a->L = b->L;
+	b->L->R = a;
+	b->L = a;
+	};
+}
+
+//	"Cover" a column
+
+void coverCol(struct DXL *dxl, struct unit *col)
+{
+#if debugDXL
+printf("Covering column (%d,%d) ...\n",col->Row,col->Col);
+#endif
+
+dxl->h.S--;
+unlinkH(col);		//	Unlink the column headers horizontally
+unlinkH(&dxl->allColsMin[col->Col]);
+
+struct unit *i = col->D;
+while (i!=col)
+	{
+	struct unit *j = i->R;
+	while (j!=i)	//	Unlink all rows with entries in this column from *other* columns
+		{
+		unlinkV(j);
+		j->C->S--;
+		maybeGoLeft(dxl, j->C->Col);
+		j=j->R;
+		};
+	i=i->D;
+	};
+#if debugDXL
+printf("Done\n");
+#endif
+}
+
+//	"Uncover" a column
+
+void uncoverCol(struct DXL *dxl, struct unit *col)
+{
+#if debugDXL
+printf("Uncovering column (%d,%d) ...\n",col->Row,col->Col);
+#endif
+
+dxl->h.S++;
+struct unit *i = col->U;
+while (i!=col)
+	{
+	struct unit *j = i->L;
+	while (j!=i)
+		{
+		j->C->S++;
+		maybeGoRight(dxl, j->C->Col);
+		relinkV(j);
+		j=j->L;
+		};
+	i=i->U;
+	};
+	
+relinkH(&dxl->allColsMin[col->Col]);
+relinkH(col);
+
+#if debugDXL
+printf("Done\n");
+#endif
+}
+
+//	Encode info into a doubly linked list of unit objects
+//	and column headers, linked to by the header object h.
+
+void encodeMatrixDXL(struct DXL *dxl, int *mat, int nRows, int nCols, int setSize, int verbose)
+{
+long int count=0;
+
+//	Initially, h just wraps back on itself
+
+dxl->h.L = &dxl->h;
+dxl->h.R = &dxl->h;
+dxl->h.S = 0;
+
+dxl->hMin.L = &dxl->hMin;
+dxl->hMin.R = &dxl->hMin;
+dxl->hMin.S = -1;
+dxl->hMin.Col = -1;
+
+dxl->allCols = (struct unit *)malloc(nCols * sizeof(struct unit));
+CHECK_MEM(dxl->allCols)
+
+dxl->allColsMin = (struct unit *)malloc(nCols * sizeof(struct unit));
+CHECK_MEM(dxl->allColsMin)
+
+dxl->allRows = (struct unit *)malloc(nRows * sizeof(struct unit));
+CHECK_MEM(dxl->allRows)
+
+for (int j=0;j<nRows;j++)
+	{
+	dxl->allRows[j].Row=j;
+	dxl->allRows[j].Col=-1;
+	dxl->allRows[j].S=0;
+	dxl->allRows[j].R=&dxl->allRows[j];
+	dxl->allRows[j].L=&dxl->allRows[j];
+	};
+
+for (int i=0;i<nCols;i++)
+	{
+	//	Start with an empty list for each column
+	
+	dxl->allCols[i].Col=i;
+	dxl->allCols[i].Row=-1;
+	dxl->allCols[i].S=0;
+	dxl->allCols[i].U=&dxl->allCols[i];
+	dxl->allCols[i].D=&dxl->allCols[i];
+	
+	//	Link in a new unit for every non-zero matrix entry in this column
+	
+	for (int j=0;j<nRows;j++)
+		{
+		if (bsearch(&i, mat+j*setSize, setSize, sizeof(int), compare))
+			{
+			count++;
+			dxl->allCols[i].S++;
+			dxl->allRows[j].S++;
+			
+			struct unit *u = (struct unit *)malloc(sizeof(struct unit));
+			CHECK_MEM(u)
+			
+			u->Col=i;
+			u->Row=j;
+			u->C=&dxl->allCols[i];		//	Point back to the column header
+			
+			dxl->allCols[i].U->D = u;	//	Link new unit into the column
+			u->U = dxl->allCols[i].U;
+			dxl->allCols[i].U = u;
+			u->D = &dxl->allCols[i];
+			
+			dxl->allRows[j].L->R = u;	//	Link new unit into its row
+			u->L = dxl->allRows[j].L;
+			dxl->allRows[j].L = u;
+			u->R = &dxl->allRows[j];
+			};
+		};
+		
+	//	If the column is non-empty, link it into the list that starts at h
+	
+	if (dxl->allCols[i].S > 0)
+		{
+		dxl->h.S++;
+		dxl->h.L->R = &dxl->allCols[i];
+		dxl->allCols[i].L = dxl->h.L;
+		dxl->h.L = &dxl->allCols[i];
+		dxl->allCols[i].R = &dxl->h;
+		};
+	};
+	
+//	Prepare an extra linked list of column headers in increasing order of size,
+//	so we can find the column with the fewest non-zero entries immediately
+
+struct cSize *cs = (struct cSize *)malloc(nCols*sizeof(struct cSize));
+CHECK_MEM(cs)
+for (int i=0;i<nCols;i++)
+	{
+	dxl->allColsMin[i].Col=i;
+	dxl->allColsMin[i].S=dxl->allCols[i].S;
+	cs[i].Col=i;
+	cs[i].S=dxl->allCols[i].S;
+	};
+qsort(cs,nCols,sizeof(struct cSize),compareCS);
+for (int k=0;k<nCols;k++)
+	{
+	int i=cs[k].Col;
+	dxl->hMin.L->R = &dxl->allColsMin[i];
+	dxl->allColsMin[i].L = dxl->hMin.L;
+	dxl->hMin.L = &dxl->allColsMin[i];
+	dxl->allColsMin[i].R = &dxl->hMin;
+	};
+free(cs);
+
+if (verbose)
+	{
+	printf("Sorted columns list linked from dxl->hMin:\n");
+	struct unit *z = dxl->hMin.R;
+	while (z!=&dxl->hMin)
+		{
+		printf("S=%d Col=%d, compare with left=%d\n",z->S,z->Col,compareUnits(z,z->L));
+		z=z->R;
+		};
+	printf("\n");
+
+	printf("Found a total of %ld entries\n",count);
+	printf("Linked %d columns to h\n",dxl->h.S);
+	struct unit *p = dxl->h.R;
+	while (p!=&dxl->h)
+		{
+		printf("Column %d has %d entries, moving down: ",p->Col,p->S);
+		struct unit *q = p->D;
+		while (q!=p)
+			{
+			printf("(%d,%d) ",q->Row,q->Col);
+			q = q->D;
+			};
+
+		printf("and moving up: ");
+		q = p->U;
+		while (q!=p)
+			{
+			printf("(%d,%d) ",q->Row,q->Col);
+			q = q->U;
+			};
+		printf("\n");
+		
+		p=p->R;
+		};
+		
+	printf("\nChecking backwards links:\n");
+	p = dxl->h.L;
+	while (p!=&dxl->h)
+		{
+		printf("Column %d has %d entries\n",p->Col,p->S);
+		p=p->L;
+		};
+	
+	printf("\nRows:\n");
+	for (int r=0;r<nRows;r++)
+		{
+		printf("Row %d has %d entries, moving right: ",r,dxl->allRows[r].S);
+		p = &dxl->allRows[r];
+		struct unit *q = p->R;
+		while (q!=p)
+			{
+			printf("(%d,%d) ",q->Row,q->Col);
+			q = q->R;
+			};
+
+		printf("and moving left: ");
+		q = p->L;
+		while (q!=p)
+			{
+			printf("(%d,%d) ",q->Row,q->Col);
+			q = q->L;
+			};
+		printf("\n");
+		};
+	};
+	
+//	We used the dxl->allRows objects to help organised the encoding,
+//	but the algorithm requires that the rows just wrap back on themselves without
+//	any header, so we now unlink these objects.
+
+for (int j=0;j<nRows;j++) unlinkH(&dxl->allRows[j]);
+free(dxl->allRows);
+}
+
+void freeMatrixDXL(struct DXL *dxl)
+{
+struct unit *p = dxl->h.R;
+while (p!=&dxl->h)
+	{
+	struct unit *q = p->D, *q0=NULL;
+	while (q!=p)
+		{
+		q0=q;
+		q=q->D;
+		free(q0);
+		};
+	p=p->R;
+	};
+free(dxl->allCols);
+if (dxl->objects) free(dxl->objects);
+}
+
+//	Initialise data for search
+
+void initSearchDXL(struct DXL *dxl, int mlev)
+{
+dxl->maxLevels = mlev;
+dxl->objects = (struct unit **)malloc(dxl->maxLevels*sizeof(struct unit *));
+CHECK_MEM(dxl->objects)
+dxl->maxDepthReached=-1;
+dxl->minColsLeft=dxl->h.S;
+dxl->lowestSolChanged=0;
+}
+
+void searchDXL(struct DXL *dxl, int k, int mayHaveSol)
+{
+if (k==dxl->maxLevels)
+	{
+	printf("Exceeded maximum level %d\n",dxl->maxLevels);
+	exit(EXIT_FAILURE);
+	};
+	
+if (k>dxl->maxDepthReached)
+	{
+	dxl->maxDepthReached=k;
+	printf("maxDepthReached=%d (columns left=%d)\n", dxl->maxDepthReached,dxl->h.S);
+	};
+	
+if (dxl->h.S<dxl->minColsLeft)
+	{
+	dxl->minColsLeft=dxl->h.S;
+	printf("minColsLeft=%d (current depth=%d)\n", dxl->minColsLeft,k);
+	};
+	
+//	If we have eliminated all columns, we have a solution
+	
+if (dxl->h.R == &dxl->h)
+	{
+	handleDXLSol(dxl, dxl->objects, k);
+	return;
+	};
+		
+//	Choose the column with the smallest number of non-zero entries
+
+struct unit *mcol = dxl->hMin.R;
+struct unit *col = &dxl->allCols[mcol->Col];
+	
+#if debugDXL
+	printf("In level %d, chose column %d\n",k,col->Col);
+#endif
+
+coverCol(dxl, col);	//	Unlink this column, and remove its rows from all other columns
+
+//	Iterate over all rows in this column, i.e. subsets that contain the element corresponding to this column
+
+struct unit *r = col->D;
+while (r!=col)
+	{
+	#if debugDXL
+		printf("In search level %d, r is (%d, %d)\n",k,r->Row,r->Col);
+	#endif
+
+	//	Cover all non-zero columns for this row (in addition to the one we have already covered)
+	//	because if we use this subset, it will account for all those elements
+	
+	struct unit *j = r->R;
+	while (j!=r)
+		{
+		coverCol(dxl,j->C);
+		j=j->R;
+		};
+		
+	//	Go and look for more sets in the solution of the reduced problem;
+	//	if we are using incidence counts, update and reverse them before and after
+		
+	dxl->objects[k] = r;
+	if (k < dxl->lowestSolChanged) dxl->lowestSolChanged=k;
+	searchDXL(dxl, k+1, TRUE);
+		
+	//	Uncover the columns we covered
+
+	j = r->L;
+	while (j!=r)
+		{
+		uncoverCol(dxl,j->C);
+		j=j->L;
+		};
+		
+	r=r->D;
+	};
+	
+uncoverCol(dxl,col);
+}
+
+void handleDXLSol(struct DXL *dxl, struct unit **objects, int lev)
+{
+#if DEBUG_PC
+if (debug) printf("dxlSolCount=%d in handleDXLSol()\n",dxl->dxlSolCount);
+#endif
+
+if (useOrbits)
+	{
+	if (dxl->dxlSolCount!=0)
+		{
+		int lastSameOrbit = dxl->lowestSolChanged>0 ? subTC[subsetsList[objects[dxl->lowestSolChanged-1]->Row]] : -2;
+		while (PCsolSize>DXLsolStart && PCorbit[PCsolSize-1]!=lastSameOrbit) dropTCfromPC(FALSE);
+		}
+	else dxl->lowestSolChanged=0;
+	
+	dxl->dxlSolCount++;
+
+	int addedTCs=0;
+	for (int l=dxl->lowestSolChanged;l<lev;l++)
+		{
+		int orb=subTC[subsetsList[objects[l]->Row]];
+		int nsize=orbitSizes[orb];
+		int spn = (nsize==2 && fullSymm && (!fixedPoints));
+		for (int z=0;z<nsize;z++)
+			{
+			int t=orbits[orb][z];
+			if (addTCtoPC(t,orb,spn?z:(-1))) addedTCs++;
+			else
+				{
+				for (int j=0;j<addedTCs;j++) dropTCfromPC(FALSE);
+				return;
+				};
+			};
+		};
+	}
+else
+	{
+	if (dxl->dxlSolCount!=0)
+		{
+		int hi=PCsolSize-DXLsolStart;
+		for (int k=0;k<hi - dxl->lowestSolChanged;k++) dropTCfromPC(FALSE);
+		}
+	else dxl->lowestSolChanged=0;
+	
+	dxl->dxlSolCount++;
+
+	int addedTCs=0;
+	for (int l=dxl->lowestSolChanged;l<lev;l++)
+		{
+		if (addTCtoPC(subTC[subsetsList[objects[l]->Row]],-1,-1)) addedTCs++;
+		else
+			{
+			for (int j=0;j<addedTCs;j++) dropTCfromPC(FALSE);
+			return;
+			};
+		};
+	};
+
+searchPC(0);
+dxl->lowestSolChanged=lev;
+}
+
+
 //	============
 //	Main program
 //	============
@@ -2707,6 +3258,10 @@ for (int i=1;i<argc;i++)
 
 	else if (strcmp(argv[i],"fixedPoints")==0) fixedPoints=TRUE;
 	else if (strcmp(argv[i],"fullSymm")==0) fullSymm=TRUE;
+	
+//	Cover all 1-cycles first?
+
+	else if (strcmp(argv[i],"coverFirst")==0) coverFirst=TRUE;
 	
 //	Maybe filter solutions
 	
@@ -3805,8 +4360,6 @@ loopTableSize = n1C + 2*PCsolTarget;
 CHECK_MEM( loopTable = (struct loop *)malloc(loopTableSize*sizeof(struct loop)) )
 loopTableUsed = 0;
 
-CHECK_MEM( topLoopList = (struct loop **)malloc(n*sizeof(struct loop *)) )
-
 CHECK_MEM( minL = (struct loop **)malloc(loopTableSize*sizeof(struct loop **)) )
 
 //	Put each 1-cycle into a loop structure, and link the loops together
@@ -3935,10 +4488,13 @@ int spLen = fn + fn1 + fn2 + fn3 + n - 4;
 
 if (nsk) spLen -= (nskScore/(n-2) - 1);
 
+PCsolCount=0;
+PCprovCount=0;
+
 //	Open files for results
 
 FILE *f;
-sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s",
+sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s%s",
 	nsk?nskString:(ffc?"FFC":"FTC"),
 	
 	stabiliser?"_STAB":"",
@@ -3953,7 +4509,8 @@ sprintf(optionsDescription,"%s%s%s%s%s%s%s%s%s%s%s",
 	fullSymm?"_FS":"",
 	fixedPoints?"_FP":"",
 	
-	treesOnly?"_TreesOnly":"");
+	treesOnly?"_TreesOnly":"",
+	coverFirst?"_COV":"");
 sprintf(twoCyclesOutputFile,"%d_%d_twoCycles_%s.txt",
 	n, spLen, optionsDescription);
 sprintf(superPermsOutputFile,"%d_%d_%s.txt",
@@ -3961,13 +4518,192 @@ sprintf(superPermsOutputFile,"%d_%d_%s.txt",
 	
 twoCyclesOutputFileOpened=FALSE;
 superPermsOutputFileOpened=FALSE;
-	
-//	Search for solutions
 
-printf("\nSearching for solutions of size %d ...\n",PCsolTarget);
-PCsolCount=0;
-PCprovCount=0;
-searchPC(0);
+//	If coverFirst option has been chosen, we first try to cover all the free 1-cycles with disjoint 2-cycles
+//	before proceeding to link all the loops together
+
+if (coverFirst)
+	{
+	DXLsolStart = PCsolSize;
+	
+	int nSubs = nTC;
+	int nOCS = (n-1);
+	if (useOrbits)
+		{
+		int maxOrbitSize=0;
+		for (int z=0;z<nOrbits;z++) if (orbitOK[z] && orbitSizes[z]>maxOrbitSize) maxOrbitSize=orbitSizes[z];
+		nOCS = maxOrbitSize*(n-1);
+		};
+	
+	//	sOC gives the nOCS one-cycle numbers for each subset (in original numbering scheme)
+	
+	int *sOC = (int *)malloc(nOCS*nSubs*sizeof(int));
+	CHECK_MEM(sOC)
+	
+	//	tOC gives the nOCS one-cycle numbers for each subset (in translated numbering scheme, omitting unused one-cycles and subsets)
+	
+	int *tOC = (int *)malloc(nOCS*nSubs*sizeof(int));
+	CHECK_MEM(tOC)
+	
+	//	Map subset numbers back to 2-cycle numbers or orbit numbers
+	
+	subTC = (int *)malloc(nSubs*sizeof(int));
+	CHECK_MEM(subTC)
+	
+	//	Identify the one-cycles in the kernel
+	
+	char *ocKernel = (char *)malloc(n1C*sizeof(char));
+	CHECK_MEM(ocKernel)
+	int nOCfree=fn1;
+	for (int z=0;z<n1C;z++) ocKernel[z]=FALSE;
+	for (int z=0;z<nSTC;z++)
+	for (int y=0;y<n-1;y++)
+		{
+		ocKernel[oneForTwo[stcIndex[z]*(n-1)+y]]=TRUE;
+		nOCfree--;
+		};
+	printf("%d 1-cycles to cover\n",nOCfree);
+		
+	nSubs=0;
+	if (useOrbits)
+		{
+		for (int orb=0;orb<nOrbits;orb++)
+		if (orbitOK[orb])
+			{
+			//	We create subsets that consist of the one-cycles from each orbit; if there is any intersection
+			//	with the kernel, we drop the subset.
+			
+			int ok=TRUE, offs=0;
+			for (int a=0;a<orbitSizes[orb];a++)
+				{
+				int t = orbits[orb][a];
+				for (int z=0;z<n-1;z++)
+					{
+					int oc = oneForTwo[t*(n-1)+z];
+					if (ocKernel[oc])
+						{
+						ok=FALSE;
+						break;
+						};
+					sOC[nSubs*nOCS+offs] = oc;
+					offs++;
+					};
+				if (!ok) break;
+				};
+			if (ok)
+				{
+				for (int j=offs;j<nOCS;j++) sOC[nSubs*nOCS+j] = -1;
+				qsort(sOC+nSubs*nOCS,nOCS,sizeof(int),compare1);
+				subTC[nSubs] = orb;
+				nSubs++;
+				};
+			};
+		}
+	else
+		{
+		for (int t=0;t<nTC;t++)
+			{
+			//	We create subsets that consist of the one-cycles from each 2-cycle; if there is any intersection
+			//	with the kernel, we drop the subset.
+			
+			int ok=TRUE, offs=0;
+			for (int z=0;z<n-1;z++)
+				{
+				int oc = oneForTwo[t*(n-1)+z];
+				if (ocKernel[oc])
+					{
+					ok=FALSE;
+					break;
+					};
+				sOC[nSubs*nOCS+offs] = oc;
+				offs++;
+				};
+			if (ok)
+				{
+				qsort(sOC+nSubs*nOCS,nOCS,sizeof(int),compare1);
+				subTC[nSubs] = t;
+				nSubs++;
+				};
+			};
+		};
+	
+	printf("Created %d subsets\n",nSubs);
+	
+	if (verbose)
+		{
+		printBlockN(stdout,sOC,nOCS,nSubs);
+		printf("\n");
+		};
+
+	char *oneCycleFlag = (char *)malloc(n1C*sizeof(char));
+	CHECK_MEM(oneCycleFlag)
+	
+	int *oneCycleList = (int *)malloc(n1C*sizeof(int));
+	CHECK_MEM(oneCycleList)
+	int *oneCycleNumbers = (int *)malloc(n1C*sizeof(int));
+	CHECK_MEM(oneCycleNumbers)
+	subsetsList = (int *)malloc(nSubs*sizeof(int));
+	CHECK_MEM(subsetsList)
+	
+	dxlA.dxlSolCount = 0;
+		
+	for (int k=0;k<n1C;k++)
+		{
+		oneCycleFlag[k]=FALSE;
+		oneCycleNumbers[k]=-1;
+		};
+	
+	int sUsed=0;
+	for (int s=0;s<nSubs;s++)
+		{
+		for (int k=0;k<nOCS;k++) oneCycleFlag[*(sOC+nOCS*s+k)]=TRUE;
+		subsetsList[sUsed++] = s;
+		};
+	
+	int ocUsed=0;
+	for (int k=0;k<n1C;k++)
+	if (oneCycleFlag[k])
+		{
+		oneCycleList[ocUsed]=k;
+		oneCycleNumbers[k]=ocUsed;
+		ocUsed++;
+		};
+		
+	//	Translate the tightened collection of subsets to the new one-cycle numbering scheme
+	
+	for (int i=0;i<sUsed;i++)
+		{
+		int s = subsetsList[i];
+		for (int j=0;j<nOCS;j++)
+			{
+			tOC[i*nOCS+j] = oneCycleNumbers[sOC[s*nOCS+j]];
+			};
+		qsort(tOC+nOCS*i,nOCS,sizeof(int),compare1);
+		};
+	
+	printf("Using %d subsets covering %d one-cycles ...\n",sUsed,ocUsed);
+	
+	if (verbose)
+		{
+		printBlockN(stdout,tOC,nOCS,sUsed);
+		};
+	
+	encodeMatrixDXL(&dxlA, tOC, sUsed, ocUsed, nOCS, verbose);
+
+	initSearchDXL(&dxlA, sUsed+ocUsed);
+	
+	searchDXL(&dxlA, 0, FALSE);
+	
+	freeMatrixDXL(&dxlA);
+	}
+else
+	{
+		
+	//	Direct search for solutions
+
+	printf("\nSearching for solutions of size %d ...\n",PCsolTarget);
+	searchPC(0);
+	};
 
 if (twoCyclesOutputFileOpened)
 	{
