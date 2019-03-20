@@ -2,6 +2,7 @@
 # -*- encoding: utf-8 -*-
 from __future__ import division
 
+from collections import defaultdict
 import math
 from itertools import permutations
 import optparse
@@ -10,6 +11,7 @@ parser = optparse.OptionParser(usage="%prog [options] N")
 parser.add_option("-b", "--bound", type="int", help="only include edges up to this weight")
 parser.add_option("-n", "--no-cyclic", action="store_true", help="no edges between non-adjacent cyclic permutations")
 parser.add_option("-s", "--simple", action="store_true", help="only include edges from a.b -> b.a^r")
+parser.add_option("-c", "--counts", action="store_true", help="show counts of edges by weight")
 
 (options, args) = parser.parse_args()
 if len(args) != 1: parser.error("Wrong number of arguments")
@@ -48,6 +50,14 @@ def distance(p, q):
         if sp in sq+sq: return INF
     
     return weight
+
+if options.counts:
+    counts = defaultdict(int)
+    for q in perms:
+        counts[distance(ordered, q)] += 1
+    for w, c in counts.iteritems():
+        print "{0}: {1} ({2:.3f})".format(w, c, c/math.factorial(N))
+    exit(0)
 
 print "NAME : superperm %d" % (N,)
 print "TYPE : ATSP"
