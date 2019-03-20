@@ -12,6 +12,7 @@ parser.add_option("-b", "--bound", type="int", help="only include edges up to th
 parser.add_option("-n", "--no-cyclic", action="store_true", help="no edges between non-adjacent cyclic permutations")
 parser.add_option("-s", "--simple", action="store_true", help="only include edges from a.b -> b.a^r")
 parser.add_option("-c", "--counts", action="store_true", help="show counts of edges by weight")
+parser.add_option("-p", "--proper", action="store_true", help="only include proper edges, ie those that don't pass through another node")
 
 (options, args) = parser.parse_args()
 if len(args) != 1: parser.error("Wrong number of arguments")
@@ -29,6 +30,18 @@ perms = list(permutations(range(N)))
 n_perms = len(perms)
 ordered = tuple(range(N))
 
+def is_improper(p, q, weight):
+    if weight == INF:
+        return True
+    p_prefix = set()
+    q_prefix = set()
+    for i in range(weight - 1):
+        p_prefix.add(p[i])
+        q_prefix.add(q[N - weight + i])
+        if p_prefix == q_prefix:
+            return True
+    return False
+
 def distance(p, q):
     if q == ordered: return 0
     
@@ -43,6 +56,9 @@ def distance(p, q):
             if p[n:] == q[:N-n]:
                 weight = n
                 break
+
+    if options.proper and is_improper(p, q, weight):
+        return INF
     
     if weight > 1 and options.no_cyclic:
         sp = "".join([ SYMBOLS[i] for i in p ])
