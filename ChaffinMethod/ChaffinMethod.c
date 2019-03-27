@@ -24,7 +24,7 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.00
+Version: 2.01
 Last Updated: 27 March 2019
 
 Usage:
@@ -69,7 +69,7 @@ Chaffin_<n>_W_<w>.txt
 int n;				//	The number of symbols in the permutations we are considering
 int fn;				//	n!
 int nfactor;		//	10^(n-1)
-int maxDec;			//	Highest decimal representation of a permutation we can encounter, plus 1
+int maxDec;			//	Highest decimal representation of a digit sequence we can encounter, plus 1
 int maxW;			//	Largest number of wasted characters we allow for
 char *curstr;		//	Current string
 int max_perm;		//	Maximum number of permutations visited by any string seen so far
@@ -127,10 +127,10 @@ nfactor=10;
 for (int k=0;k<n-2;k++) nfactor*=10;
 
 //	We represent permutations p_1 + 10 p_2 + 100 p_3 + .... 10^(n-1) + p_n
-//	maxDec is the highest value this can take, plus 1
+//	maxDec is the highest value this can take (allowing for non-permutations as well), plus 1
 
 maxDec = n;
-for (int k=0;k<n-1;k++) maxDec = 10*maxDec + n-1-k;
+for (int k=0;k<n-1;k++) maxDec = 10*maxDec + n;
 maxDec++;
 
 //	Generate a table of all permutations of n symbols
