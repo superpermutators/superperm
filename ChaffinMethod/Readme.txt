@@ -43,10 +43,10 @@ Minimal superpermutations on 4 symbols have 6 wasted characters and a length of 
 Wed 27 Mar 2019 13:39:35 AWST
 
 
-The n=5 case should complete in about a minute, with output like this:
+The n=5 case should complete in less than a minute, with output like this:
 
 $ date; ChaffinMethod 5; date
-Wed 27 Mar 2019 13:39:40 AWST
+Thu 28 Mar 2019 15:25:36 AWST
 1 wasted characters: at most 10 permutations, in 15 characters, 1 examples
 2 wasted characters: at most 15 permutations, in 21 characters, 1 examples
 3 wasted characters: at most 20 permutations, in 27 characters, 1 examples
@@ -82,8 +82,7 @@ DONE!
 -----
 Minimal superpermutations on 5 symbols have 29 wasted characters and a length of 153.
 
-Wed 27 Mar 2019 13:40:36 AWST
-
+Thu 28 Mar 2019 15:26:11 AWST
 
 Files written
 -------------
@@ -91,3 +90,7 @@ Files written
 The strings for each value of w, the number of wasted characters, are written to files of the form:
 
 	Chaffin_<n>_W_<w>.txt
+	
+If the program is halted for some reason, when it is run again it will read back any files it finds with
+names of this form, and restart computations for the w value of the last such file that it finds.
+

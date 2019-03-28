@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.01
-Last Updated: 27 March 2019
+Version: 2.1
+Last Updated: 28 March 2019
 
 Usage:
 
@@ -38,6 +38,9 @@ superpermutations).
 The strings for each value of w are written to files of the form:
 
 Chaffin_<n>_W_<w>.txt
+
+If the program is halted for some reason, when it is run again it will read back any files it finds with names of this form,
+and restart computations for the w value of the last such file that it finds.
 */
 
 #include <stdio.h>
@@ -90,6 +93,9 @@ void fillStr2(int pos, int pfound, int partNum, char *swap, int *bestStr, int le
 int fac(int k);
 void makePerms(int n, int **permTab);
 void writeCurrentString(int newFile, int size);
+void clearFlags(int tperm0);
+size_t getFileSize(FILE *fc);
+void readBackFile(FILE *fp, int w);
 
 //	Main program
 //	------------
@@ -102,7 +108,7 @@ if (argc==2 && argv[1][0]>='0'+MIN_N && argv[1][0]<='0'+MAX_N)
 	}
 else
 	{
-	printf("Please specify n from 1 to %d on the command line\n",MAX_N);
+	printf("Please specify n from %d to %d on the command line\n",MIN_N,MAX_N);
 	exit(EXIT_FAILURE);
 	};
 	
@@ -126,7 +132,7 @@ CHECK_MEM( bestStrings = (int **)malloc(maxW*sizeof(int *)) )
 nfactor=10;
 for (int k=0;k<n-2;k++) nfactor*=10;
 
-//	We represent permutations p_1 + 10 p_2 + 100 p_3 + .... 10^(n-1) + p_n
+//	We represent permutations as p_1 + 10 p_2 + 100 p_3 + .... 10^(n-1) p_n
 //	maxDec is the highest value this can take (allowing for non-permutations as well), plus 1
 
 maxDec = n;
@@ -161,6 +167,14 @@ for (int i=0;i<fn;i++)
 mperm_res[0] = n;		//	With no wasted characters, we can visit n permutations
 max_perm = n;			//	Any new maximum (for however many wasted characters) must exceed that;
 						//	we don't reset this within the loop, as the true maximum will increase as we increase tot_bl
+
+//	Set up the zero-wasted-characters string that visits n permutations:  1 2 3 ... n 1 2 3 (n-1)
+
+bestLen[0] = 2*n-1;
+nBest[0] = 1;
+CHECK_MEM( bestStrings[0] = (int *)malloc(bestLen[tot_bl]*nBest[tot_bl]*sizeof(int)) )
+for (int i=0;i<n;i++) bestStrings[0][i]=i+1;
+for (int i=n;i<2*n-1;i++) bestStrings[0][i]=i-n+1;
 						
 //	Fill the first n entries of the string with [1...n], and compute the
 //	associated decimal, as well as the partial decimal for [2...n]
@@ -173,22 +187,90 @@ for (int j0=0; j0<n; j0++)
 	factor*=10;
 	};
 int partNum0 = tperm0/10;
-						
-//	tot_bl is the total number of wasted characters we are allowing in strings;
-//	we loop through increasing the value
+
+//	Check for any pre-existing files
+
+int resumeFrom = 1;
+int didResume = FALSE;
 
 for (tot_bl=1; tot_bl<maxW; tot_bl++)
 	{
 	sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
+	FILE *fp = fopen(outputFileName,"ra");
+	if (fp==NULL) break;
+	
+	printf("Reading pre-existing file %s ...\n",outputFileName);
+	size_t fsize = getFileSize(fp);
+	int len=0;
+	while (len<fsize)
+		{
+		int c = fgetc(fp);
+		if (c==EOF)
+			{
+			printf("Unexpected EOF encountered reading file %s\n",outputFileName);
+			exit(EXIT_FAILURE);
+			};
+		if (c=='\n') break;
+		len++;
+		};
+	bestLen[tot_bl] = len;
+	nBest[tot_bl] = (int)(fsize/(len+1));
+	if (fsize != nBest[tot_bl]*(len+1))
+		{
+		printf("Size of file %s is %ld, which is not exactly divisible by line length %d\n",outputFileName,fsize,len+1);
+		exit(EXIT_FAILURE);
+		};
+	fseek(fp,0,SEEK_SET);
+	readBackFile(fp, tot_bl);
+	fclose(fp);
+	
+	mperm_res[tot_bl] = len - tot_bl - (n-1);
+	
+	printf("Found %d strings of length %d, implying %d permutations, in file %s\n",nBest[tot_bl],bestLen[tot_bl],mperm_res[tot_bl],outputFileName);
+	
+	resumeFrom = tot_bl;
+	didResume = TRUE;
+	};
+						
+//	tot_bl is the total number of wasted characters we are allowing in strings;
+//	we loop through increasing the value
 
-//	Set all flags for unvisited permutations, then clear the flag for [1...n]
+int expectedInc = 2*(n-4);			//	We guess that max_perm will increase by at least this much at each step
 
-	for (int i=0; i<maxDec; i++) unvisited[i] = TRUE;
-	unvisited[tperm0]=FALSE;
+for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
+	{
+	sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
+	
+	//	Gamble on max_perm increasing by at least expectedInc; if it doesn't, we will decrement it and retry
+	
+	int old_max = mperm_res[tot_bl-1];
+	max_perm = old_max + expectedInc;
+	
+	if (didResume && tot_bl==resumeFrom) max_perm = mperm_res[resumeFrom];
+	if (max_perm > fn) max_perm = fn;
+	
+	nBest[tot_bl]=0;
 	
 	//	Recursively fill in the string
 
-	fillStr(n,1,partNum0,TRUE);
+	while (max_perm>0)
+		{
+		clearFlags(tperm0);
+		bestLen[tot_bl]=max_perm+tot_bl+n-1;
+		fillStr(n,1,partNum0,TRUE);
+		if (nBest[tot_bl] > 0) break;
+		printf("Backtracking, reducing max_perm from %d to %d\n",max_perm,max_perm-1);
+		max_perm--;
+		};
+		
+	if (max_perm - old_max < expectedInc)
+		{
+		printf("Reduced default increment in max_perm from %d to ",expectedInc);
+		expectedInc = max_perm - old_max;
+		if (expectedInc <= 0) expectedInc = 1;
+		printf("%d\n",expectedInc);
+		};
+
 	
 	//	Record maximum number of permutations visited with this many wasted characters
 
@@ -199,14 +281,12 @@ for (tot_bl=1; tot_bl<maxW; tot_bl++)
 
 	if (max_perm >= fn)
 		{
-		printf("\n-----\nDONE!\n-----\nMinimal superpermutations on %d symbols have %d wasted characters and a length of %u.\n\n",
+		printf("\n-----\nDONE!\n-----\nMinimal superpermutations on %d symbols have %d wasted characters and a length of %d.\n\n",
 			n,tot_bl,fn+tot_bl+n-1);
 		break;
 		};
 		
 	//	Read back list of best strings
-	
-	CHECK_MEM( bestStrings[tot_bl] = (int *)malloc(bestLen[tot_bl]*nBest[tot_bl]*sizeof(int)) )
 	
 	FILE *fp = fopen(outputFileName,"ra");
 	if (fp==NULL)
@@ -214,18 +294,8 @@ for (tot_bl=1; tot_bl<maxW; tot_bl++)
 		printf("Unable to open file %s to read\n",outputFileName);
 		exit(EXIT_FAILURE);
 		};
-		
-	int ptr=0;
-	for (int i=0;i<nBest[tot_bl];i++)
-		{
-		char c;
-		for (int j=0;j<bestLen[tot_bl];j++)
-			{
-			fscanf(fp,"%c",&c);
-			bestStrings[tot_bl][ptr++] = c-'0';
-			};
-		fscanf(fp,"%c",&c);
-		};
+	
+	readBackFile(fp, tot_bl);
 	fclose(fp);
 	};
 
@@ -244,8 +314,7 @@ int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we
 //	If we can only match the current max_perm by using an optimal string for our remaining quota of wasted characters,
 //	we try using those strings (swapping digits to make them start from the permutation we just visited).
 
-
-if	(leftPerm && spareW > 0 && spareW < tot_bl && mperm_res[spareW] + pfound - 1 == max_perm)
+if	(leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1 == max_perm)
 	{
 	for (int i=0;i<nBest[spareW];i++)
 		{
@@ -257,7 +326,7 @@ if	(leftPerm && spareW > 0 && spareW < tot_bl && mperm_res[spareW] + pfound - 1 
 	return;
 	};
 
-for	(j1=1; j1<=n; j1++)		//	Loop to try to each possible next character we could append
+for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could append
 	{
 	// there is never any benefit to having 2 of the same character next to each other
 	
@@ -283,7 +352,7 @@ for	(j1=1; j1<=n; j1++)		//	Loop to try to each possible next character we could
 				}
 			else if (pfound+1==max_perm)
 				{
-				writeCurrentString(FALSE,pos+1);
+				writeCurrentString(nBest[tot_bl]==0,pos+1);
 				nBest[tot_bl]++;
 				};
 
@@ -340,7 +409,7 @@ if	(j1 != curstr[pos-1])
 			}
 		else if (pfound+1==max_perm)
 			{
-			writeCurrentString(FALSE,pos+1);
+			writeCurrentString(nBest[tot_bl]==0,pos+1);
 			nBest[tot_bl]++;
 			};
 
@@ -372,8 +441,6 @@ else return k*fac(k-1);
 //	Generate all permutations of 1 ... n;
 //	generates lists for lower values of n
 //	in the process.
-//
-//	We sort each table into lexical order after constructing it.
 
 void makePerms(int n, int **permTab)
 {
@@ -422,4 +489,37 @@ if (fp==NULL)
 for (int k=0;k<size;k++) fprintf(fp,"%c",'0'+curstr[k]);
 fprintf(fp,"\n");
 fclose(fp);
+}
+
+void clearFlags(int tperm0)
+{
+for (int i=0; i<maxDec; i++) unvisited[i] = TRUE;
+unvisited[tperm0]=FALSE;
+}
+
+//	Get file size, then reset pointer to start
+
+size_t getFileSize(FILE *fc)
+{
+fseek(fc,0,SEEK_END);
+size_t fileSizeBytes = ftell(fc);
+fseek(fc,0,SEEK_SET);
+return fileSizeBytes;
+}
+
+void readBackFile(FILE *fp, int w)
+{
+CHECK_MEM( bestStrings[w] = (int *)malloc(bestLen[w]*nBest[w]*sizeof(int)) )
+
+int ptr=0;
+for (int i=0;i<nBest[w];i++)
+	{
+	char c;
+	for (int j=0;j<bestLen[w];j++)
+		{
+		fscanf(fp,"%c",&c);
+		bestStrings[w][ptr++] = c-'0';
+		};
+	fscanf(fp,"%c",&c);
+	};
 }
