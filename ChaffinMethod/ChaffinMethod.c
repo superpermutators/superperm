@@ -24,16 +24,17 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.1
-Last Updated: 28 March 2019
+Version: 2.2
+Last Updated: 29 March 2019
 
 Usage:
 
-	ChaffinMethod n
+	ChaffinMethod n [oneExample]
 
-Computes all strings (starting with 123...n) that contain the maximum possible number of permutations on n symbols while wasting w
+Computes strings (starting with 123...n) that contain the maximum possible number of permutations on n symbols while wasting w
 characters, for all values of w from 1 up to the point where all permutations are visited (i.e. these strings become
-superpermutations).
+superpermutations).  The default is to find ALL such strings; if the "oneExample" option is specified, then only a single
+example is found.
 
 The strings for each value of w are written to files of the form:
 
@@ -83,6 +84,8 @@ int **bestStrings;	//	For each number of wasted characters, a list of all string
 int tot_bl;			//	The total number of wasted characters we are allowing in strings, in current search
 char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by decimal rep of permutation
 char *valid;		//	Flags saying whether decimal rep of digit sequence corresponds to a valid permutation
+int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
+int allExamples=TRUE;
 char outputFileName[256];
 
 //	Function definitions
@@ -102,15 +105,26 @@ void readBackFile(FILE *fp, int w);
 
 int main(int argc, const char * argv[])
 {
-if (argc==2 && argv[1][0]>='0'+MIN_N && argv[1][0]<='0'+MAX_N)
+if (argc>=2 && argv[1][0]>='0'+MIN_N && argv[1][0]<='0'+MAX_N)
 	{
 	n = argv[1][0]-'0';
+	if (argc==3)
+		{
+	 	if (strcmp(argv[2],"oneExample")==0) oneExample=TRUE;
+	 	else
+	 		{
+	 		printf("Unknown option %s\n",argv[2]);
+	 		exit(EXIT_FAILURE);
+	 		};
+	 	};
 	}
 else
 	{
 	printf("Please specify n from %d to %d on the command line\n",MIN_N,MAX_N);
 	exit(EXIT_FAILURE);
 	};
+	
+allExamples = !oneExample;
 	
 fn=fac(n);
 
@@ -195,9 +209,14 @@ int didResume = FALSE;
 
 for (tot_bl=1; tot_bl<maxW; tot_bl++)
 	{
-	sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
+	sprintf(outputFileName,"Chaffin_%d_W_%d%s.txt",n,tot_bl,oneExample?"_OE":"");
 	FILE *fp = fopen(outputFileName,"ra");
-	if (fp==NULL) break;
+	if (fp==NULL)
+		{
+		sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
+		fp = fopen(outputFileName,"ra");
+		if (fp==NULL) break;
+		};
 	
 	printf("Reading pre-existing file %s ...\n",outputFileName);
 	size_t fsize = getFileSize(fp);
@@ -239,7 +258,7 @@ int expectedInc = 2*(n-4);			//	We guess that max_perm will increase by at least
 
 for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	{
-	sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
+	sprintf(outputFileName,"Chaffin_%d_W_%d%s.txt",n,tot_bl,oneExample?"_OE":"");
 	
 	//	Gamble on max_perm increasing by at least expectedInc; if it doesn't, we will decrement it and retry
 	
@@ -314,7 +333,7 @@ int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we
 //	If we can only match the current max_perm by using an optimal string for our remaining quota of wasted characters,
 //	we try using those strings (swapping digits to make them start from the permutation we just visited).
 
-if	(leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1 == max_perm)
+if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1 == max_perm)
 	{
 	for (int i=0;i<nBest[spareW];i++)
 		{
@@ -365,7 +384,10 @@ for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could ap
 			}
 		else if	(alreadyWasted < tot_bl)
 			{
-			if	(mperm_res[tot_bl - (alreadyWasted+1)] + pfound >= max_perm)
+			int d = mperm_res[tot_bl - (alreadyWasted+1)] + pfound - max_perm;
+			if	(
+				(oneExample && d > 0) || (allExamples && d >= 0)
+				)
 				{
 				fillStr(pos+1, pfound, tperm/10, valid[tperm]);
 				};

@@ -3,22 +3,23 @@ Readme.txt
 
 Author:			Greg Egan [based on a previous version by Nathaniel Johnston;
 				see http://www.njohnston.ca/2014/08/all-minimal-superpermutations-on-five-symbols-have-been-found/ ]
-Date:			27 March 2019
+Date:			27-29 March 2019
 
 Building and testing
 --------------------
 
-This file describes the program ChaffinMethod.c, which uses an algorithm devised by Benjamin Chaffin to compute all strings
+This file describes the program ChaffinMethod.c, which uses an algorithm devised by Benjamin Chaffin to compute strings
 (starting with 123...n) that contain the maximum possible number of permutations on n symbols while wasting w
 characters, for all values of w from 1 up to the point where all permutations are visited (i.e. these strings become
-superpermutations).
+superpermutations).  The default is to find ALL such strings; if the "oneExample" option is specified, then only a single
+example is found.
 
 ChaffinMethod.c is a single, standalone file for a command-line C program, which should compile, link and run in
 any command-line environment.
 
 Usage is:
 
-	ChaffinMethod n
+	ChaffinMethod n [oneExample]
 
 where:
 
@@ -89,7 +90,10 @@ Files written
 
 The strings for each value of w, the number of wasted characters, are written to files of the form:
 
-	Chaffin_<n>_W_<w>.txt
+	Chaffin_<n>_W_<w>[_OE].txt
+	
+The suffix "_OE" is appended if the file contains only one example of a string that meets the conditions,
+rather than listing every example. 
 	
 If the program is halted for some reason, when it is run again it will read back any files it finds with
 names of this form, and restart computations for the w value of the last such file that it finds.
