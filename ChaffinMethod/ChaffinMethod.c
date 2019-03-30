@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.2
-Last Updated: 29 March 2019
+Version: 2.3
+Last Updated: 30 March 2019
 
 Usage:
 
@@ -84,6 +84,7 @@ int **bestStrings;	//	For each number of wasted characters, a list of all string
 int tot_bl;			//	The total number of wasted characters we are allowing in strings, in current search
 char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by decimal rep of permutation
 char *valid;		//	Flags saying whether decimal rep of digit sequence corresponds to a valid permutation
+int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
 int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
 char outputFileName[256];
@@ -161,7 +162,7 @@ makePerms(n,permTab+n-1);
 int *p0 = permTab[n-1];
 
 //	Set up flags that say whether each number is a valid permutation or not,
-//	and whether we have visited a given permutation
+//	and whether we have visited a given permutation.
 
 CHECK_MEM( valid = (char *)malloc(maxDec*sizeof(char)) )
 CHECK_MEM( unvisited = (char *)malloc(maxDec*sizeof(char)) )
@@ -176,6 +177,64 @@ for (int i=0;i<fn;i++)
 		factor*=10;
 		};
 	valid[tperm]=TRUE;
+	};
+	
+//	For each number d_1 d_2 d_3 ... d_n as a digit sequence, what is
+//	the length of the longest run d_j ... d_n in which all the digits are distinct.
+
+CHECK_MEM( ldd = (int *)malloc(maxDec*sizeof(int)) )
+
+//	Loop through all digit sequences
+
+static int dseq[MAX_N];
+for (int i=0;i<n;i++) dseq[i]=1;
+int more=TRUE;
+while (more)
+	{
+	int tperm=0, factor=1;
+	for (int j0=0;j0<n; j0++)
+		{
+		tperm+=factor*(dseq[j0]);
+		factor*=10;
+		};
+		
+	if (valid[tperm]) ldd[tperm]=0;
+	else
+		{
+		int ok=TRUE;
+		for (int l=2;l<=n;l++)
+			{
+			for (int i=0;i<l && ok;i++)
+			for (int j=i+1;j<l;j++)
+				{
+				if (dseq[n-1-i]==dseq[n-1-j])
+					{
+					ok=FALSE;
+					break;
+					};
+				};
+
+			if (!ok)
+				{
+				ldd[tperm] = n-(l-1);
+				break;
+				};
+			};
+		};
+		
+	for (int h=n-1;h>=0;h--)
+		{
+		if (++dseq[h]>n)
+			{
+			if (h==0)
+				{
+				more=FALSE;
+				break;
+				};
+			dseq[h]=1;
+			}
+		else break;
+		};	
 	};
 	
 mperm_res[0] = n;		//	With no wasted characters, we can visit n permutations
@@ -265,8 +324,21 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	int old_max = mperm_res[tot_bl-1];
 	max_perm = old_max + expectedInc;
 	
-	if (didResume && tot_bl==resumeFrom) max_perm = mperm_res[resumeFrom];
-	if (max_perm > fn) max_perm = fn;
+	if (didResume && tot_bl==resumeFrom)
+		{
+		max_perm = mperm_res[resumeFrom];
+		if (oneExample) max_perm--;
+		};
+
+	if (allExamples)
+		{
+		if (max_perm > fn) max_perm = fn;
+		}
+	else
+		{
+		if (max_perm >= fn) max_perm = fn-1;
+		};
+	
 	
 	nBest[tot_bl]=0;
 	
@@ -351,8 +423,15 @@ for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could ap
 	
 	if	(j1 != curstr[pos-1])
 		{
-		curstr[pos] = j1;
 		tperm = partNum + nfactor*j1;
+		
+		//	ldd[tperm] tells us the minimum number of further characters we would need to waste
+		//	before visiting another permutation.
+		
+		int spareW0 = spareW - ldd[tperm];
+		if (spareW0<0) continue;
+		
+		curstr[pos] = j1;
 
 		// Check to see if this contributes a new permutation or not
 		
@@ -378,13 +457,10 @@ for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could ap
 			unvisited[tperm]=FALSE;
 			fillStr(pos+1, pfound+1, tperm/10, TRUE);
 			unvisited[tperm]=TRUE;
-
-		// the quantity alreadyWasted = pos - pfound - n + 1 is the number of already-used blanks
-		
 			}
-		else if	(alreadyWasted < tot_bl)
+		else if	(spareW > 0)
 			{
-			int d = mperm_res[tot_bl - (alreadyWasted+1)] + pfound - max_perm;
+			int d = mperm_res[valid[tperm] ? spareW-1 : spareW0] + pfound - max_perm;
 			if	(
 				(oneExample && d > 0) || (allExamples && d >= 0)
 				)
