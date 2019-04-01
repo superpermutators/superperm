@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.3
-Last Updated: 30 March 2019
+Version: 2.4
+Last Updated: 1 April 2019
 
 Usage:
 
@@ -78,6 +78,7 @@ int maxW;			//	Largest number of wasted characters we allow for
 char *curstr;		//	Current string
 int max_perm;		//	Maximum number of permutations visited by any string seen so far
 int *mperm_res;		//	For each number of wasted characters, the maximum number of permutations that can be visited
+int *mperm_ruledOut;		//	For each number of wasted characters, the smallest number of permutations currently ruled out
 int *nBest;			//	For each number of wasted characters, the number of strings that achieve mperm_res permutations
 int *bestLen;		//	For each number of wasted characters, the lengths of the strings that visit mperm_res permutations
 int **bestStrings;	//	For each number of wasted characters, a list of all strings that visit mperm_res permutations
@@ -87,6 +88,7 @@ char *valid;		//	Flags saying whether decimal rep of digit sequence corresponds 
 int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
 int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
+int done=FALSE;			//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
 char outputFileName[256];
 
 //	Function definitions
@@ -139,8 +141,14 @@ maxW = fn;
 
 CHECK_MEM( nBest = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
+CHECK_MEM( mperm_ruledOut = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( bestLen = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( bestStrings = (int **)malloc(maxW*sizeof(int *)) )
+
+//	The value of mperm_ruledOut[w] is the lowest permutation count that we are currently certain cannot be achieved
+//	with w wasted characters.
+
+for (int i=0;i<maxW;i++) mperm_ruledOut[i]=fn+1;
 
 //	Compute 10^(n-1)
 
@@ -348,9 +356,15 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 		{
 		clearFlags(tperm0);
 		bestLen[tot_bl]=max_perm+tot_bl+n-1;
+		done=FALSE;
 		fillStr(n,1,partNum0,TRUE);
 		if (nBest[tot_bl] > 0) break;
+		
+		//	We searched either for matches to max_perm (allExamples) or strings that did better than max_perm (oneExample), and came up empty
+		
 		printf("Backtracking, reducing max_perm from %d to %d\n",max_perm,max_perm-1);
+		if (allExamples) mperm_ruledOut[tot_bl] = max_perm;
+		else mperm_ruledOut[tot_bl] = max_perm+1;
 		max_perm--;
 		};
 		
@@ -397,6 +411,8 @@ return 0;
 
 void fillStr(int pos, int pfound, int partNum, int leftPerm)
 {
+if (done) return;
+
 int j1, newperm;
 int tperm;
 int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
@@ -447,6 +463,11 @@ for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could ap
 				nBest[tot_bl]=1;
 				bestLen[tot_bl]=pos+1;
 				max_perm = pfound+1;
+				if (oneExample && max_perm+1 >= mperm_ruledOut[tot_bl])
+					{
+					done=TRUE;
+					return;
+					};
 				}
 			else if (pfound+1==max_perm)
 				{
