@@ -24,7 +24,7 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.4
+Version: 2.5
 Last Updated: 1 April 2019
 
 Usage:
@@ -433,61 +433,60 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 	return;
 	};
 
-for	(j1=1; j1<=n; j1++)		//	Loop to try each possible next character we could append
+for	(int z=0; z<n-1; z++)		//	Loop to try each possible next character we could append
 	{
-	// there is never any benefit to having 2 of the same character next to each other
+	//	There is never any benefit to having 2 of the same character next to each other, so we start from
+	//	the next character in cyclic order. 
 	
-	if	(j1 != curstr[pos-1])
+	j1 = 1 + (curstr[pos-1]+z)%n;
+	tperm = partNum + nfactor*j1;
+	
+	//	ldd[tperm] tells us the minimum number of further characters we would need to waste
+	//	before visiting another permutation.
+	
+	int spareW0 = spareW - ldd[tperm];
+	if (spareW0<0) continue;
+	
+	curstr[pos] = j1;
+
+	// Check to see if this contributes a new permutation or not
+	
+	newperm = valid[tperm] && unvisited[tperm];
+
+	// now go to the next level of the recursion
+	
+	if (newperm)
 		{
-		tperm = partNum + nfactor*j1;
-		
-		//	ldd[tperm] tells us the minimum number of further characters we would need to waste
-		//	before visiting another permutation.
-		
-		int spareW0 = spareW - ldd[tperm];
-		if (spareW0<0) continue;
-		
-		curstr[pos] = j1;
-
-		// Check to see if this contributes a new permutation or not
-		
-		newperm = valid[tperm] && unvisited[tperm];
-
-		// now go to the next level of the recursion
-		
-		if (newperm)
+		if (pfound+1>max_perm)
 			{
-			if (pfound+1>max_perm)
+			writeCurrentString(TRUE,pos+1);
+			nBest[tot_bl]=1;
+			bestLen[tot_bl]=pos+1;
+			max_perm = pfound+1;
+			if (oneExample && max_perm+1 >= mperm_ruledOut[tot_bl])
 				{
-				writeCurrentString(TRUE,pos+1);
-				nBest[tot_bl]=1;
-				bestLen[tot_bl]=pos+1;
-				max_perm = pfound+1;
-				if (oneExample && max_perm+1 >= mperm_ruledOut[tot_bl])
-					{
-					done=TRUE;
-					return;
-					};
-				}
-			else if (pfound+1==max_perm)
-				{
-				writeCurrentString(nBest[tot_bl]==0,pos+1);
-				nBest[tot_bl]++;
+				done=TRUE;
+				return;
 				};
-
-			unvisited[tperm]=FALSE;
-			fillStr(pos+1, pfound+1, tperm/10, TRUE);
-			unvisited[tperm]=TRUE;
 			}
-		else if	(spareW > 0)
+		else if (pfound+1==max_perm)
 			{
-			int d = mperm_res[valid[tperm] ? spareW-1 : spareW0] + pfound - max_perm;
-			if	(
-				(oneExample && d > 0) || (allExamples && d >= 0)
-				)
-				{
-				fillStr(pos+1, pfound, tperm/10, valid[tperm]);
-				};
+			writeCurrentString(nBest[tot_bl]==0,pos+1);
+			nBest[tot_bl]++;
+			};
+
+		unvisited[tperm]=FALSE;
+		fillStr(pos+1, pfound+1, tperm/10, TRUE);
+		unvisited[tperm]=TRUE;
+		}
+	else if	(spareW > 0)
+		{
+		int d = mperm_res[valid[tperm] ? spareW-1 : spareW0] + pfound - max_perm;
+		if	(
+			(oneExample && d > 0) || (allExamples && d >= 0)
+			)
+			{
+			fillStr(pos+1, pfound, tperm/10, valid[tperm]);
 			};
 		};
 	};
