@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.5
-Last Updated: 1 April 2019
+Version: 2.6
+Last Updated: 2 April 2019
 
 Usage:
 
@@ -67,13 +67,23 @@ and restart computations for the w value of the last such file that it finds.
 
 #define CHECK_MEM(p) if ((p)==NULL) {printf("Insufficient memory\n"); exit(EXIT_FAILURE);};
 
+//	Structure definitions
+//	---------------------
+
+struct digitScore
+{
+int digit;
+int score;
+};
+
 //	Global variables
 //	----------------
 
 int n;				//	The number of symbols in the permutations we are considering
 int fn;				//	n!
 int nfactor;		//	10^(n-1)
-int maxDec;			//	Highest decimal representation of a digit sequence we can encounter, plus 1
+int maxDec;			//	Highest decimal representation of an n-digit sequence we can encounter, plus 1
+int maxDecM;		//	Highest decimal representation of an (n-1)-digit sequence we can encounter, plus 1
 int maxW;			//	Largest number of wasted characters we allow for
 char *curstr;		//	Current string
 int max_perm;		//	Maximum number of permutations visited by any string seen so far
@@ -86,6 +96,7 @@ int tot_bl;			//	The total number of wasted characters we are allowing in string
 char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by decimal rep of permutation
 char *valid;		//	Flags saying whether decimal rep of digit sequence corresponds to a valid permutation
 int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
+char *nextDigits;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
 int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
 int done=FALSE;			//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
@@ -102,6 +113,7 @@ void writeCurrentString(int newFile, int size);
 void clearFlags(int tperm0);
 size_t getFileSize(FILE *fc);
 void readBackFile(FILE *fp, int w);
+int compareDS(const void *ii0, const void *jj0);
 
 //	Main program
 //	------------
@@ -157,10 +169,13 @@ for (int k=0;k<n-2;k++) nfactor*=10;
 
 //	We represent permutations as p_1 + 10 p_2 + 100 p_3 + .... 10^(n-1) p_n
 //	maxDec is the highest value this can take (allowing for non-permutations as well), plus 1
+//	maxDecM is the equivalent for (n-1)-digit sequences
 
-maxDec = n;
-for (int k=0;k<n-1;k++) maxDec = 10*maxDec + n;
+maxDecM = n;
+for (int k=0;k<n-2;k++) maxDecM = 10*maxDecM + n;
+maxDec = 10*maxDecM+n;
 maxDec++;
+maxDecM++;
 
 //	Generate a table of all permutations of n symbols
 
@@ -192,7 +207,7 @@ for (int i=0;i<fn;i++)
 
 CHECK_MEM( ldd = (int *)malloc(maxDec*sizeof(int)) )
 
-//	Loop through all digit sequences
+//	Loop through all n-digit sequences
 
 static int dseq[MAX_N];
 for (int i=0;i<n;i++) dseq[i]=1;
@@ -231,6 +246,56 @@ while (more)
 		};
 		
 	for (int h=n-1;h>=0;h--)
+		{
+		if (++dseq[h]>n)
+			{
+			if (h==0)
+				{
+				more=FALSE;
+				break;
+				};
+			dseq[h]=1;
+			}
+		else break;
+		};	
+	};
+	
+//	Set up a table of the next digits to follow from a given (n-1)-digit sequence
+
+struct digitScore *sortDS;
+CHECK_MEM( sortDS = (struct digitScore *)malloc((n-1)*sizeof(struct digitScore)) )
+CHECK_MEM( nextDigits = (char *)malloc(maxDecM*(n-1)*sizeof(char)) )
+
+//	Loop through all (n-1)-digit sequences
+
+for (int i=0;i<n-1;i++) dseq[i]=1;
+more=TRUE;
+while (more)
+	{
+	int part=0, factor=1;
+	for (int j0=0;j0<n-1; j0++)
+		{
+		part+=factor*(dseq[j0]);
+		factor*=10;
+		};
+		
+	//	Sort potential next digits by the ldd score we get by appending them
+	
+	int q=0;
+	for (int d=1;d<=n;d++)
+	if (d != dseq[n-2])
+		{
+		int t = nfactor*d + part;
+		sortDS[q].digit = d;
+		sortDS[q].score = ldd[t];
+		q++;
+		};
+		
+	qsort(sortDS,n-1,sizeof(struct digitScore),compareDS);
+	
+	for (int z=0;z<n-1;z++)	nextDigits[(n-1)*part+z] = sortDS[z].digit;
+	
+	for (int h=n-2;h>=0;h--)
 		{
 		if (++dseq[h]>n)
 			{
@@ -432,26 +497,28 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 		};
 	return;
 	};
-
-for	(int z=0; z<n-1; z++)		//	Loop to try each possible next character we could append
-	{
-	//	There is never any benefit to having 2 of the same character next to each other, so we start from
-	//	the next character in cyclic order. 
 	
-	j1 = 1 + (curstr[pos-1]+z)%n;
+//	Loop to try each possible next digit we could append
+//	These have been sorted into increasing order of ldd[tperm]
+	
+char *nd = nextDigits + (n-1)*partNum;
+for	(int z=0; z<n-1; z++)
+	{
+	j1 = nd[z];
 	tperm = partNum + nfactor*j1;
 	
 	//	ldd[tperm] tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
 	
 	int spareW0 = spareW - ldd[tperm];
-	if (spareW0<0) continue;
+	if (spareW0<0) return;
 	
 	curstr[pos] = j1;
 
 	// Check to see if this contributes a new permutation or not
 	
-	newperm = valid[tperm] && unvisited[tperm];
+	int vperm = valid[tperm];
+	newperm = vperm && unvisited[tperm];
 
 	// now go to the next level of the recursion
 	
@@ -481,12 +548,26 @@ for	(int z=0; z<n-1; z++)		//	Loop to try each possible next character we could 
 		}
 	else if	(spareW > 0)
 		{
-		int d = mperm_res[valid[tperm] ? spareW-1 : spareW0] + pfound - max_perm;
-		if	(
-			(oneExample && d > 0) || (allExamples && d >= 0)
-			)
+		if (vperm)
 			{
-			fillStr(pos+1, pfound, tperm/10, valid[tperm]);
+			int d = mperm_res[spareW-1] + pfound - max_perm;
+			if	(
+				(oneExample && d > 0) || (allExamples && d >= 0)
+				)
+				{
+				fillStr(pos+1, pfound, tperm/10, TRUE);
+				};
+			}
+		else
+			{
+			int d = mperm_res[spareW0] + pfound - max_perm;
+			if	(
+				(oneExample && d > 0) || (allExamples && d >= 0)
+				)
+				{
+				fillStr(pos+1, pfound, tperm/10, FALSE);
+				}
+			else return;
 			};
 		};
 	};
@@ -640,4 +721,16 @@ for (int i=0;i<nBest[w];i++)
 		};
 	fscanf(fp,"%c",&c);
 	};
+}
+
+//	Compare two digitScore structures for quicksort()
+
+int compareDS(const void *ii0, const void *jj0)
+{
+struct digitScore *ii=(struct digitScore *)ii0, *jj=(struct digitScore *)jj0;
+if (ii->score < jj->score) return -1;
+if (ii->score > jj->score) return 1;
+if (ii->digit < jj->digit) return -1;
+if (ii->digit > jj->digit) return 1;
+return 0;
 }
