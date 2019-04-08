@@ -24,17 +24,17 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.6
-Last Updated: 2 April 2019
+Version: 2.7
+Last Updated: 8 April 2019
 
 Usage:
 
-	ChaffinMethod n [oneExample]
+	ChaffinMethod n [oneExample] [noRepeats]
 
-Computes strings (starting with 123...n) that contain the maximum possible number of permutations on n symbols while wasting w
+Computes strings (starting with 123...n) that contain the maximum possible number of distinct permutations on n symbols while wasting w
 characters, for all values of w from 1 up to the point where all permutations are visited (i.e. these strings become
 superpermutations).  The default is to find ALL such strings; if the "oneExample" option is specified, then only a single
-example is found.
+example is found.  The "noRepeats" option explicitly rules out strings that contain any permutation more than once.
 
 The strings for each value of w are written to files of the form:
 
@@ -59,8 +59,16 @@ and restart computations for the w value of the last such file that it finds.
 
 //	Smallest and largest values of n accepted
 
+//	(Note that if we went higher than n=7, DBITS would need to increase, and we would also need to change some variables
+//	from 32-bit to 64-bit ints. However, at this point it seems extremely unlikely that it would ever be practical to
+//	run this code with n=8.)
+
 #define MIN_N 3
 #define MAX_N 7
+
+//	Number of bits allowed for each digit in integer representation of permutations
+
+#define DBITS 3
 
 //	Macros
 //	------
@@ -81,9 +89,9 @@ int score;
 
 int n;				//	The number of symbols in the permutations we are considering
 int fn;				//	n!
-int nfactor;		//	10^(n-1)
-int maxDec;			//	Highest decimal representation of an n-digit sequence we can encounter, plus 1
-int maxDecM;		//	Highest decimal representation of an (n-1)-digit sequence we can encounter, plus 1
+int nmbits;			//	(n-1)*DBITS
+int maxInt;			//	Highest integer representation of an n-digit sequence we can encounter, plus 1
+int maxIntM;		//	Highest integer representation of an (n-1)-digit sequence we can encounter, plus 1
 int maxW;			//	Largest number of wasted characters we allow for
 char *curstr;		//	Current string
 int max_perm;		//	Maximum number of permutations visited by any string seen so far
@@ -93,12 +101,14 @@ int *nBest;			//	For each number of wasted characters, the number of strings tha
 int *bestLen;		//	For each number of wasted characters, the lengths of the strings that visit mperm_res permutations
 int **bestStrings;	//	For each number of wasted characters, a list of all strings that visit mperm_res permutations
 int tot_bl;			//	The total number of wasted characters we are allowing in strings, in current search
-char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by decimal rep of permutation
-char *valid;		//	Flags saying whether decimal rep of digit sequence corresponds to a valid permutation
+char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by integer rep of permutation
+char *valid;		//	Flags saying whether integer rep of digit sequence corresponds to a valid permutation
 int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
 char *nextDigits;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
 int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
+int noRepeats=FALSE;
+int allowRepeats=TRUE;
 int done=FALSE;			//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
 char outputFileName[256];
 
@@ -111,7 +121,6 @@ int fac(int k);
 void makePerms(int n, int **permTab);
 void writeCurrentString(int newFile, int size);
 void clearFlags(int tperm0);
-size_t getFileSize(FILE *fc);
 void readBackFile(FILE *fp, int w);
 int compareDS(const void *ii0, const void *jj0);
 
@@ -123,12 +132,13 @@ int main(int argc, const char * argv[])
 if (argc>=2 && argv[1][0]>='0'+MIN_N && argv[1][0]<='0'+MAX_N)
 	{
 	n = argv[1][0]-'0';
-	if (argc==3)
+	for (int i=2;i<argc;i++)
 		{
-	 	if (strcmp(argv[2],"oneExample")==0) oneExample=TRUE;
+	 	if (strcmp(argv[i],"oneExample")==0) oneExample=TRUE;
+	 	else if (strcmp(argv[i],"noRepeats")==0) noRepeats=TRUE;
 	 	else
 	 		{
-	 		printf("Unknown option %s\n",argv[2]);
+	 		printf("Unknown option %s\n",argv[i]);
 	 		exit(EXIT_FAILURE);
 	 		};
 	 	};
@@ -140,6 +150,7 @@ else
 	};
 	
 allExamples = !oneExample;
+allowRepeats = !noRepeats;
 	
 fn=fac(n);
 
@@ -162,20 +173,19 @@ CHECK_MEM( bestStrings = (int **)malloc(maxW*sizeof(int *)) )
 
 for (int i=0;i<maxW;i++) mperm_ruledOut[i]=fn+1;
 
-//	Compute 10^(n-1)
+//	Compute number of bits we will shift final digit
 
-nfactor=10;
-for (int k=0;k<n-2;k++) nfactor*=10;
+nmbits = DBITS*(n-1);
 
-//	We represent permutations as p_1 + 10 p_2 + 100 p_3 + .... 10^(n-1) p_n
-//	maxDec is the highest value this can take (allowing for non-permutations as well), plus 1
-//	maxDecM is the equivalent for (n-1)-digit sequences
+//	We represent permutations as p_1 + b*p_2 + b^2*p_3 + .... b^(n-1)*p_n, where b=2^(DBITS)
+//	maxInt is the highest value this can take (allowing for non-permutations as well), plus 1
+//	maxIntM is the equivalent for (n-1)-digit sequences
 
-maxDecM = n;
-for (int k=0;k<n-2;k++) maxDecM = 10*maxDecM + n;
-maxDec = 10*maxDecM+n;
-maxDec++;
-maxDecM++;
+maxIntM = n;
+for (int k=0;k<n-2;k++) maxIntM = (maxIntM<<DBITS)+n;
+maxInt = (maxIntM<<DBITS)+n;
+maxInt++;
+maxIntM++;
 
 //	Generate a table of all permutations of n symbols
 
@@ -187,17 +197,16 @@ int *p0 = permTab[n-1];
 //	Set up flags that say whether each number is a valid permutation or not,
 //	and whether we have visited a given permutation.
 
-CHECK_MEM( valid = (char *)malloc(maxDec*sizeof(char)) )
-CHECK_MEM( unvisited = (char *)malloc(maxDec*sizeof(char)) )
+CHECK_MEM( valid = (char *)malloc(maxInt*sizeof(char)) )
+CHECK_MEM( unvisited = (char *)malloc(maxInt*sizeof(char)) )
 
-for (int i=0;i<maxDec;i++) valid[i]=FALSE;
+for (int i=0;i<maxInt;i++) valid[i]=FALSE;
 for (int i=0;i<fn;i++)
 	{
-	int tperm=0, factor=1;
-	for (int j0=0;j0<n; j0++)
+	int tperm=0;
+	for (int j0=0;j0<n;j0++)
 		{
-		tperm+=factor*(p0[n*i+j0]);
-		factor*=10;
+		tperm+=(p0[n*i+j0]<<(j0*DBITS));
 		};
 	valid[tperm]=TRUE;
 	};
@@ -205,7 +214,7 @@ for (int i=0;i<fn;i++)
 //	For each number d_1 d_2 d_3 ... d_n as a digit sequence, what is
 //	the length of the longest run d_j ... d_n in which all the digits are distinct.
 
-CHECK_MEM( ldd = (int *)malloc(maxDec*sizeof(int)) )
+CHECK_MEM( ldd = (int *)malloc(maxInt*sizeof(int)) )
 
 //	Loop through all n-digit sequences
 
@@ -214,11 +223,10 @@ for (int i=0;i<n;i++) dseq[i]=1;
 int more=TRUE;
 while (more)
 	{
-	int tperm=0, factor=1;
-	for (int j0=0;j0<n; j0++)
+	int tperm=0;
+	for (int j0=0;j0<n;j0++)
 		{
-		tperm+=factor*(dseq[j0]);
-		factor*=10;
+		tperm+=(dseq[j0]<<(j0*DBITS));
 		};
 		
 	if (valid[tperm]) ldd[tperm]=0;
@@ -264,7 +272,7 @@ while (more)
 
 struct digitScore *sortDS;
 CHECK_MEM( sortDS = (struct digitScore *)malloc((n-1)*sizeof(struct digitScore)) )
-CHECK_MEM( nextDigits = (char *)malloc(maxDecM*(n-1)*sizeof(char)) )
+CHECK_MEM( nextDigits = (char *)malloc(maxIntM*(n-1)*sizeof(char)) )
 
 //	Loop through all (n-1)-digit sequences
 
@@ -272,11 +280,10 @@ for (int i=0;i<n-1;i++) dseq[i]=1;
 more=TRUE;
 while (more)
 	{
-	int part=0, factor=1;
-	for (int j0=0;j0<n-1; j0++)
+	int part=0;
+	for (int j0=0;j0<n-1;j0++)
 		{
-		part+=factor*(dseq[j0]);
-		factor*=10;
+		part+=(dseq[j0]<<(j0*DBITS));
 		};
 		
 	//	Sort potential next digits by the ldd score we get by appending them
@@ -285,7 +292,7 @@ while (more)
 	for (int d=1;d<=n;d++)
 	if (d != dseq[n-2])
 		{
-		int t = nfactor*d + part;
+		int t = (d<<nmbits) + part;
 		sortDS[q].digit = d;
 		sortDS[q].score = ldd[t];
 		q++;
@@ -318,21 +325,20 @@ max_perm = n;			//	Any new maximum (for however many wasted characters) must exc
 
 bestLen[0] = 2*n-1;
 nBest[0] = 1;
-CHECK_MEM( bestStrings[0] = (int *)malloc(bestLen[tot_bl]*nBest[tot_bl]*sizeof(int)) )
+CHECK_MEM( bestStrings[0] = (int *)malloc(bestLen[0]*nBest[0]*sizeof(int)) )
 for (int i=0;i<n;i++) bestStrings[0][i]=i+1;
 for (int i=n;i<2*n-1;i++) bestStrings[0][i]=i-n+1;
 						
 //	Fill the first n entries of the string with [1...n], and compute the
-//	associated decimal, as well as the partial decimal for [2...n]
+//	associated integer, as well as the partial integer for [2...n]
 
-int tperm0=0, factor=1;
-for (int j0=0; j0<n; j0++)
+int tperm0=0;
+for (int j0=0;j0<n;j0++)
 	{
 	curstr[j0] = j0+1;
-	tperm0 += factor*(j0+1);
-	factor*=10;
+	tperm0 += (j0+1)<<(j0*DBITS);
 	};
-int partNum0 = tperm0/10;
+int partNum0 = tperm0>>DBITS;
 
 //	Check for any pre-existing files
 
@@ -351,31 +357,21 @@ for (tot_bl=1; tot_bl<maxW; tot_bl++)
 		};
 	
 	printf("Reading pre-existing file %s ...\n",outputFileName);
-	size_t fsize = getFileSize(fp);
-	int len=0;
-	while (len<fsize)
+	bestLen[tot_bl] = 0;
+	nBest[tot_bl] = 0;
+	while (TRUE)
 		{
 		int c = fgetc(fp);
-		if (c==EOF)
-			{
-			printf("Unexpected EOF encountered reading file %s\n",outputFileName);
-			exit(EXIT_FAILURE);
-			};
-		if (c=='\n') break;
-		len++;
+		if (c==EOF) break;
+		if (c=='\n') nBest[tot_bl]++;
+		if (nBest[tot_bl]==0) bestLen[tot_bl]++;
 		};
-	bestLen[tot_bl] = len;
-	nBest[tot_bl] = (int)(fsize/(len+1));
-	if (fsize != nBest[tot_bl]*(len+1))
-		{
-		printf("Size of file %s is %ld, which is not exactly divisible by line length %d\n",outputFileName,fsize,len+1);
-		exit(EXIT_FAILURE);
-		};
-	fseek(fp,0,SEEK_SET);
+	fclose(fp);
+	fp = fopen(outputFileName,"ra");
 	readBackFile(fp, tot_bl);
 	fclose(fp);
 	
-	mperm_res[tot_bl] = len - tot_bl - (n-1);
+	mperm_res[tot_bl] = bestLen[tot_bl] - tot_bl - (n-1);
 	
 	printf("Found %d strings of length %d, implying %d permutations, in file %s\n",nBest[tot_bl],bestLen[tot_bl],mperm_res[tot_bl],outputFileName);
 	
@@ -396,12 +392,6 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	
 	int old_max = mperm_res[tot_bl-1];
 	max_perm = old_max + expectedInc;
-	
-	if (didResume && tot_bl==resumeFrom)
-		{
-		max_perm = mperm_res[resumeFrom];
-		if (oneExample) max_perm--;
-		};
 
 	if (allExamples)
 		{
@@ -412,8 +402,12 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 		if (max_perm >= fn) max_perm = fn-1;
 		};
 	
-	
-	nBest[tot_bl]=0;
+	if (didResume && tot_bl==resumeFrom)
+		{
+		max_perm = mperm_res[resumeFrom];
+		if (allExamples) nBest[tot_bl]=0;
+		}
+	else nBest[tot_bl]=0;
 	
 	//	Recursively fill in the string
 
@@ -505,7 +499,7 @@ char *nd = nextDigits + (n-1)*partNum;
 for	(int z=0; z<n-1; z++)
 	{
 	j1 = nd[z];
-	tperm = partNum + nfactor*j1;
+	tperm = partNum + (j1<<nmbits);
 	
 	//	ldd[tperm] tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
@@ -543,29 +537,37 @@ for	(int z=0; z<n-1; z++)
 			};
 
 		unvisited[tperm]=FALSE;
-		fillStr(pos+1, pfound+1, tperm/10, TRUE);
+		fillStr(pos+1, pfound+1, tperm>>DBITS, TRUE);
 		unvisited[tperm]=TRUE;
 		}
 	else if	(spareW > 0)
 		{
 		if (vperm)
 			{
-			int d = mperm_res[spareW-1] + pfound - max_perm;
-			if	(
-				(oneExample && d > 0) || (allExamples && d >= 0)
-				)
+			if (allowRepeats)
 				{
-				fillStr(pos+1, pfound, tperm/10, TRUE);
+				int d = mperm_res[spareW-1] + pfound - max_perm;
+				if	(
+					(oneExample && d > 0) || (allExamples && d >= 0)
+					)
+					{
+					fillStr(pos+1, pfound, tperm>>DBITS, TRUE);
+					};
 				};
 			}
 		else
 			{
+			if (spareW0 >=tot_bl)
+				{
+				printf("spareW0=%d tot_bl=%d\n",spareW0,tot_bl);
+				exit(EXIT_FAILURE);
+				};
 			int d = mperm_res[spareW0] + pfound - max_perm;
 			if	(
 				(oneExample && d > 0) || (allExamples && d >= 0)
 				)
 				{
-				fillStr(pos+1, pfound, tperm/10, FALSE);
+				fillStr(pos+1, pfound, tperm>>DBITS, FALSE);
 				}
 			else return;
 			};
@@ -591,11 +593,12 @@ j1 = swap[*bestStr];	//	Get the next digit from the template, swapped to make it
 if	(j1 != curstr[pos-1])
 	{
 	curstr[pos] = j1;
-	tperm = partNum + nfactor*j1;
+	tperm = partNum + (j1<<nmbits);
 
 	// Check to see if this contributes a new permutation or not
-		
-	newperm = valid[tperm] && unvisited[tperm];
+	
+	int vperm = valid[tperm];
+	newperm = vperm && unvisited[tperm];
 
 	// now go to the next level of the recursion
 	
@@ -613,7 +616,7 @@ if	(j1 != curstr[pos-1])
 			};
 
 		unvisited[tperm]=FALSE;
-		fillStr2(pos+1, pfound+1, tperm/10, swap, bestStr+1, len-1);
+		fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
 		unvisited[tperm]=TRUE;
 
 	// the quantity alreadyWasted = pos - pfound - n + 1 is the number of already-used blanks
@@ -621,9 +624,9 @@ if	(j1 != curstr[pos-1])
 		}
 	else if	(alreadyWasted < tot_bl)
 		{
-		if	(mperm_res[tot_bl - (alreadyWasted+1)] + pfound >= max_perm)
+		if	(((!vperm) || allowRepeats) && mperm_res[tot_bl - (alreadyWasted+1)] + pfound >= max_perm)
 			{
-			fillStr2(pos+1, pfound, tperm/10, swap, bestStr+1, len-1);
+			fillStr2(pos+1, pfound, tperm>>DBITS, swap, bestStr+1, len-1);
 			};
 		};
 	};
@@ -692,18 +695,8 @@ fclose(fp);
 
 void clearFlags(int tperm0)
 {
-for (int i=0; i<maxDec; i++) unvisited[i] = TRUE;
+for (int i=0; i<maxInt; i++) unvisited[i] = TRUE;
 unvisited[tperm0]=FALSE;
-}
-
-//	Get file size, then reset pointer to start
-
-size_t getFileSize(FILE *fc)
-{
-fseek(fc,0,SEEK_END);
-size_t fileSizeBytes = ftell(fc);
-fseek(fc,0,SEEK_SET);
-return fileSizeBytes;
 }
 
 void readBackFile(FILE *fp, int w)
@@ -713,13 +706,11 @@ CHECK_MEM( bestStrings[w] = (int *)malloc(bestLen[w]*nBest[w]*sizeof(int)) )
 int ptr=0;
 for (int i=0;i<nBest[w];i++)
 	{
-	char c;
 	for (int j=0;j<bestLen[w];j++)
 		{
-		fscanf(fp,"%c",&c);
-		bestStrings[w][ptr++] = c-'0';
+		bestStrings[w][ptr++] = fgetc(fp)-'0';
 		};
-	fscanf(fp,"%c",&c);
+	fgetc(fp);
 	};
 }
 
