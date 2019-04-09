@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.7
-Last Updated: 8 April 2019
+Version: 2.8
+Last Updated: 9 April 2019
 
 Usage:
 
@@ -75,6 +75,29 @@ and restart computations for the w value of the last such file that it finds.
 
 #define CHECK_MEM(p) if ((p)==NULL) {printf("Insufficient memory\n"); exit(EXIT_FAILURE);};
 
+//	If GET_OCP_DATA is TRUE, we gather data on where 1-cycle tracking first starts pruning
+//	If GET_OCP_DATA is FALSE, we USE data gathered when it was TRUE that has been recorded in the array ocpThreshold[]
+
+#define GET_OCP_DATA FALSE
+
+#if GET_OCP_DATA
+
+	#define PRINT_OCP_DATA printf("*** 1-cycle pruning first effective for lowestW=%d ***\n",lowestW);
+
+	#define MONITOR_OCP \
+		if (tot_bl<lowestW) \
+			{ \
+			lowestW=tot_bl; \
+			PRINT_OCP_DATA \
+			};
+
+#else
+
+	#define MONITOR_OCP
+	
+#endif
+
+
 //	Structure definitions
 //	---------------------
 
@@ -89,6 +112,7 @@ int score;
 
 int n;				//	The number of symbols in the permutations we are considering
 int fn;				//	n!
+int nm;				//	n-1
 int nmbits;			//	(n-1)*DBITS
 int maxInt;			//	Highest integer representation of an n-digit sequence we can encounter, plus 1
 int maxIntM;		//	Highest integer representation of an (n-1)-digit sequence we can encounter, plus 1
@@ -105,12 +129,30 @@ char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by inte
 char *valid;		//	Flags saying whether integer rep of digit sequence corresponds to a valid permutation
 int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
 char *nextDigits;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
+
+int noc;				//	Number of 1-cycles
+int nocThresh;			//	Threshold for unvisited 1-cycles before we try new bounds		
+int *oneCycleCounts;	//	Number of unvisited permutations in each 1-cycle
+int *oneCycleIndices;	//	The 1-cycle to which each permutation belongs
+int oneCycleBins[MAX_N+1];	//	The numbers of 1-cycles that have 0 ... n unvisited permutations
+
 int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
 int noRepeats=FALSE;
 int allowRepeats=TRUE;
 int done=FALSE;			//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
 char outputFileName[256];
+
+//	Monitoring 1-cycle tracking
+
+int ocpTrackingOn, ocpTrackingOff;
+
+#if GET_OCP_DATA
+int lowestW;
+#else
+//	For n=0,1,2,3,4,5,6,7
+int ocpThreshold[]={1000,1000,1000,1000, 6, 24, 120, 720};
+#endif
 
 //	Function definitions
 //	--------------------
@@ -123,6 +165,8 @@ void writeCurrentString(int newFile, int size);
 void clearFlags(int tperm0);
 void readBackFile(FILE *fp, int w);
 int compareDS(const void *ii0, const void *jj0);
+void rClassMin(int *p, int n);
+int pruneOnPerms(int w, int d0);
 
 //	Main program
 //	------------
@@ -175,7 +219,8 @@ for (int i=0;i<maxW;i++) mperm_ruledOut[i]=fn+1;
 
 //	Compute number of bits we will shift final digit
 
-nmbits = DBITS*(n-1);
+nm = n-1;
+nmbits = DBITS*nm;
 
 //	We represent permutations as p_1 + b*p_2 + b^2*p_3 + .... b^(n-1)*p_n, where b=2^(DBITS)
 //	maxInt is the highest value this can take (allowing for non-permutations as well), plus 1
@@ -214,11 +259,18 @@ for (int i=0;i<fn;i++)
 //	For each number d_1 d_2 d_3 ... d_n as a digit sequence, what is
 //	the length of the longest run d_j ... d_n in which all the digits are distinct.
 
+//	Also, record which 1-cycle each permutation belongs to
+
 CHECK_MEM( ldd = (int *)malloc(maxInt*sizeof(int)) )
+
+noc = fac(n-1);
+nocThresh = noc/2;
+CHECK_MEM( oneCycleCounts = (int *)malloc(maxInt*sizeof(int)) )
+CHECK_MEM( oneCycleIndices = (int *)malloc(maxInt*sizeof(int)) )
 
 //	Loop through all n-digit sequences
 
-static int dseq[MAX_N];
+static int dseq[MAX_N], dseq2[MAX_N];
 for (int i=0;i<n;i++) dseq[i]=1;
 int more=TRUE;
 while (more)
@@ -229,7 +281,18 @@ while (more)
 		tperm+=(dseq[j0]<<(j0*DBITS));
 		};
 		
-	if (valid[tperm]) ldd[tperm]=0;
+	if (valid[tperm])
+		{
+		ldd[tperm]=0;
+		for (int i=0;i<n;i++) dseq2[i]=dseq[i];
+		rClassMin(dseq2,n);
+		int r=0;
+		for (int j0=0;j0<n; j0++)
+			{
+			r+=(dseq2[j0]<<(j0*DBITS));
+			};
+		oneCycleIndices[tperm]=r;
+		}
 	else
 		{
 		int ok=TRUE;
@@ -384,9 +447,30 @@ for (tot_bl=1; tot_bl<maxW; tot_bl++)
 
 int expectedInc = 2*(n-4);			//	We guess that max_perm will increase by at least this much at each step
 
+#if GET_OCP_DATA
+lowestW=maxW;
+#endif
+
+//	Set up 1-cycle information
+
+for (int i=0;i<maxInt;i++) oneCycleCounts[i]=n;
+oneCycleCounts[oneCycleIndices[tperm0]]=n-1;
+
+for (int b=0;b<n-1;b++) oneCycleBins[b]=0;
+oneCycleBins[n]=noc-1;
+oneCycleBins[n-1]=1;
+
 for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	{
 	sprintf(outputFileName,"Chaffin_%d_W_%d%s.txt",n,tot_bl,oneExample?"_OE":"");
+	
+	#if GET_OCP_DATA
+		ocpTrackingOn = TRUE;
+	#else
+		ocpTrackingOn = tot_bl >= ocpThreshold[n];
+		if (ocpTrackingOn) printf("[ocpTrackingOn]\n");
+	#endif
+	ocpTrackingOff = !ocpTrackingOn;
 	
 	//	Gamble on max_perm increasing by at least expectedInc; if it doesn't, we will decrement it and retry
 	
@@ -462,6 +546,13 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	readBackFile(fp, tot_bl);
 	fclose(fp);
 	};
+	
+#if GET_OCP_DATA
+
+PRINT_OCP_DATA
+
+#endif
+
 
 return 0;
 }
@@ -537,7 +628,23 @@ for	(int z=0; z<n-1; z++)
 			};
 
 		unvisited[tperm]=FALSE;
+		int prevC=0, oc=0;
+		if (ocpTrackingOn)
+			{
+			oc=oneCycleIndices[tperm];
+			prevC = oneCycleCounts[oc]--;
+			oneCycleBins[prevC]--;
+			oneCycleBins[prevC-1]++;
+			};
+		
 		fillStr(pos+1, pfound+1, tperm>>DBITS, TRUE);
+		
+		if (ocpTrackingOn)
+			{
+			oneCycleBins[prevC-1]--;
+			oneCycleBins[prevC]++;
+			oneCycleCounts[oc]=prevC;
+			};
 		unvisited[tperm]=TRUE;
 		}
 	else if	(spareW > 0)
@@ -546,7 +653,7 @@ for	(int z=0; z<n-1; z++)
 			{
 			if (allowRepeats)
 				{
-				int d = mperm_res[spareW-1] + pfound - max_perm;
+				int d = pruneOnPerms(spareW-1, pfound - max_perm);
 				if	(
 					(oneExample && d > 0) || (allExamples && d >= 0)
 					)
@@ -562,7 +669,7 @@ for	(int z=0; z<n-1; z++)
 				printf("spareW0=%d tot_bl=%d\n",spareW0,tot_bl);
 				exit(EXIT_FAILURE);
 				};
-			int d = mperm_res[spareW0] + pfound - max_perm;
+			int d = pruneOnPerms(spareW0, pfound - max_perm);
 			if	(
 				(oneExample && d > 0) || (allExamples && d >= 0)
 				)
@@ -614,9 +721,25 @@ if	(j1 != curstr[pos-1])
 			writeCurrentString(nBest[tot_bl]==0,pos+1);
 			nBest[tot_bl]++;
 			};
-
+			
 		unvisited[tperm]=FALSE;
+		int prevC=0, oc=0;
+		if (ocpTrackingOn)
+			{
+			oc=oneCycleIndices[tperm];
+			prevC = oneCycleCounts[oc]--;
+			oneCycleBins[prevC]--;
+			oneCycleBins[prevC-1]++;
+			};
+		
 		fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
+		
+		if (ocpTrackingOn)
+			{
+			oneCycleBins[prevC-1]--;
+			oneCycleBins[prevC]++;
+			oneCycleCounts[oc]=prevC;
+			};
 		unvisited[tperm]=TRUE;
 
 	// the quantity alreadyWasted = pos - pfound - n + 1 is the number of already-used blanks
@@ -624,7 +747,7 @@ if	(j1 != curstr[pos-1])
 		}
 	else if	(alreadyWasted < tot_bl)
 		{
-		if	(((!vperm) || allowRepeats) && mperm_res[tot_bl - (alreadyWasted+1)] + pfound >= max_perm)
+		if	(((!vperm) || allowRepeats) && pruneOnPerms(tot_bl - (alreadyWasted+1), pfound - max_perm) >=0)
 			{
 			fillStr2(pos+1, pfound, tperm>>DBITS, swap, bestStr+1, len-1);
 			};
@@ -724,4 +847,68 @@ if (ii->score > jj->score) return 1;
 if (ii->digit < jj->digit) return -1;
 if (ii->digit > jj->digit) return 1;
 return 0;
+}
+
+//	Cycle a string of integers so the lowest comes first
+
+void rClassMin(int *p, int n)
+{
+int min=p[0], km=0;
+for (int k=1;k<n;k++) if (p[k]<min) {min=p[k]; km=k;};
+
+for (int r=0;r<km;r++)
+	{
+	int tmp=p[0];
+	for (int i=1;i<n;i++)
+		{
+		p[i-1]=p[i];
+		};
+	p[n-1]=tmp;
+	};
+}
+
+//	With w characters available to waste, can we visit enough new permutations to match or increase max_perm?
+//
+//	We have one upper bound on the new permutations in mperm_res[w], and another we can calculate from the numbers of 1-cycles with various
+//	counts of unvisited permutations.
+
+//	We add the smaller of these bounds to d0, which is count of perms we've already seen, minus max_perm
+//	(or if calculating, we return as soon as the sign of the sum is determined)
+
+int pruneOnPerms(int w, int d0)
+{
+int res = d0 + mperm_res[w];
+if (ocpTrackingOff || res < 0) return res;
+int res0 = d0;
+w++;				//	We have already subtracted waste characters needed to reach first permutation, so we get the first 1-cycle for free
+
+//	oneCycleBins[b] contains count of how many 1-cycles have b unvisited permutations, where b is from 0 to n.
+
+for (int b=n;b>0;b--)
+	{
+	int ocb = oneCycleBins[b];
+	if (w<=ocb)
+		{
+		res0+=w*b;
+		if (res0 >= res) return res;
+		else
+			{
+			MONITOR_OCP
+			return res0;
+			};
+		}
+	else
+		{
+		res0+=ocb*b;
+		w-=ocb;
+		};
+	if (res0 >= res) return res;
+	if (res0 > 0)
+		{
+		MONITOR_OCP
+		return res0;
+		};
+	};
+MONITOR_OCP
+return res0;
 }
