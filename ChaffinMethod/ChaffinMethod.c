@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.8
-Last Updated: 9 April 2019
+Version: 2.9
+Last Updated: 11 April 2019
 
 Usage:
 
@@ -85,6 +85,7 @@ and restart computations for the w value of the last such file that it finds.
 	#define PRINT_OCP_DATA printf("*** 1-cycle pruning first effective for lowestW=%d ***\n",lowestW);
 
 	#define MONITOR_OCP \
+		prunedOCP++; \
 		if (tot_bl<lowestW) \
 			{ \
 			lowestW=tot_bl; \
@@ -93,7 +94,7 @@ and restart computations for the w value of the last such file that it finds.
 
 #else
 
-	#define MONITOR_OCP
+	#define MONITOR_OCP prunedOCP++;
 	
 #endif
 
@@ -105,6 +106,9 @@ struct digitScore
 {
 int digit;
 int score;
+int fullNum;
+int nextPart;
+int nextPerm;
 };
 
 //	Global variables
@@ -128,7 +132,7 @@ int tot_bl;			//	The total number of wasted characters we are allowing in string
 char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by integer rep of permutation
 char *valid;		//	Flags saying whether integer rep of digit sequence corresponds to a valid permutation
 int *ldd;			//	For each digit sequence, n - (the longest run of distinct digits, starting from the last)
-char *nextDigits;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
+struct digitScore *nextDigits;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
 
 int noc;				//	Number of 1-cycles
 int nocThresh;			//	Threshold for unvisited 1-cycles before we try new bounds		
@@ -146,6 +150,7 @@ char outputFileName[256];
 //	Monitoring 1-cycle tracking
 
 int ocpTrackingOn, ocpTrackingOff;
+long int prunedOCP=0;
 
 #if GET_OCP_DATA
 int lowestW;
@@ -333,9 +338,8 @@ while (more)
 	
 //	Set up a table of the next digits to follow from a given (n-1)-digit sequence
 
-struct digitScore *sortDS;
-CHECK_MEM( sortDS = (struct digitScore *)malloc((n-1)*sizeof(struct digitScore)) )
-CHECK_MEM( nextDigits = (char *)malloc(maxIntM*(n-1)*sizeof(char)) )
+CHECK_MEM( nextDigits = (struct digitScore *)malloc(maxIntM*(n-1)*sizeof(struct digitScore)) )
+int dsum = n*(n+1)/2;
 
 //	Loop through all (n-1)-digit sequences
 
@@ -348,6 +352,7 @@ while (more)
 		{
 		part+=(dseq[j0]<<(j0*DBITS));
 		};
+	struct digitScore *nd = nextDigits+(n-1)*part;
 		
 	//	Sort potential next digits by the ldd score we get by appending them
 	
@@ -356,14 +361,31 @@ while (more)
 	if (d != dseq[n-2])
 		{
 		int t = (d<<nmbits) + part;
-		sortDS[q].digit = d;
-		sortDS[q].score = ldd[t];
+		nd[q].digit = d;
+		int ld = nd[q].score = ldd[t];
+		
+		//	The full number n-digit number we get if we append the chosen digit to the previous n-1
+		
+		nd[q].fullNum = t;
+		
+		//	The next (n-1)-digit partial number that follows (dropping oldest of the current n)
+		
+		int p = nd[q].nextPart = t>>DBITS;
+		
+		//	If there is a unique permutation after 0 or 1 wasted characters, precompute its number
+		
+		if (ld==0) nd[q].nextPerm = t;		//	Adding the current chosen digit gets us there
+		else if (ld==1)						//	After the current chosen digit, a single subsequent choice gives a unique permutation
+			{
+			int d2 = dsum-d;
+			for (int z=1;z<=n-2;z++) d2-=dseq[z];
+			nd[q].nextPerm = (d2<<nmbits) + p;
+			}
+		else nd[q].nextPerm = -1;
 		q++;
 		};
 		
-	qsort(sortDS,n-1,sizeof(struct digitScore),compareDS);
-	
-	for (int z=0;z<n-1;z++)	nextDigits[(n-1)*part+z] = sortDS[z].digit;
+	qsort(nd,n-1,sizeof(struct digitScore),compareDS);
 	
 	for (int h=n-2;h>=0;h--)
 		{
@@ -548,11 +570,9 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	};
 	
 #if GET_OCP_DATA
-
 PRINT_OCP_DATA
-
 #endif
-
+printf("OCP tracking pruned the search %ld times\n",prunedOCP);
 
 return 0;
 }
@@ -563,8 +583,8 @@ void fillStr(int pos, int pfound, int partNum, int leftPerm)
 {
 if (done) return;
 
-int j1, newperm;
-int tperm;
+int j1;
+int tperm, ld;
 int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
 int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we can waste while not exceeding tot_bl
 
@@ -584,30 +604,39 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 	};
 	
 //	Loop to try each possible next digit we could append
-//	These have been sorted into increasing order of ldd[tperm]
+//	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation
 	
-char *nd = nextDigits + (n-1)*partNum;
-for	(int z=0; z<n-1; z++)
+struct digitScore *nd = nextDigits + nm*partNum;
+
+//	To be able to fully exploit foreknowledge that we are heading for a visited permutation after 1 wasted character, we need to ensure
+//	that we still traverse the loop in order of increasing waste.  The affected choices will always be the first two in the loop, and
+//	we only need to swap them if the first permutation is visited and the second is not.
+
+int swap = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].nextPerm]);
+
+for	(int y=0; y<nm; y++)
 	{
-	j1 = nd[z];
-	tperm = partNum + (j1<<nmbits);
+	int z = (swap && y<=1) ? (1-y) : y;
+	struct digitScore *ndz = nd+z;
+	j1 = ndz->digit;
+	tperm = ndz->fullNum;
+	ld = ndz->score;
 	
-	//	ldd[tperm] tells us the minimum number of further characters we would need to waste
+	//	ld = ldd[tperm] tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
 	
-	int spareW0 = spareW - ldd[tperm];
+	int spareW0 = spareW - ld;
+	
+	//	Having taken care of ordering issues, we can treat a visited permutation after 1 wasted character as an extra wasted character
+	
+	if (ld==1 && !unvisited[ndz->nextPerm]) spareW0--;
+		
 	if (spareW0<0) return;
 	
 	curstr[pos] = j1;
-
-	// Check to see if this contributes a new permutation or not
 	
-	int vperm = valid[tperm];
-	newperm = vperm && unvisited[tperm];
-
-	// now go to the next level of the recursion
-	
-	if (newperm)
+	int vperm = (ld==0);
+	if (vperm && unvisited[tperm])
 		{
 		if (pfound+1>max_perm)
 			{
@@ -628,22 +657,23 @@ for	(int z=0; z<n-1; z++)
 			};
 
 		unvisited[tperm]=FALSE;
-		int prevC=0, oc=0;
 		if (ocpTrackingOn)
 			{
+			int prevC=0, oc=0;
 			oc=oneCycleIndices[tperm];
 			prevC = oneCycleCounts[oc]--;
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
-			};
 		
-		fillStr(pos+1, pfound+1, tperm>>DBITS, TRUE);
+			fillStr(pos+1, pfound+1, ndz->nextPart, TRUE);
 		
-		if (ocpTrackingOn)
-			{
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
 			oneCycleCounts[oc]=prevC;
+			}
+		else
+			{
+			fillStr(pos+1, pfound+1, ndz->nextPart, TRUE);
 			};
 		unvisited[tperm]=TRUE;
 		}
@@ -658,23 +688,18 @@ for	(int z=0; z<n-1; z++)
 					(oneExample && d > 0) || (allExamples && d >= 0)
 					)
 					{
-					fillStr(pos+1, pfound, tperm>>DBITS, TRUE);
+					fillStr(pos+1, pfound, ndz->nextPart, TRUE);
 					};
 				};
 			}
 		else
 			{
-			if (spareW0 >=tot_bl)
-				{
-				printf("spareW0=%d tot_bl=%d\n",spareW0,tot_bl);
-				exit(EXIT_FAILURE);
-				};
 			int d = pruneOnPerms(spareW0, pfound - max_perm);
 			if	(
 				(oneExample && d > 0) || (allExamples && d >= 0)
 				)
 				{
-				fillStr(pos+1, pfound, tperm>>DBITS, FALSE);
+				fillStr(pos+1, pfound, ndz->nextPart, FALSE);
 				}
 			else return;
 			};
@@ -689,7 +714,7 @@ void fillStr2(int pos, int pfound, int partNum, char *swap, int *bestStr, int le
 {
 if (len<=0) return;		//	No more digits left in the template we are following
 
-int j1, newperm;
+int j1;
 int tperm;
 int alreadyWasted = pos - pfound - n + 1;
 
@@ -705,11 +730,10 @@ if	(j1 != curstr[pos-1])
 	// Check to see if this contributes a new permutation or not
 	
 	int vperm = valid[tperm];
-	newperm = vperm && unvisited[tperm];
 
 	// now go to the next level of the recursion
 	
-	if (newperm)
+	if (vperm && unvisited[tperm])
 		{
 		if (pfound+1>max_perm)
 			{
@@ -723,27 +747,25 @@ if	(j1 != curstr[pos-1])
 			};
 			
 		unvisited[tperm]=FALSE;
-		int prevC=0, oc=0;
 		if (ocpTrackingOn)
 			{
+			int prevC=0, oc=0;
 			oc=oneCycleIndices[tperm];
 			prevC = oneCycleCounts[oc]--;
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
-			};
 		
-		fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
+			fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
 		
-		if (ocpTrackingOn)
-			{
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
 			oneCycleCounts[oc]=prevC;
+			}
+		else
+			{
+			fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
 			};
 		unvisited[tperm]=TRUE;
-
-	// the quantity alreadyWasted = pos - pfound - n + 1 is the number of already-used blanks
-	
 		}
 	else if	(alreadyWasted < tot_bl)
 		{
