@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.9
-Last Updated: 11 April 2019
+Version: 2.10
+Last Updated: 14 April 2019
 
 Usage:
 
@@ -163,7 +163,7 @@ int ocpThreshold[]={1000,1000,1000,1000, 6, 24, 120, 720};
 //	--------------------
 
 void fillStr(int pos, int pfound, int partNum, int leftPerm);
-void fillStr2(int pos, int pfound, int partNum, char *swap, int *bestStr, int len);
+void fillStr2(int pos, int pfound, int partNum, char *remapDigits, int *bestStr, int len);
 int fac(int k);
 void makePerms(int n, int **permTab);
 void writeCurrentString(int newFile, int size);
@@ -583,13 +583,12 @@ void fillStr(int pos, int pfound, int partNum, int leftPerm)
 {
 if (done) return;
 
-int j1;
 int tperm, ld;
 int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
 int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we can waste while not exceeding tot_bl
 
 //	If we can only match the current max_perm by using an optimal string for our remaining quota of wasted characters,
-//	we try using those strings (swapping digits to make them start from the permutation we just visited).
+//	we try using those strings (remapping digits to make them start from the permutation we just visited).
 
 if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1 == max_perm)
 	{
@@ -597,14 +596,14 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 		{
 		int len = bestLen[spareW];
 		int *bestStr = bestStrings[spareW] + i*len;
-		char *swap = curstr + pos - n - 1;
-		fillStr2(pos,pfound,partNum,swap,bestStr+n,len-n);
+		char *remapDigits = curstr + pos - n - 1;
+		fillStr2(pos,pfound,partNum,remapDigits,bestStr+n,len-n);
 		};
 	return;
 	};
 	
-//	Loop to try each possible next digit we could append
-//	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation
+//	Loop to try each possible next digit we could append.
+//	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation.
 	
 struct digitScore *nd = nextDigits + nm*partNum;
 
@@ -612,17 +611,17 @@ struct digitScore *nd = nextDigits + nm*partNum;
 //	that we still traverse the loop in order of increasing waste.  The affected choices will always be the first two in the loop, and
 //	we only need to swap them if the first permutation is visited and the second is not.
 
-int swap = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].nextPerm]);
+int swap01 = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].nextPerm]);
+
+int deferredRepeat=0;				//	If we find a repeated permutation, we follow that branch last
 
 for	(int y=0; y<nm; y++)
 	{
-	int z = (swap && y<=1) ? (1-y) : y;
+	int z = (swap01 && y<=1) ? (1-y) : y;
 	struct digitScore *ndz = nd+z;
-	j1 = ndz->digit;
-	tperm = ndz->fullNum;
 	ld = ndz->score;
 	
-	//	ld = ldd[tperm] tells us the minimum number of further characters we would need to waste
+	//	ld tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
 	
 	int spareW0 = spareW - ld;
@@ -631,9 +630,10 @@ for	(int y=0; y<nm; y++)
 	
 	if (ld==1 && !unvisited[ndz->nextPerm]) spareW0--;
 		
-	if (spareW0<0) return;
+	if (spareW0<0) break;
 	
-	curstr[pos] = j1;
+	curstr[pos] = ndz->digit;
+	tperm = ndz->fullNum;
 	
 	int vperm = (ld==0);
 	if (vperm && unvisited[tperm])
@@ -683,13 +683,7 @@ for	(int y=0; y<nm; y++)
 			{
 			if (allowRepeats)
 				{
-				int d = pruneOnPerms(spareW-1, pfound - max_perm);
-				if	(
-					(oneExample && d > 0) || (allExamples && d >= 0)
-					)
-					{
-					fillStr(pos+1, pfound, ndz->nextPart, TRUE);
-					};
+				deferredRepeat=ndz->nextPart;
 				};
 			}
 		else
@@ -701,8 +695,19 @@ for	(int y=0; y<nm; y++)
 				{
 				fillStr(pos+1, pfound, ndz->nextPart, FALSE);
 				}
-			else return;
+			else break;
 			};
+		};
+	};
+	
+if (deferredRepeat!=0)
+	{
+	int d = pruneOnPerms(spareW-1, pfound - max_perm);
+	if	(
+		(oneExample && d > 0) || (allExamples && d >= 0)
+		)
+		{
+		fillStr(pos+1, pfound, deferredRepeat, TRUE);
 		};
 	};
 }
@@ -710,7 +715,7 @@ for	(int y=0; y<nm; y++)
 //	Version that fills in the string when we are following a previously computed best string
 //	rather than trying all digits.
 
-void fillStr2(int pos, int pfound, int partNum, char *swap, int *bestStr, int len)
+void fillStr2(int pos, int pfound, int partNum, char *remapDigits, int *bestStr, int len)
 {
 if (len<=0) return;		//	No more digits left in the template we are following
 
@@ -718,7 +723,7 @@ int j1;
 int tperm;
 int alreadyWasted = pos - pfound - n + 1;
 
-j1 = swap[*bestStr];	//	Get the next digit from the template, swapped to make it start at our chosen permutation
+j1 = remapDigits[*bestStr];	//	Get the next digit from the template, remapped to make it start at our chosen permutation
 
 // there is never any benefit to having 2 of the same character next to each other
 	
@@ -755,7 +760,7 @@ if	(j1 != curstr[pos-1])
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
 		
-			fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
+			fillStr2(pos+1, pfound+1, tperm>>DBITS, remapDigits, bestStr+1, len-1);
 		
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
@@ -763,7 +768,7 @@ if	(j1 != curstr[pos-1])
 			}
 		else
 			{
-			fillStr2(pos+1, pfound+1, tperm>>DBITS, swap, bestStr+1, len-1);
+			fillStr2(pos+1, pfound+1, tperm>>DBITS, remapDigits, bestStr+1, len-1);
 			};
 		unvisited[tperm]=TRUE;
 		}
@@ -771,7 +776,7 @@ if	(j1 != curstr[pos-1])
 		{
 		if	(((!vperm) || allowRepeats) && pruneOnPerms(tot_bl - (alreadyWasted+1), pfound - max_perm) >=0)
 			{
-			fillStr2(pos+1, pfound, tperm>>DBITS, swap, bestStr+1, len-1);
+			fillStr2(pos+1, pfound, tperm>>DBITS, remapDigits, bestStr+1, len-1);
 			};
 		};
 	};
