@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.10
-Last Updated: 14 April 2019
+Version: 2.11
+Last Updated: 15 April 2019
 
 Usage:
 
@@ -608,16 +608,43 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 struct digitScore *nd = nextDigits + nm*partNum;
 
 //	To be able to fully exploit foreknowledge that we are heading for a visited permutation after 1 wasted character, we need to ensure
-//	that we still traverse the loop in order of increasing waste.  The affected choices will always be the first two in the loop, and
+//	that we still traverse the loop in order of increasing waste.
+//
+//	For example, for n=5 we might have 1123 as the last 4 digits, with the choices:
+//
+//		1123 | add 4 -> 1234 ld = 1
+//		1123 | add 5 -> 1235 ld = 1
+//
+//  The affected choices will always be the first two in the loop, and
 //	we only need to swap them if the first permutation is visited and the second is not.
 
 int swap01 = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].nextPerm]);
 
-int deferredRepeat=0;				//	If we find a repeated permutation, we follow that branch last
+//	Also, it is not obligatory, but useful, to swap the 2nd and 3rd entries (indices 1 and 2) if we have (n-1) distinct digits in the
+//	current prefix, with the first 3 choices ld=0,1,2, but the 1st and 2nd entries lead to a visited permutation.  This will happen
+//	if we are on the verge of looping back at the end of a 2-cycle.
+//
+//		1234 | add 5 -> 12345 ld = 0 (but 12345 has already been visited)
+//		1234 | add 1 -> 12341 ld = 1 (but 23415 has been visited already)
+//		1234 | add 2 -> 12342 ld = 2
+
+int swap12 = FALSE;					//	This is set later if the conditions are met
+
+int deferredRepeat=FALSE;			//	If we find a repeated permutation, we follow that branch last
 
 for	(int y=0; y<nm; y++)
 	{
-	int z = (swap01 && y<=1) ? (1-y) : y;
+	int z;
+	if (swap01)
+		{
+		if (y==0) z=1; else if (y==1) {z=0; swap01=FALSE;} else z=y;
+		}
+	else if (swap12)
+		{
+		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y; 
+		}
+	else z=y;
+	
 	struct digitScore *ndz = nd+z;
 	ld = ndz->score;
 	
@@ -681,10 +708,8 @@ for	(int y=0; y<nm; y++)
 		{
 		if (vperm)
 			{
-			if (allowRepeats)
-				{
-				deferredRepeat=ndz->nextPart;
-				};
+			if (allowRepeats) deferredRepeat=TRUE;
+			swap12 = !unvisited[nd[1].nextPerm];
 			}
 		else
 			{
@@ -700,14 +725,18 @@ for	(int y=0; y<nm; y++)
 		};
 	};
 	
-if (deferredRepeat!=0)
+//	If we encountered a choice that led to a repeat visit to a permutation, we follow (or prune) that branch now.
+//	It will always come from the FIRST choice in the original list, as that is where any valid permutation must be.
+	
+if (deferredRepeat)
 	{
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
 	if	(
 		(oneExample && d > 0) || (allExamples && d >= 0)
 		)
 		{
-		fillStr(pos+1, pfound, deferredRepeat, TRUE);
+		curstr[pos] = nd->digit;
+		fillStr(pos+1, pfound, nd->nextPart, TRUE);
 		};
 	};
 }
