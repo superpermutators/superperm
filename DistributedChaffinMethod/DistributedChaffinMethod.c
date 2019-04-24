@@ -239,8 +239,10 @@ int main(int argc, const char * argv[])
 
 time_t t0;
 time(&t0);
-srand48(t0 + clock());
-unsigned long int rnum=lrand48();
+
+srand((int)( (t0 + clock()) % (1<<31) ));
+unsigned long int rnum=rand();
+
 sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,rnum);
 sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,rnum);
 
@@ -976,13 +978,14 @@ time_t t1;
 time(&t1);
 ct = localtime(&t1);
 static char tsb[30];
-char *ts = asctime_r(ct,tsb);
+char *ts = asctime(ct);
+strcpy(tsb,ts);
 unsigned long int tlen = strlen(tsb);
 if (tsb[tlen-1]=='\n') tsb[tlen-1]='\0';
 
 //	Output string with time stamps
 
-printf("%s %s\n",ts, s);
+printf("%s %s\n",tsb, s);
 
 FILE *fp = fopen(LOG_FILE_NAME,"aa");
 if (fp==NULL)
@@ -990,7 +993,7 @@ if (fp==NULL)
 	printf("Error: Unable to open log file %s to append\n",LOG_FILE_NAME);
 	exit(EXIT_FAILURE);
 	};
-fprintf(fp,"%s %s\n",ts, s);
+fprintf(fp,"%s %s\n",tsb, s);
 fclose(fp);
 }
 
