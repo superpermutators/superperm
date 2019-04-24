@@ -39,8 +39,10 @@ Files written
 
 The program writes files:
 
-(1) A cumulative log file, "DCMLog.txt"
-(2) A temporary file, "DCMServerResponse.txt"
+(1) A cumulative log file, "DCMLog_NNNNNNNNNN.txt"
+(2) A temporary file, "DCMServerResponse_NNNNNNNNNN.txt"
+
+where NNNNNNNNNN is a random integer chosen by each instance of the program.
 
 
 

@@ -88,11 +88,15 @@ another instance of the program.
 
 //	Name of temporary file in which response from server is placed
 
-#define SERVER_RESPONSE_FILE_NAME "DCMServerResponse.txt"
+#define SERVER_RESPONSE_FILE_NAME_TEMPLATE "DCMServerResponse_%lu.txt"
 
 //	Name of log file
 
-#define LOG_FILE_NAME "DCMLog.txt"
+#define LOG_FILE_NAME_TEMPLATE "DCMLog_%lu.txt"
+
+//	Max size of file names
+
+#define FILE_NAME_SIZE 128
 
 //	Times
 
@@ -201,6 +205,10 @@ unsigned long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
 time_t startedCurrentTask;			//	Time we started current task
 time_t timeOfLastCheckin;			//	Time we last contacted the server
 
+
+static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
+static char LOG_FILE_NAME[FILE_NAME_SIZE];
+
 //	Function definitions
 //	--------------------
 
@@ -227,6 +235,15 @@ int pruneOnPerms(int w, int d0);
 
 int main(int argc, const char * argv[])
 {
+//	Choose random file names
+
+time_t t0;
+time(&t0);
+srand48(t0 + clock());
+unsigned long int rnum=lrand48();
+sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,rnum);
+sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,rnum);
+
 int justTest = argc==2 && strcmp(argv[1],"test")==0;
 
 //	First, just check we can establish contact with the server
