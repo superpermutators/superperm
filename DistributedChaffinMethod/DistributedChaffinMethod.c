@@ -104,11 +104,11 @@ another instance of the program.
 
 //	Time between checking in with server (while performing a task)
 
-#define TIME_BETWEEN_SERVER_CHECKINS (5*MINUTE)
+#define TIME_BETWEEN_SERVER_CHECKINS (2*MINUTE)
 
 //	Time to spend on a branch before splitting the search
 
-#define TIME_BEFORE_SPLIT (9*MINUTE)
+#define TIME_BEFORE_SPLIT (3*MINUTE)
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
