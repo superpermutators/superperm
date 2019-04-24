@@ -3,9 +3,9 @@
 DistributedChaffinMethod.c
 ==========================
 
-Author: Greg Egan, 
-Version: 1.0
-Last Updated: 24 April 2019
+Author: Greg Egan
+Version: 1.1
+Last Updated: 25 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -987,7 +987,7 @@ if (tsb[tlen-1]=='\n') tsb[tlen-1]='\0';
 
 printf("%s %s\n",tsb, s);
 
-FILE *fp = fopen(LOG_FILE_NAME,"aa");
+FILE *fp = fopen(LOG_FILE_NAME,"at");
 if (fp==NULL)
 	{
 	printf("Error: Unable to open log file %s to append\n",LOG_FILE_NAME);
@@ -1006,7 +1006,7 @@ int sendServerCommand(const char *command)
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
 //	current command fails.
 
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"w");
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
 if (fp==NULL)
 	{
 	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
@@ -1021,7 +1021,7 @@ unsigned long int flen = strlen(SERVER_RESPONSE_FILE_NAME);
 unsigned long int len = ulen+slen+clen+flen+10;
 char *cmd;
 CHECK_MEM( cmd = malloc(len*sizeof(char)) )
-sprintf(cmd,"%s '%s%s' > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FILE_NAME);
+sprintf(cmd,"%s \"%s%s\" > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FILE_NAME);
 int res = system(cmd);
 free(cmd);
 return res;
@@ -1035,7 +1035,7 @@ return res;
 int logServerResponse(const char *reqd)
 {
 int result = TRUE;
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"ra");
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
 	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
@@ -1140,7 +1140,7 @@ int getTask(struct task *tsk)
 {
 sendServerCommandAndLog("action=getTask");
 
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"ra");
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
 	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
@@ -1223,7 +1223,7 @@ int getMax(int nval, int wval, int oldMax)
 sprintf(buffer,"action=checkMax&n=%d&w=%d",	nval, wval);
 sendServerCommandAndLog(buffer);
 
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"ra");
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
 	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
@@ -1281,7 +1281,7 @@ sprintf(buffer,"action=splitTask&id=%u&access=%u&retain=%s",
 	currentTask.task_id, currentTask.access_code,retainedDigits);
 sendServerCommandAndLog(buffer);
 
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"ra");
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
 	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
