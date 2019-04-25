@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 1.1
+Version: 1.1.1
 Last Updated: 25 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -625,6 +625,11 @@ if (++nodesChecked >= nodesBeforeTimeCheck && pos > currentTask.prefixLen)
 		//	Also check for current maximum for the (n,w) pair we are working on
 		
 		max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
+		if (max_perm+1 >= currentTask.prev_perm_ruled_out)
+			{
+			done=TRUE;
+			return;
+			};
 		
 		elapsedTime = difftime(t, startedCurrentTask);
 		if (elapsedTime > TIME_BEFORE_SPLIT)
