@@ -115,9 +115,11 @@ another instance of the program.
 
 #define NODES_BEFORE_TIME_CHECK 1000000
 
-//	Set a floor so we can't waste an absurd amount of time doing time checks
+//	Set a floor and ceiling so we can't waste an absurd amount of time doing time checks,
+//	or take too long between them.
 
-#define MIN_NODES_BEFORE_TIME_CHECK 1000
+#define MIN_NODES_BEFORE_TIME_CHECK 10000
+#define MAX_NODES_BEFORE_TIME_CHECK 100000000
 
 //	Size of general-purpose buffer for messages from server, log, etc.
 
@@ -610,6 +612,8 @@ if (++nodesChecked >= nodesBeforeTimeCheck && pos > currentTask.prefixLen)
 	double elapsedTime = difftime(t, timeOfLastCheckin);
 	nodesBeforeTimeCheck = (unsigned long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
+	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
+	
 	nodesChecked = 0;
 	
 	if (elapsedTime > 0.9 * TIME_BETWEEN_SERVER_CHECKINS)
