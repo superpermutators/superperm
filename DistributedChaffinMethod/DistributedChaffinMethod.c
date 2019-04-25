@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 1.1.1
+Version: 2
 Last Updated: 25 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -79,7 +79,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=2&"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
