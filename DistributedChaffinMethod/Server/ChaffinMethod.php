@@ -75,12 +75,11 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query(($p>=0 ? "START TRANSACTION READ WRITE" : "START TRANSACTION READ ONLY")))
+	if (!$mysqli->real_query("LOCK TABLES witness_strings " . ($p>=0 ? "WRITE" : "READ")))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
-		
 	$res = $mysqli->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w" . ($p>=0 ? " FOR UPDATE" : ""));
 	if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	else
@@ -148,7 +147,7 @@ else
 			};
 		};
 	
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -169,11 +168,17 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE"))
+		{
+		$mysqli->close();
+		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		};
 	$access = mt_rand($A_LO,$A_HI);
 	if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed) VALUES($access, $n, $w, '$str', $pte)"))
 		$result = "Task id: $mysqli->insert_id\n";
 	else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-		
+	
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -195,7 +200,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("START TRANSACTION READ WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings READ"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -242,7 +247,7 @@ else
 			};
 		};
 		
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -262,7 +267,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("START TRANSACTION READ WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -287,7 +292,7 @@ else
 		else $result = "Error: No match to id=$id, access=$access for the task checking in\n";
 		};
 		
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -308,7 +313,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("START TRANSACTION READ WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -348,7 +353,7 @@ else
 		else $result = "0 assigned tasks\n";
 		};
 	
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -450,7 +455,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("START TRANSACTION READ WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -504,7 +509,7 @@ else
 		else $result = "Error: No match to id=$id, access=$access for the task being finalised\n";
 		};
 		
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -525,7 +530,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("START TRANSACTION READ WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings READ"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -644,7 +649,7 @@ else
 		else $result = "Error: No match to id=$id, access=$access for the task being split\n";
 		};
 		
-	$mysqli->real_query("COMMIT");
+	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
 	};
@@ -654,9 +659,7 @@ else
 //	Process query string
 //	====================
 
-echo "Quit\nError: This server has become overloaded and the project will need to be relaunched at a later date.\nThanks for participating, and apologies for any disappointment.\nPlease stay tuned to the Superpermutators Google Group.  Hopefully we'll be back at some point\n";
-
-/*
+//echo "Quit\nError: This server has become overloaded and the project will need to be relaunched at a later date.\nThanks for participating, and apologies for any disappointment.\nPlease stay tuned to the Superpermutators Google Group.  Hopefully we'll be back at some point\n";
 
 $queryOK = FALSE;
 $err = 'Invalid query';
@@ -820,5 +823,5 @@ if (is_string($qs))
 	};
 
 if (!$queryOK) echo "Error: $err \n";
-*/
+
 ?>
