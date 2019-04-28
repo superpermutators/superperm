@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 3
-Last Updated: 26 April 2019
+Version: 4
+Last Updated: 29 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -79,7 +79,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=3&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=4&"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
@@ -88,11 +88,11 @@ another instance of the program.
 
 //	Name of temporary file in which response from server is placed
 
-#define SERVER_RESPONSE_FILE_NAME_TEMPLATE "DCMServerResponse_%lu.txt"
+#define SERVER_RESPONSE_FILE_NAME_TEMPLATE "DCMServerResponse_%u.txt"
 
 //	Name of log file
 
-#define LOG_FILE_NAME_TEMPLATE "DCMLog_%lu.txt"
+#define LOG_FILE_NAME_TEMPLATE "DCMLog_%u.txt"
 
 //	Max size of file names
 
@@ -102,24 +102,28 @@ another instance of the program.
 
 #define MINUTE 60
 
-//	Time between checking in with server (while performing a task)
+//	Ensure we don't contact the server in a burst, even when we are completing calculations very rapidly
 
-#define TIME_BETWEEN_SERVER_CHECKINS (2*MINUTE)
+#define MIN_TIME_BETWEEN_SERVER_CHECKINS 2
+
+//	Time we aim to check in with the server, when checking for tasks or running a task	
+
+#define TIME_BETWEEN_SERVER_CHECKINS (3*MINUTE)
 
 //	Time to spend on a branch before splitting the search
 
-#define TIME_BEFORE_SPLIT (3*MINUTE)
+#define TIME_BEFORE_SPLIT (5*MINUTE)
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
 
-#define NODES_BEFORE_TIME_CHECK 1000000
+#define NODES_BEFORE_TIME_CHECK 100000000
 
 //	Set a floor and ceiling so we can't waste an absurd amount of time doing time checks,
 //	or take too long between them.
 
-#define MIN_NODES_BEFORE_TIME_CHECK 10000
-#define MAX_NODES_BEFORE_TIME_CHECK 100000000
+#define MIN_NODES_BEFORE_TIME_CHECK 1000000
+#define MAX_NODES_BEFORE_TIME_CHECK 10000000000
 
 //	Size of general-purpose buffer for messages from server, log, etc.
 
@@ -158,6 +162,9 @@ unsigned int prev_perm_ruled_out;
 //	Global variables
 //	----------------
 
+unsigned int programInstance;			//	Random number that individualises this instance of the program running on same computer
+unsigned int clientID;			//	Client ID with server
+char *ipAddress;			//	IP address
 int n=-1;					//	The number of symbols in the permutations we are considering
 int fn;						//	n!
 int nm;						//	n-1
@@ -166,11 +173,11 @@ int maxInt;					//	Highest integer representation of an n-digit sequence we can 
 int maxIntM;				//	Highest integer representation of an (n-1)-digit sequence we can encounter, plus 1
 int maxW;					//	Largest number of wasted characters we allow for
 char *curstr=NULL;			//	Current string as integer digits
-char *curi=NULL;			//	Current string digit indices
-char *curd=NULL;			//	Current string digits visited			
+char *curi=NULL;
 char *bestSeen=NULL;		//	Longest string seen in search, as integer digits
 int bestSeenLen, bestSeenP;
 char *asciiString=NULL;		//	String as ASCII digits
+char *asciiString2=NULL;		//	String as ASCII digits
 int max_perm;				//	Maximum number of permutations visited by any string seen so far
 int *mperm_res=NULL;		//	For each number of wasted characters, the maximum number of permutations that can be visited
 int tot_bl;					//	The total number of wasted characters we are allowing in strings, in current search
@@ -186,6 +193,7 @@ int *oneCycleIndices=NULL;	//	The 1-cycle to which each permutation belongs
 int oneCycleBins[MAX_N+1];	//	The numbers of 1-cycles that have 0 ... n unvisited permutations
 
 int done=FALSE;				//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
+int splitMode=FALSE;		//	Set TRUE when we are splitting the task
 
 //	Monitoring 1-cycle tracking
 
@@ -201,6 +209,9 @@ struct task currentTask;
 
 #define N_TASK_STRINGS 7
 char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","pro: "};
+
+#define N_CLIENT_STRINGS 3
+char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
 
 unsigned long int nodesChecked;		//	Count of nodes checked since last time check
 unsigned long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
@@ -220,10 +231,11 @@ void setupForN(int nval);
 int sendServerCommand(const char *command);
 void sendServerCommandAndLog(const char *s);
 int logServerResponse(const char *reqd);
+void registerClient(void);
 int getTask(struct task *tsk);
 int getMax(int nval, int wval, int oldMax);
 void doTask(void);
-void splitTask(const char *retainedDigits);
+void splitTask(int pos);
 void fillStr(int pos, int pfound, int partNum);
 int fac(int k);
 void makePerms(int n, int **permTab);
@@ -237,16 +249,40 @@ int pruneOnPerms(int w, int d0);
 
 int main(int argc, const char * argv[])
 {
-//	Choose random file names
+//	Choose a random number to identify this instance of the program;
+//	this also individualises the log file and the server response file.
 
 time_t t0;
 time(&t0);
+int rseed=(int)( (t0 + clock()) % (1<<31) );
+srand(rseed);
 
-srand((int)( (t0 + clock()) % (1<<31) ));
-unsigned long int rnum=rand();
-
-sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,rnum);
-sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,rnum);
+while(TRUE)
+	{
+	programInstance=rand();
+	sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,programInstance);
+	sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,programInstance);
+	
+	//	Check for pre-existing files to avoid any collisions
+	
+	FILE *fp = fopen(LOG_FILE_NAME,"r");
+	if (fp!=NULL)
+		{
+		fclose(fp);
+		continue;
+		};
+	fp = fopen(SERVER_RESPONSE_FILE_NAME,"r");
+	if (fp!=NULL)
+		{
+		fclose(fp);
+		continue;
+		};
+		
+	break;
+	};
+	
+sprintf(buffer,"Program instance number: %u",programInstance);
+logString(buffer);
 
 int justTest = argc==2 && strcmp(argv[1],"test")==0;
 
@@ -263,8 +299,14 @@ if (s1!=0 || (!s2))
 	
 if (justTest) exit(0);
 
+//	Register with the server, offering to do actual work
+
+registerClient();
+
 while (TRUE)
 	{
+	sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);	//	Put a floor under the frequency of server contacts
+	
 	int t = getTask(&currentTask);
 	
 	if (t<0)
@@ -313,10 +355,10 @@ MFREE(curstr)
 CHECK_MEM( curstr = (char *)malloc(2*fn*sizeof(char)) )
 MFREE(curi)
 CHECK_MEM( curi = (char *)malloc(2*fn*sizeof(char)) )
-MFREE(curd)
-CHECK_MEM( curd = (char *)malloc(2*fn*n*sizeof(char)) )
 MFREE(asciiString)
 CHECK_MEM( asciiString = (char *)malloc(2*fn*sizeof(char)) )
+MFREE(asciiString2)
+CHECK_MEM( asciiString2 = (char *)malloc(2*fn*sizeof(char)) )
 MFREE(bestSeen)
 CHECK_MEM( bestSeen = (char *)malloc(2*fn*sizeof(char)) )
 
@@ -571,9 +613,14 @@ time(&timeOfLastCheckin);
 //	Recursively fill in the string
 
 done=FALSE;
+splitMode=FALSE;
 max_perm = currentTask.perm_to_exceed;
+max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
 bestSeenP=0;
-fillStr(currentTask.prefixLen,pf,partNum0);
+if (max_perm+1 < currentTask.prev_perm_ruled_out)
+	{
+	fillStr(currentTask.prefixLen,pf,partNum0);;
+	};
 
 //	Finish with current task with the server
 
@@ -596,6 +643,12 @@ void fillStr(int pos, int pfound, int partNum)
 {
 if (done) return;
 
+if (splitMode)
+	{
+	splitTask(pos);
+	return;
+	};
+
 if (pfound > bestSeenP)
 	{
 	bestSeenP = pfound;
@@ -603,66 +656,56 @@ if (pfound > bestSeenP)
 	for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
 	};
 	
-if (++nodesChecked >= nodesBeforeTimeCheck && pos > currentTask.prefixLen)
+if (++nodesChecked >= nodesBeforeTimeCheck)
 	{
 	//	We have hit a threshold for nodes checked, so time to check the time
 	
 	time_t t;
 	time(&t);
 	double elapsedTime = difftime(t, timeOfLastCheckin);
-	nodesBeforeTimeCheck = (unsigned long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
+	
+	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
+	//	time closer to the target
+	
+	printf("ElapsedTime=%lf\n",elapsedTime);
+	printf("Current nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+	
+	unsigned long int nbtc = nodesBeforeTimeCheck;
+	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (unsigned long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+
+	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+
 	nodesChecked = 0;
+	timeOfLastCheckin = t;
 	
-	if (elapsedTime > 0.9 * TIME_BETWEEN_SERVER_CHECKINS)
+	//	We have hit a threshold for elapsed time since last check in with the server
+	
+	sprintf(buffer,"action=checkIn&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
+		currentTask.task_id, currentTask.access_code,clientID,ipAddress,programInstance);
+	sendServerCommandAndLog(buffer);
+	
+	//	Also check for current maximum for the (n,w) pair we are working on
+	
+	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
+	if (max_perm+1 >= currentTask.prev_perm_ruled_out)
 		{
-		//	We have hit a threshold for elapsed time since last check in with the server
+		done=TRUE;
+		return;
+		};
+	
+	elapsedTime = difftime(t, startedCurrentTask);
+	if (elapsedTime > TIME_BEFORE_SPLIT)
+		{
+		//	We have hit a threshold for elapsed time since we started this task, so split the task
 		
-		timeOfLastCheckin = t;
-		
-		sprintf(buffer,"action=checkIn&id=%u&access=%u",
-			currentTask.task_id, currentTask.access_code);
-		sendServerCommandAndLog(buffer);
-		
-		//	Also check for current maximum for the (n,w) pair we are working on
-		
-		max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
-		if (max_perm+1 >= currentTask.prev_perm_ruled_out)
-			{
-			done=TRUE;
-			return;
-			};
-		
-		elapsedTime = difftime(t, startedCurrentTask);
-		if (elapsedTime > TIME_BEFORE_SPLIT)
-			{
-			//	We have hit a threshold for elapsed time since we started this task, so split the task
-			
-			startedCurrentTask = t;
-			
-			logString("Splitting current task ...");
-			
-			//	Number of digit choices that led to the sub-branch we are in now
-			
-			int ourBranchC = curi[currentTask.prefixLen];
-			
-			//	We split the task with the original prefix into (n-1) new tasks
-			//	where that prefix is followed by every possible non-repeated digit.
-			
-			//	We finalise those new tasks whose sub-branches we have already fully traversed,
-			//	and then continue in the current sub-branch under the banner of a new task
-			//	with a longer prefix.
-			
-			//	The server will allocate the remaining digits to other tasks.
-			
-			static char retainedDigits[MAX_N+1];
-			for (int z=0;z<ourBranchC;z++) retainedDigits[z]='0'+curd[n*currentTask.prefixLen + z];
-			retainedDigits[ourBranchC]='\0';
-			
-			splitTask(retainedDigits);
-			};
+		startedCurrentTask = t;
+		logString("Splitting current task ...");
+		splitMode=TRUE;
 		};
 	};
 
@@ -700,9 +743,7 @@ int swap12 = FALSE;					//	This is set later if the conditions are met
 
 int deferredRepeat=FALSE;			//	If we find a repeated permutation, we follow that branch last
 
-curi[pos] = 0;
-char *cd = curd+n*pos;
-
+int childIndex=0;
 for	(int y=0; y<nm; y++)
 	{
 	int z;
@@ -730,7 +771,7 @@ for	(int y=0; y<nm; y++)
 		
 	if (spareW0<0) break;
 	
-	cd[curi[pos]++] = curstr[pos] = ndz->digit;
+	curstr[pos] = ndz->digit;
 	tperm = ndz->fullNum;
 	
 	int vperm = (ld==0);
@@ -764,6 +805,7 @@ for	(int y=0; y<nm; y++)
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
 		
+			curi[pos] = childIndex++;
 			fillStr(pos+1, pfound+1, ndz->nextPart);
 		
 			oneCycleBins[prevC-1]--;
@@ -772,6 +814,7 @@ for	(int y=0; y<nm; y++)
 			}
 		else
 			{
+			curi[pos] = childIndex++;
 			fillStr(pos+1, pfound+1, ndz->nextPart);
 			};
 		unvisited[tperm]=TRUE;
@@ -788,6 +831,7 @@ for	(int y=0; y<nm; y++)
 			int d = pruneOnPerms(spareW0, pfound - max_perm);
 			if	(d > 0)
 				{
+				curi[pos] = childIndex++;
 				fillStr(pos+1, pfound, ndz->nextPart);
 				}
 			else
@@ -795,12 +839,6 @@ for	(int y=0; y<nm; y++)
 				break;
 				};
 			};
-		};
-		
-	if (pos < currentTask.prefixLen)
-		{
-		done=TRUE;
-		return;
 		};
 	};
 	
@@ -812,13 +850,9 @@ if (deferredRepeat)
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
 	if	(d>0)
 		{
-		cd[curi[pos]++] = curstr[pos] = nd->digit;
+		curstr[pos] = nd->digit;
+		curi[pos] = childIndex++;
 		fillStr(pos+1, pfound, nd->nextPart);
-		if (pos < currentTask.prefixLen)
-			{
-			done=TRUE;
-			return;
-			};
 		};
 	};
 }
@@ -1147,7 +1181,8 @@ return taskItems;
 
 int getTask(struct task *tsk)
 {
-sendServerCommandAndLog("action=getTask");
+sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u",clientID,ipAddress,programInstance);
+sendServerCommandAndLog(buffer);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -1271,23 +1306,25 @@ fclose(fp);
 return max;
 }
 
-//	Split the current task
+//	Create a new task to delegate a branch exploration that the current task would have performed
 
-//	We split the task with the original prefix into (n-1) new tasks
-//	where that prefix is followed by every possible non-repeated digit.
-
-//	We finalise those new tasks whose sub-branches we have already fully traversed,
-//	and then continue in the current sub-branch under the banner of a new task
-//	with a longer prefix.
-
-//	The server will allocate the remaining digits to other tasks.
-
-void splitTask(const char *retainedDigits)
+void splitTask(int pos)
 {
-unsigned long int nrd = strlen(retainedDigits);
+for (int i=0;i<pos;i++) asciiString[i]='0'+curstr[i];
+asciiString[pos]='\0';
 
-sprintf(buffer,"action=splitTask&id=%u&access=%u&retain=%s",
-	currentTask.task_id, currentTask.access_code,retainedDigits);
+for (int i=n;i<pos;i++) asciiString2[i-n]='0'+curi[i];
+asciiString2[pos-n]='\0';
+
+sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
+	currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
+sendServerCommandAndLog(buffer);
+sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);
+}
+
+void registerClient()
+{
+sprintf(buffer,"action=register&programInstance=%u",programInstance);
 sendServerCommandAndLog(buffer);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
@@ -1296,16 +1333,9 @@ if (fp==NULL)
 	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
 	exit(EXIT_FAILURE);
 	};
-	
-int taskCount = 0;
-static struct task ftask[MAX_N];
-static int finalise[MAX_N];
-for (int i=0;i<MAX_N;i++) finalise[i]=FALSE;
 
-int taskItems=0;
-static int tif[N_TASK_STRINGS];
-for (int i=0;i<N_TASK_STRINGS;i++) tif[i]=FALSE;
-
+int clientItems = 0;
+unsigned int dummyPIN;
 while (!feof(fp))
 	{
 	//	Get a line from the server response, ensure it is null-terminated without a newline
@@ -1318,61 +1348,48 @@ while (!feof(fp))
 		buffer[blen-1]='\0';
 		blen--;
 		};
-		
-	//	See if line contains any task parameters
-	
-	taskItems = parseTaskParameters(buffer, blen, &ftask[taskCount], taskItems, tif);
-	
-	//	If we have three, that should be Task id / Access code / str, indices 0, 1, 4 in list.
-	
-	if (taskItems==3)
+
+	for (int i=0;i<N_CLIENT_STRINGS;i++)
 		{
-		if (tif[0] && tif[1] && tif[4])
+		unsigned long int len = strlen(clientStrings[i]);
+		if (strncmp(buffer,clientStrings[i],len)==0)
 			{
-			if (ftask[taskCount].prefix[ftask[taskCount].prefixLen-1] == retainedDigits[nrd-1])
+			switch(i)
 				{
-				//	This is the current sub-branch, which we will continue to execute
-				//	as a new task.
+				case 0:
+					sscanf(buffer+len,"%u",&clientID);
+					clientItems++;
+					break;
 				
-				currentTask.task_id = ftask[taskCount].task_id;
-				currentTask.access_code = ftask[taskCount].access_code;
-				free(currentTask.prefix);
-				currentTask.prefix = ftask[taskCount].prefix;
-				currentTask.prefixLen = ftask[taskCount].prefixLen;
-				}
-			else
-				{
-				finalise[taskCount] = TRUE;
+				case 1:
+					CHECK_MEM( ipAddress = malloc((blen-len+1)*sizeof(char)) )
+					strcpy(ipAddress, buffer+len);
+					clientItems++;
+					break;
+				
+				case 2:
+					sscanf(buffer+len,"%u",&dummyPIN);
+					if (dummyPIN!=programInstance)
+						{
+						printf("Error: Program instance number mismatch\n");
+						exit(EXIT_FAILURE);
+						};
+					clientItems++;
+					break;
+				
+				default:
+					break;
 				};
 			
-			taskItems = 0;
-			for (int i=0;i<N_TASK_STRINGS;i++) tif[i]=FALSE;
-			taskCount++;
-			}
-		else
-			{
-			printf("Error: Server response for splitTask could not be parsed\n");
-			exit(EXIT_FAILURE);
+			break;
 			};
 		};
-		
 	};
-
 fclose(fp);
 
-//	Now finalise the tasks for sub-branches we traversed.
-
-for (int t=0;t<taskCount;t++)
-if (finalise[t])
+if (clientItems!=N_CLIENT_STRINGS)
 	{
-	for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
-	asciiString[bestSeenLen] = '\0';
-
-	sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&split=Y",
-	ftask[t].task_id, ftask[t].access_code, asciiString, max_perm+1);
-	sendServerCommandAndLog(buffer);
-
-	free(ftask[t].prefix);
+	printf("Error: Incomplete response from server, only saw %d of %d items\n",clientItems,N_CLIENT_STRINGS);
+	exit(EXIT_FAILURE);
 	};
-
 }

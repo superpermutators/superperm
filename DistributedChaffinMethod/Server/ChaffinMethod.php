@@ -3,7 +3,7 @@ include 'ink2.php';
 
 //	Version of the client required
 
-$versionRequired = 3;
+$versionRequired = 4;
 
 //	Valid range for $n
 
@@ -173,10 +173,23 @@ else
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
-	$access = mt_rand($A_LO,$A_HI);
-	if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed) VALUES($access, $n, $w, '$str', $pte)"))
-		$result = "Task id: $mysqli->insert_id\n";
-	else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		
+	$res = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND prefix='$str' AND perm_to_exceed=$pte");
+	if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	else if ($res->num_rows!=0)
+		{
+		$res->data_seek(0);
+		$row = $res->fetch_array();
+		$id = $row[0];
+		$result = "Task id: $id already existed with those properties\n";
+		}
+	else
+		{
+		$access = mt_rand($A_LO,$A_HI);
+		if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed) VALUES($access, $n, $w, '$str', $pte)"))
+			$result = "Task id: $mysqli->insert_id\n";
+		else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		};
 	
 	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
@@ -190,7 +203,7 @@ else
 //	or:			"No tasks"
 //	or:			"Error ... "
 
-function getTask()
+function getTask($clientID,$ip,$pi)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -200,53 +213,68 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings READ"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings READ, workers WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
-	$res = $mysqli->query("SELECT * FROM tasks WHERE status='U' LIMIT 1 FOR UPDATE");
+		
+	$wres = $mysqli->query("SELECT * FROM workers WHERE id=$clientID AND instance_num=$pi AND IP='$ip' FOR UPDATE");
 	if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	else
 		{
-		if ($res->num_rows == 0) $result = "No tasks\n";
+		if ($wres->num_rows == 0) $result = "Error: No client found with those details\n";
 		else
 			{
-			$res->data_seek(0);
-			$row = $res->fetch_assoc();
-			$id = $row['id'];
-			$access = $row['access'];
-			$n = $row['n'];
-			$w = $row['waste'];
-			$str = $row['prefix'];
-			$pte = $row['perm_to_exceed'];
-			$ppro = $row['prev_perm_ruled_out'];
-			if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($pte) && is_string($ppro))
+			if (!$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$clientID"))
+				 $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+			else
 				{
-				if ($mysqli->real_query("UPDATE tasks SET status='A', ts_allocated=NOW() WHERE id=$id"))
+				$res = $mysqli->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 1 FOR UPDATE");
+				if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+				else
 					{
-					$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\n";
-					
-					//	Output all finalised (w,p) pairs
-					
-					$res2 = $mysqli->query("SELECT waste, perms FROM witness_strings WHERE n=$n AND final='Y' ORDER BY waste ASC");
-					if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+					if ($res->num_rows == 0) $result = "No tasks\n";
 					else
 						{
-						for ($row_no = 0; $row_no < $res2->num_rows; $row_no++)
+						$res->data_seek(0);
+						$row = $res->fetch_assoc();
+						$id = $row['id'];
+						$access = $row['access'];
+						$n = $row['n'];
+						$w = $row['waste'];
+						$str = $row['prefix'];
+						$pte = $row['perm_to_exceed'];
+						$ppro = $row['prev_perm_ruled_out'];
+						if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($pte) && is_string($ppro))
 							{
-							$res2->data_seek($row_no);
-							$row = $res2->fetch_array();
-							$result = $result . "(" . $row[0] . "," . $row[1] . ")\n";
-							};
+							if ($mysqli->real_query("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=$clientID WHERE id=$id") &&
+								$mysqli->real_query("UPDATE workers SET current_task=$id WHERE id=$clientID"))
+								{
+								$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\n";
+								
+								//	Output all finalised (w,p) pairs
+								
+								$res2 = $mysqli->query("SELECT waste, perms FROM witness_strings WHERE n=$n AND final='Y' ORDER BY waste ASC");
+								if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+								else
+									{
+									for ($row_no = 0; $row_no < $res2->num_rows; $row_no++)
+										{
+										$res2->data_seek($row_no);
+										$row = $res2->fetch_array();
+										$result = $result . "(" . $row[0] . "," . $row[1] . ")\n";
+										};
+									};
+								}
+							else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+							}
+						else $result = "Error: Unable to find expected fields in database\n";
 						};
-					}
-				else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-				}
-			else $result = "Error: Unable to find expected fields in database\n";
+					};
+				};
 			};
 		};
-		
 	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
@@ -257,7 +285,7 @@ else
 //
 //	Returns: "OK" or "Error: ... "
 
-function checkIn($id, $access)
+function checkIn($id, $access, $clientID, $ip, $pi)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -267,7 +295,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, workers WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -279,7 +307,8 @@ else
 		$row = $res->fetch_array();
 		if ($row[0]=='A')
 			{
-			if ($mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access"))
+			if ($mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access") &&
+			$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$clientID AND instance_num=$pi AND IP='$ip'"))
 				$result = "OK\n";
 			else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 			}
@@ -302,7 +331,7 @@ else
 //
 //	Returns some stats about assigned task times since checkin, or "Error: ..."
 
-function cancelStalled($maxMin)
+function cancelStalledTasks($maxMin)
 {
 global $host, $user_name, $pwd, $dbase, $A_LO, $A_HI;
 
@@ -313,12 +342,12 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, workers WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
-	$res = $mysqli->query("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()) FROM tasks WHERE status='A' FOR UPDATE");
+	$res = $mysqli->query("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()), client_id FROM tasks WHERE status='A' FOR UPDATE");
 	if ($mysqli->errno)	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	else
 		{
@@ -338,9 +367,71 @@ else
 				if ($stall > $maxMin)
 					{
 					$id = $row[0];
+					$clientID = $row[2];
 					$access = mt_rand($A_LO,$A_HI);
 
-					if (!$mysqli->real_query("UPDATE tasks SET status='U', access=$access WHERE id=$id"))
+					if (!($mysqli->real_query("UPDATE tasks SET status='U', access=$access WHERE id=$id") &&
+						$mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$clientID")))
+						{
+						$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+						break;
+						};
+					
+					$cancelled++;
+					};
+				};
+			$result = $result . "$nass assigned tasks, maximum stalled time = $maxStall minutes, cancelled $cancelled tasks\n";
+			}
+		else $result = "0 assigned tasks\n";
+		};
+	
+	$mysqli->real_query("UNLOCK TABLES");
+	$mysqli->close();
+	return $result;
+	};
+}
+
+//	Function to cancel stalled clients
+//
+//	Returns some stats about assigned times since checkin, or "Error: ..."
+
+function cancelStalledClients($maxMin)
+{
+global $host, $user_name, $pwd, $dbase;
+
+$mysqli = new mysqli($host, $user_name, $pwd, $dbase);
+if ($mysqli->connect_errno)
+	{
+	return "Error: Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error . "\n";
+	}
+else
+	{
+	if (!$mysqli->real_query("LOCK TABLES workers WRITE"))
+		{
+		$mysqli->close();
+		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		};
+	$res = $mysqli->query("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()) FROM workers FOR UPDATE");
+	if ($mysqli->errno)	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	else
+		{
+		if ($res->num_rows>0)
+			{
+			$result = "";
+			$nreg = $res->num_rows;
+			$cancelled = 0;
+			$maxStall = 0;
+			for ($i=0;$i<$nreg;$i++)
+				{
+				$res->data_seek($i);
+				$row = $res->fetch_array();
+				$stall = intval($row[1]);
+				if ($stall > $maxStall) $maxStall = $stall;
+				
+				if ($stall > $maxMin)
+					{
+					$id = $row[0];
+					if (!$mysqli->real_query("DELETE FROM workers WHERE id=$id"))
 						{
 						$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 						break;
@@ -348,9 +439,9 @@ else
 					$cancelled++;
 					};
 				};
-			$result = $result . "$nass assigned tasks, maximum stalled time = $maxStall minutes, cancelled $cancelled tasks\n";
+			$result = $result . "$nreg registered clients, maximum stalled time = $maxStall minutes, cancelled $cancelled clients\n";
 			}
-		else $result = "0 assigned tasks\n";
+		else $result = "0 registered clients\n";
 		};
 	
 	$mysqli->real_query("UNLOCK TABLES");
@@ -445,7 +536,7 @@ else
 //
 //	Returns: "OK ..." or "Error: ... "
 
-function finishTask($id, $access, $pro, $str, $splitTask)
+function finishTask($id, $access, $pro, $str)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -455,7 +546,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings WRITE, workers WRITE"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -471,11 +562,10 @@ else
 		if ($row['status']=='A')
 			{
 			//	Check that the exclusion string starts with the expected prefix.
-			//	We drop that condition if we are finalising a split task.
 			
 			$pref = $row['prefix'];
 			$pref_len = strlen($pref);
-			if (substr($str,0,$pref_len)==$pref || $splitTask)
+			if (substr($str,0,$pref_len)==$pref)
 				{
 				$n_str = $row['n'];
 				$n = intval($n_str);
@@ -493,6 +583,11 @@ else
 						$res2 = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND (status='A' OR status='U') LIMIT 1");
 						if ($res2->num_rows==0) $result = finishedAllTasks($n, $w, $iter, $mysqli);
 						else $result = "OK\n";
+
+						//	Remove this as current task for client
+						
+						$clientID = $row['client_id'];
+						if (intval($clientID)>0) $mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$clientID");
 						}
 					else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					}
@@ -515,12 +610,12 @@ else
 	};
 }
 
-//	Function to split a task, with the caller retaining control of certain sub-branches as new tasks
+//	Function to create a task split from an existing one, with a specified prefix and branch
 //
-//	Returns: "Task id: ..." / "Access code: ..." / "str: ... " for all the retained sub-branches,
+//	Returns: "OK"
 //	or "Error: ... "
 
-function splitTask($id, $access, $retain)
+function splitTask($id, $access, $new_pref, $branchOrder)
 {
 global $host, $user_name, $pwd, $dbase, $A_LO, $A_HI;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -547,29 +642,12 @@ else
 			{
 			$pref = $row['prefix'];
 			$pref_len = strlen($pref);
-			$prefEnd = intval(substr($pref,$pref_len-1,1));
 			$n_str = $row['n'];
 			$n = intval($n_str);
 				
-			//	Check that the retain string is valid: it should be a list of distinct digits between 1 and n, not including
-			//	the last digit of the prefix.
-			
-			$rlen = strlen($retain);
-			$rarr = str_split($retain);
-			$ok = ($rlen <= $n-1) && count(array_unique($rarr)) == $rlen;
-			if ($ok)
-				{
-				for ($i=0; $i<$rlen; $i++)
-					{
-					$d = intval($rarr[$i]);
-					if ($d < 1 || $d > $n || $d==$prefEnd)
-						{
-						$ok=FALSE;
-						break;
-						};
-					};
-				};
-			if ($ok)
+			//	Check that the new prefix extends the old one
+
+			if (substr($new_pref,0,$pref_len)==$pref)
 				{
 				//	See if we have a higher permutation in the witness_strings database, to supersede the original task's perm_to_exceed
 				
@@ -586,59 +664,41 @@ else
 					if ($pw > $pte) $pte = $pw;
 					};
 
-				//	Clone the original task, appending each retain-string digit to its prefixes, and assigning new access codes.
+				//	Base the new task on the old one
 				
-				$result = "";
-				
-				//	Add all the non-retained digits to make unassigned tasks
-				
-				for ($d=1; $d<=$n; $d++)
-				if ($d!=$prefEnd && (!in_array("$d",$rarr)))
+				$new_access = mt_rand($A_LO,$A_HI);
+				$fieldList = "";
+				$valuesList = "";
+				$c = 0;
+				reset($row);
+				for ($j=0; $j < count($row); $j++)
 					{
-					$rarr[] = "$d";
-					};
-				
-				for ($i=0; $i<$n-1; $i++)
-					{
-					$is_retained = $i < $rlen;
-					$new_access = mt_rand($A_LO,$A_HI);
-					$new_pref = $pref . $rarr[$i];
-					$fieldList = "";
-					$valuesList = "";
-					$c = 0;
-					reset($row);
-					for ($j=0; $j < count($row); $j++)
+					$field = key($row);
+					$value = current($row);
+					if ($field=='access') $value = $new_access;
+					else if ($field=='prefix') $value = "'$new_pref'"; 
+					else if ($field=='perm_to_exceed') $value = $pte; 
+					else if ($field=='ts_allocated') $value = 'NOW()';
+					else if ($field=='status') $value = "'U'";
+					else if ($field=='branch_order') $value = "'$branchOrder'";
+					else $value = "'$value'";
+					
+					if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && $field != 'ts_allocated' && $field != 'checkin_count' && $field != 'client_id')
 						{
-						$field = key($row);
-						$value = current($row);
-						if ($field=='access') $value = $new_access;
-						else if ($field=='prefix') $value = "'$new_pref'"; 
-						else if ($field=='perm_to_exceed') $value = $pte; 
-						else if ($field=='ts_allocated') $value = 'NOW()';
-						else if ((!$is_retained) && $field=='status') $value = "'U'";
-						else $value = "'$value'";
-						
-						if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && ($is_retained || $field != 'ts_allocated') && $field != 'checkin_count')
-							{
-							$pre = ($c==0) ? "": ", ";
-							$fieldList = $fieldList . $pre . $field;
-							$valuesList = $valuesList . $pre . $value;
-							$c++;
-							};
-						next($row);
+						$pre = ($c==0) ? "": ", ";
+						$fieldList = $fieldList . $pre . $field;
+						$valuesList = $valuesList . $pre . $value;
+						$c++;
 						};
-						
-					$ok = $mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")");
-					if (!$ok) break;
-					
-					if ($is_retained) $result = $result . "Task id: $mysqli->insert_id\nAccess code: $new_access\nstr: $new_pref\n"; 
+					next($row);
 					};
 					
-				if ($ok) $ok = $mysqli->real_query("DELETE FROM tasks WHERE id=$id AND access=$access");
-					
-				if (!$ok) $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+				$ok = $mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")");
+				if (!$ok) break;
+				
+				$result = "OK\n"; 
 				}
-			else $result = "Error: Invalid 'retain' string $retain\n";
+			else $result = "Error: Invalid new prefix string $new_pref\n";
 			}
 		else if ($row['status']=='F') $result = "Error: The task being split was marked finalised, which was unexpected\n";
 		else $result = "Error: The task being split was found to have status ".$row['status']. ", which was unexpected\n";
@@ -655,11 +715,43 @@ else
 	};
 } 
 
+//	Function to register a worker, using their supplied program instance number and their IP address
+
+function register($pi)
+{
+global $host, $user_name, $pwd, $dbase;
+
+$ra = $_SERVER['REMOTE_ADDR'];
+if (!is_string($ra)) return "Error: Unable to determine connection's IP address\n";
+
+$mysqli = new mysqli($host, $user_name, $pwd, $dbase);
+if ($mysqli->connect_errno)
+	{
+	return "Error: Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error . "\n";
+	}
+else
+	{
+	if (!$mysqli->real_query("LOCK TABLES workers WRITE"))
+		{
+		$mysqli->close();
+		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		};
+	$res = $mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())");
+	if ($mysqli->errno) $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	else
+		{
+		$result = "Registered\nClient id: $mysqli->insert_id\nIP: $ra\nprogramInstance: $pi\n";
+		};
+	
+	$mysqli->real_query("UNLOCK TABLES");
+	$mysqli->close();
+	return $result;
+	};
+}
+
 
 //	Process query string
 //	====================
-
-//echo "Quit\nError: This server has become overloaded and the project will need to be relaunched at a later date.\nThanks for participating, and apologies for any disappointment.\nPlease stay tuned to the Superpermutators Google Group.  Hopefully we'll be back at some point\n";
 
 $queryOK = FALSE;
 $err = 'Invalid query';
@@ -671,7 +763,7 @@ if (is_string($qs))
 	
 	$version = $queryOutput['version'];
 	if ((!is_string($version)) || intval($version) < $versionRequired)
-		$err = "The version of DiscreteChaffinMethod you are using has been superseded. Please download version $versionRequired or later. Thanks!";
+		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
 	else
 		{
 		$action = $queryOutput['action'];
@@ -683,40 +775,69 @@ if (is_string($qs))
 				$queryOK = TRUE;
 				echo "Hello world.\n";
 				}
+			else if ($action == "register")
+				{
+				$pi = $queryOutput['programInstance'];
+				if (is_string($pi))
+					{
+					$queryOK = TRUE;
+					echo register($pi);
+					};
+				}
 			else if ($action == "getTask")
 				{
-				$queryOK = TRUE;
-				echo getTask();
+				$pi = $queryOutput['programInstance'];
+				$clientID = $queryOutput['clientID'];
+				$ip = $queryOutput['IP'];
+				if (is_string($pi) && is_string($clientID) && is_string($ip))
+					{
+					$queryOK = TRUE;
+					echo getTask($clientID,$ip,$pi);
+					};
 				}
 			else if ($action == "checkIn")
 				{
 				$id = $queryOutput['id'];
 				$access = $queryOutput['access'];
-				if (is_string($id) && is_string($access))
+				$pi = $queryOutput['programInstance'];
+				$clientID = $queryOutput['clientID'];
+				$ip = $queryOutput['IP'];
+				if (is_string($id) && is_string($access) && is_string($pi) && is_string($clientID) && is_string($ip))
 					{
 					$queryOK = TRUE;
-					echo checkIn($id, $access);
+					echo checkIn($id, $access, $clientID, $ip, $pi);
 					};
 				}
 			else if ($action == "splitTask")
 				{
 				$id = $queryOutput['id'];
 				$access = $queryOutput['access'];
-				$retain = $queryOutput['retain'];
-				if (is_string($id) && is_string($access) && is_string($retain))
+				$new_pref = $queryOutput['newPrefix'];
+				$branchOrder = $queryOutput['branchOrder'];
+				if (is_string($id) && is_string($access) && is_string($new_pref) && is_string($branchOrder))
 					{
 					$queryOK = TRUE;
-					echo splitTask($id, $access, $retain);
+					echo splitTask($id, $access, $new_pref, $branchOrder);
 					};
 				}
-			else if ($action == "cancelStalled")
+			else if ($action == "cancelStalledTasks")
 				{
 				$maxMins_str = $queryOutput['maxMins'];
 				$maxMins = intval($maxMins_str);
-				if (is_string($maxMins_str) && $maxMins>0)
+				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$queryOutput['pwd'])
 					{
 					$queryOK = TRUE;
-					echo cancelStalled($maxMins);
+					echo cancelStalledTasks($maxMins);
+					};
+				}
+			else if ($action == "cancelStalledClients")
+				{
+				$maxMins_str = $queryOutput['maxMins'];
+				$maxMins = intval($maxMins_str);
+				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$queryOutput['pwd'])
+					{
+					$queryOK = TRUE;
+					echo cancelStalledClients($maxMins);
 					};
 				}
 			else if ($action == "finishTask")
@@ -731,13 +852,7 @@ if (is_string($qs))
 					if ($pro > 0)
 						{
 						$queryOK = TRUE;
-						$splitTask = FALSE;
-						if (!(strpos($qs,'split')===FALSE))
-							{
-							$split = $queryOutput['split'];
-							$splitTask = is_string($split) && $split == 'Y';
-							};
-						echo finishTask($id, $access, $pro, $str, $splitTask);
+						echo finishTask($id, $access, $pro, $str);
 						};
 					};
 				}
@@ -794,7 +909,7 @@ if (is_string($qs))
 									
 								//	"createTask" action puts a new task into the tasks database.
 								//
-								//	Query arguments: n, w, str, pte.
+								//	Query arguments: n, w, str, pte, pwd.
 								//
 								//	where "pte" is the number of permutations to exceed in any strings the task finds.
 								//
@@ -803,7 +918,7 @@ if (is_string($qs))
 								else if ($action == "createTask")
 									{
 									$p_str = $queryOutput['pte'];
-									if (is_string($p_str))
+									if (is_string($p_str) && $pwd==$queryOutput['pwd'])
 										{
 										$p = intval($p_str);
 										if ($p > 0 && analyseString($str,$n) > 0)
