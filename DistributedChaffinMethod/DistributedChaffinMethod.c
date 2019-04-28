@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 4
+Version: 4.01
 Last Updated: 29 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -1073,7 +1073,8 @@ return res;
 //	Read the server's response into the log;
 //	If first argument is not null, it is a string that the first line must match.
 //
-//	Return TRUE if all OK, FALSE if any line starts with "Error"
+//	Return TRUE if all OK, FALSE if any line starts with "Error" or "<" (the latter indicates a
+//	server HTML error file)
 
 int logServerResponse(const char *reqd)
 {
@@ -1100,7 +1101,7 @@ while (!feof(fp))
 		};
 	lineNumber++;
 		
-	if (strncmp(buffer,"Error",5)==0) result=FALSE;
+	if (strncmp(buffer,"Error",5)==0 || buffer[0]=='<') result=FALSE;
 	
 	if (lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) result=FALSE;
 	
