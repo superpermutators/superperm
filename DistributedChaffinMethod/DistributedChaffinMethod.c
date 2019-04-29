@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 4.01
+Version: 4.02
 Last Updated: 29 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -583,7 +583,7 @@ int pf=0;
 for (int j0=0;j0<currentTask.prefixLen;j0++)
 	{
 	int d = currentTask.prefix[j0]-'0';
-	curstr[j0] = d;
+	bestSeen[j0] = curstr[j0] = d;
 	tperm0 = (tperm0>>DBITS) | (d << nmbits);
 	if (valid[tperm0])
 		{
@@ -598,6 +598,8 @@ for (int j0=0;j0<currentTask.prefixLen;j0++)
 		};
 	};
 int partNum0 = tperm0>>DBITS;
+bestSeenP=pf;
+bestSeenLen=currentTask.prefixLen;
 
 //	Maybe track 1-cycle counts
 
@@ -616,7 +618,7 @@ done=FALSE;
 splitMode=FALSE;
 max_perm = currentTask.perm_to_exceed;
 max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
-bestSeenP=0;
+
 if (max_perm+1 < currentTask.prev_perm_ruled_out)
 	{
 	fillStr(currentTask.prefixLen,pf,partNum0);;
