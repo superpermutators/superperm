@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 5
+Version: 5.1
 Last Updated: 29 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -237,6 +237,7 @@ int getMax(int nval, int wval, int oldMax);
 void doTask(void);
 void splitTask(int pos);
 void fillStr(int pos, int pfound, int partNum);
+int fillStrDL(int pos, int pfound, int partNum, int depth);
 int fac(int k);
 void makePerms(int n, int **permTab);
 void witnessCurrentString(int size);
@@ -641,6 +642,7 @@ free(currentTask.prefix);
 free(currentTask.branchOrder);
 }
 
+
 // this function recursively fills the string
 
 void fillStr(int pos, int pfound, int partNum)
@@ -649,7 +651,7 @@ if (done) return;
 
 if (splitMode)
 	{
-	splitTask(pos);
+	if (!fillStrDL(pos,pfound,partNum,n+1)) splitTask(pos);
 	return;
 	};
 
@@ -859,6 +861,170 @@ if (deferredRepeat)
 		fillStr(pos+1, pfound, nd->nextPart);
 		};
 	};
+}
+
+//	Depth-limited version of fillStr()
+
+int fillStrDL(int pos, int pfound, int partNum, int depthLimit)
+{
+if (done) return TRUE;
+if (depthLimit < 0) return FALSE;
+
+if (pfound > bestSeenP)
+	{
+	bestSeenP = pfound;
+	bestSeenLen = pos;
+	for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
+	};
+	
+int tperm, ld;
+int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
+int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we can waste while not exceeding tot_bl
+
+//	Loop to try each possible next digit we could append.
+//	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation.
+	
+struct digitScore *nd = nextDigits + nm*partNum;
+
+//	To be able to fully exploit foreknowledge that we are heading for a visited permutation after 1 wasted character, we need to ensure
+//	that we still traverse the loop in order of increasing waste.
+//
+//	For example, for n=5 we might have 1123 as the last 4 digits, with the choices:
+//
+//		1123 | add 4 -> 1234 ld = 1
+//		1123 | add 5 -> 1235 ld = 1
+//
+//  The affected choices will always be the first two in the loop, and
+//	we only need to swap them if the first permutation is visited and the second is not.
+
+int swap01 = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].nextPerm]);
+
+//	Also, it is not obligatory, but useful, to swap the 2nd and 3rd entries (indices 1 and 2) if we have (n-1) distinct digits in the
+//	current prefix, with the first 3 choices ld=0,1,2, but the 1st and 2nd entries lead to a visited permutation.  This will happen
+//	if we are on the verge of looping back at the end of a 2-cycle.
+//
+//		1234 | add 5 -> 12345 ld = 0 (but 12345 has already been visited)
+//		1234 | add 1 -> 12341 ld = 1 (but 23415 has been visited already)
+//		1234 | add 2 -> 12342 ld = 2
+
+int swap12 = FALSE;					//	This is set later if the conditions are met
+
+int deferredRepeat=FALSE;			//	If we find a repeated permutation, we follow that branch last
+
+int childIndex=0;
+for	(int y=0; y<nm; y++)
+	{
+	int z;
+	if (swap01)
+		{
+		if (y==0) z=1; else if (y==1) {z=0; swap01=FALSE;} else z=y;
+		}
+	else if (swap12)
+		{
+		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y; 
+		}
+	else z=y;
+	
+	struct digitScore *ndz = nd+z;
+	ld = ndz->score;
+	
+	//	ld tells us the minimum number of further characters we would need to waste
+	//	before visiting another permutation.
+	
+	int spareW0 = spareW - ld;
+	
+	//	Having taken care of ordering issues, we can treat a visited permutation after 1 wasted character as an extra wasted character
+	
+	if (ld==1 && !unvisited[ndz->nextPerm]) spareW0--;
+		
+	if (spareW0<0) break;
+	
+	curstr[pos] = ndz->digit;
+	tperm = ndz->fullNum;
+	
+	int vperm = (ld==0);
+	if (vperm && unvisited[tperm])
+		{
+		if (pfound+1>max_perm)
+			{
+			max_perm = pfound+1;
+			witnessCurrentString(pos+1);
+
+			if (pfound+1 > bestSeenP)
+				{
+				bestSeenP = pfound+1;
+				bestSeenLen = pos+1;
+				for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
+				};
+
+			if (max_perm+1 >= currentTask.prev_perm_ruled_out)
+				{
+				done=TRUE;
+				return TRUE;
+				};
+			};
+
+		unvisited[tperm]=FALSE;
+		if (ocpTrackingOn)
+			{
+			int prevC=0, oc=0;
+			oc=oneCycleIndices[tperm];
+			prevC = oneCycleCounts[oc]--;
+			oneCycleBins[prevC]--;
+			oneCycleBins[prevC-1]++;
+		
+			curi[pos] = childIndex++;
+			if (!fillStrDL(pos+1, pfound+1, ndz->nextPart,depthLimit-1)) return FALSE;
+		
+			oneCycleBins[prevC-1]--;
+			oneCycleBins[prevC]++;
+			oneCycleCounts[oc]=prevC;
+			}
+		else
+			{
+			curi[pos] = childIndex++;
+			if (!fillStrDL(pos+1, pfound+1, ndz->nextPart, depthLimit-1)) return FALSE;
+			};
+		unvisited[tperm]=TRUE;
+		}
+	else if	(spareW > 0)
+		{
+		if (vperm)
+			{
+			deferredRepeat=TRUE;
+			swap12 = !unvisited[nd[1].nextPerm];
+			}
+		else
+			{
+			int d = pruneOnPerms(spareW0, pfound - max_perm);
+			if	(d > 0)
+				{
+				curi[pos] = childIndex++;
+				if (!fillStrDL(pos+1, pfound, ndz->nextPart,depthLimit-1)) return FALSE;
+				}
+			else
+				{
+				break;
+				};
+			};
+		};
+	};
+	
+//	If we encountered a choice that led to a repeat visit to a permutation, we follow (or prune) that branch now.
+//	It will always come from the FIRST choice in the original list, as that is where any valid permutation must be.
+	
+if (deferredRepeat)
+	{
+	int d = pruneOnPerms(spareW-1, pfound - max_perm);
+	if	(d>0)
+		{
+		curstr[pos] = nd->digit;
+		curi[pos] = childIndex++;
+		if (!fillStrDL(pos+1, pfound, nd->nextPart,depthLimit-1)) return FALSE;
+		};
+	};
+	
+return TRUE;
 }
 
 // this function computes the factorial of a number
