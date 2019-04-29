@@ -3,7 +3,7 @@ include 'ink2.php';
 
 //	Version of the client required
 
-$versionRequired = 4;
+$versionRequired = 5;
 
 //	Valid range for $n
 
@@ -186,7 +186,8 @@ else
 	else
 		{
 		$access = mt_rand($A_LO,$A_HI);
-		if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed) VALUES($access, $n, $w, '$str', $pte)"))
+		$br = substr("000000000",0,$n);
+		if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES($access, $n, $w, '$str', $pte,'$br')"))
 			$result = "Task id: $mysqli->insert_id\n";
 		else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
@@ -199,7 +200,8 @@ else
 
 //	Function to allocate an unallocated task, if there is one.
 //
-//	Returns:	"Task id: ... " / "Access code:" /"n: ..." / "w: ..." / "str: ... " / "pte: ... " / "pro: ... " / all finalised (w,p) pairs
+//	Returns:	"Task id: ... " / "Access code:" /"n: ..." / "w: ..." / "str: ... " / "pte: ... " / "pro: ... " / "branchOrder: ..."
+//	then all finalised (w,p) pairs
 //	or:			"No tasks"
 //	or:			"Error ... "
 
@@ -246,12 +248,13 @@ else
 						$str = $row['prefix'];
 						$pte = $row['perm_to_exceed'];
 						$ppro = $row['prev_perm_ruled_out'];
-						if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($pte) && is_string($ppro))
+						$br = $row['branch_order'];
+						if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($pte) && is_string($ppro) && is_string($br))
 							{
 							if ($mysqli->real_query("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=$clientID WHERE id=$id") &&
 								$mysqli->real_query("UPDATE workers SET current_task=$id WHERE id=$clientID"))
 								{
-								$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\n";
+								$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
 								
 								//	Output all finalised (w,p) pairs
 								
@@ -502,11 +505,12 @@ if ($res->num_rows > 0)
 		{
 		$w1 = $w+1;
 		$str = substr("123456789",0,$n);
+		$br = substr("000000000",0,$n);
 		$pte = $p + 2*($n-4);
 		if ($pte >= $fn) $pte = $fn-1;
 		$pro2 = $p+$n+1;
 		$access = mt_rand($A_LO,$A_HI);
-		if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out) VALUES($access, $n, $w1, '$str', $pte, $pro2)"))
+		if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w1, '$str', $pte, $pro2,'$br')"))
 			return "OK\nTask id: $mysqli->insert_id\n";
 		else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		}
@@ -524,9 +528,10 @@ else
 	$res->close();
 	
 	$str = substr("123456789",0,$n);
+	$br = substr("000000000",0,$n);
 	$access = mt_rand($A_LO,$A_HI);
 	$iter1 = $iter+1;
-	if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro)"))
+	if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro,'$br')"))
 		return "OK\nTask id: $mysqli->insert_id\n";
 	else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	};

@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 4.02
+Version: 5
 Last Updated: 29 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -79,7 +79,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=4&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=5&"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
@@ -153,8 +153,8 @@ unsigned int task_id;
 unsigned int access_code;
 unsigned int n_value;
 unsigned int w_value;
-char *prefix;
-unsigned int prefixLen;
+char *prefix, *branchOrder;
+unsigned int prefixLen, branchOrderLen;
 unsigned int perm_to_exceed;
 unsigned int prev_perm_ruled_out;
 };
@@ -207,8 +207,8 @@ char lbuffer[BUFFER_SIZE];
 
 struct task currentTask;
 
-#define N_TASK_STRINGS 7
-char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","pro: "};
+#define N_TASK_STRINGS 8
+char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","pro: ","branchOrder: "};
 
 #define N_CLIENT_STRINGS 3
 char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
@@ -584,6 +584,7 @@ for (int j0=0;j0<currentTask.prefixLen;j0++)
 	{
 	int d = currentTask.prefix[j0]-'0';
 	bestSeen[j0] = curstr[j0] = d;
+	curi[j0] = currentTask.branchOrder[j0]-'0';
 	tperm0 = (tperm0>>DBITS) | (d << nmbits);
 	if (valid[tperm0])
 		{
@@ -637,6 +638,7 @@ sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u",
 sendServerCommandAndLog(buffer);
 
 free(currentTask.prefix);
+free(currentTask.branchOrder);
 }
 
 // this function recursively fills the string
@@ -1157,6 +1159,12 @@ for (int i=0;i<N_TASK_STRINGS;i++)
 				sscanf(s+len,"%u",&tsk->prev_perm_ruled_out);
 				break;
 			
+			case 7:
+				CHECK_MEM( tsk->branchOrder = malloc((slen-len+1)*sizeof(char)) )
+				strcpy(tsk->branchOrder, s+len);
+				tsk->branchOrderLen = (unsigned int)strlen(tsk->branchOrder);
+				break;
+			
 			default:
 				break;
 			};
@@ -1197,6 +1205,9 @@ if (fp==NULL)
 int quit=FALSE, taskItems=0;
 static int tif[N_TASK_STRINGS];
 for (int i=0;i<N_TASK_STRINGS;i++) tif[i]=FALSE;
+
+tsk->prefixLen = 0;
+tsk->branchOrderLen = 0;
 
 while (!feof(fp))
 	{
@@ -1242,6 +1253,14 @@ while (!feof(fp))
 fclose(fp);
 
 if (quit) return -1;
+if (tsk->branchOrderLen != tsk->prefixLen)
+	{
+	sprintf(buffer,
+		"Error: branchOrder and prefix have different lengths (%d, %d respectively)\n",tsk->branchOrderLen,tsk->prefixLen);
+	logString(buffer);
+	exit(EXIT_FAILURE);
+	};
+
 if (taskItems == N_TASK_STRINGS) return tsk->n_value;
 return 0;
 }
@@ -1316,8 +1335,8 @@ void splitTask(int pos)
 for (int i=0;i<pos;i++) asciiString[i]='0'+curstr[i];
 asciiString[pos]='\0';
 
-for (int i=n;i<pos;i++) asciiString2[i-n]='0'+curi[i];
-asciiString2[pos-n]='\0';
+for (int i=0;i<pos;i++) asciiString2[i]='0'+curi[i];
+asciiString2[pos]='\0';
 
 sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
 	currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
