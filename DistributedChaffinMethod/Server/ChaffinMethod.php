@@ -5,6 +5,10 @@ include 'ink2.php';
 
 $versionRequired = 6;
 
+//	Maximum number of clients to register
+
+$maxClients = 20;
+
 //	Valid range for $n
 
 $min_n = 3;
@@ -756,7 +760,7 @@ else
 
 function register($pi)
 {
-global $host, $user_name, $pwd, $dbase;
+global $host, $user_name, $pwd, $dbase, $maxClients;
 
 $ra = $_SERVER['REMOTE_ADDR'];
 if (!is_string($ra)) return "Error: Unable to determine connection's IP address\n";
@@ -773,11 +777,29 @@ else
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
-	$res = $mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())");
-	if ($mysqli->errno) $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-	else
+	$res = $mysqli->query("SELECT COUNT(id) FROM workers");
+	
+	$ok = TRUE;
+	if ($res->num_rows!=0)
 		{
-		$result = "Registered\nClient id: $mysqli->insert_id\nIP: $ra\nprogramInstance: $pi\n";
+		$res->data_seek(0);
+		$row = $res->fetch_array();
+		$nw = intval($row[0]);
+		if ($nw >= $maxClients)
+			{
+			$result = "Error: Thanks for offering to join the project, but unfortunately the server is at capacity right now ($nw out of $maxClients), and cannot accept any more clients.\n";
+			$ok = FALSE;
+			};
+		};
+	
+	if ($ok)
+		{
+		if (!$mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())"))
+			$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		else
+			{
+			$result = "Registered\nClient id: $mysqli->insert_id\nIP: $ra\nprogramInstance: $pi\n";
+			};
 		};
 	
 	$mysqli->real_query("UNLOCK TABLES");
