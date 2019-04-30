@@ -16,11 +16,67 @@ table.strings {border-style: solid; border-color: black;
 }
 table.strings caption {padding: 10px; background-color: #eeeeee;
 	border-style: solid; border-color: black;
-	border-width: 2px; border-bottom-width: 0px;};
+	border-width: 2px; border-bottom-width: 0px;}
+span.waste {color: #cc3333; font-weight: bold;}
 --></style>
 </head>
 <body>
 <?php
+
+function decorateString($str, $n)
+{
+if (is_string($str))
+	{
+	$slen = strlen($str);
+	if ($slen > 0)
+		{
+		$stri = array_map('intval',str_split($str));
+		$strmin = min($stri);
+		$strmax = max($stri);
+		if ($strmin == 1 && $strmax == $n)
+			{
+			$perms = array();
+			
+			//	Loop over all length-n substrings
+			
+			$res=substr($str,0,$n-1);
+			$prevWaste=0;
+			for ($i=0; $i <= $slen - $n; $i++)
+				{
+				$c = substr($str,$n-1+$i,1);
+				$s = array_slice($stri,$i,$n);
+				$u = array_unique($s);
+				$waste=1;
+				if (count($u) == $n)
+					{
+					$pval = 0;
+					$factor = 1;
+					for ($j=0; $j<$n; $j++)
+						{
+						$pval += $factor * $s[$j];
+						$factor *= 10;
+						};
+					if (!in_array($pval, $perms))
+						{
+						$perms[] = $pval;
+						$waste=0;
+						};
+					};
+				if ($waste!=$prevWaste)
+					{
+					if ($waste) $res = $res . '<span class="waste">';
+					else $res = $res . '</span>';
+					$prevWaste=$waste;
+					};
+				$res = $res . $c;
+				};
+			return $res;
+			};
+		};
+	};
+return "";
+}
+
 
 include 'ink1.php';
  
@@ -152,7 +208,9 @@ else
 					$row = $res->fetch_assoc();
 					for ($i = 0; $i < $nFields; $i++)
 						{
-						fwrite($fp,"<td class='". $fieldAlign[$i] ."'>" . $row[$fieldNames[$i]] . "</td>\n");
+						$val = $row[$fieldNames[$i]];
+						if ($i==4) $val=decorateString($val, $n);
+						fwrite($fp,"<td class='". $fieldAlign[$i] ."'>" . $val . "</td>\n");
 						};
 					fwrite($fp,"</tr>\n");
 					};

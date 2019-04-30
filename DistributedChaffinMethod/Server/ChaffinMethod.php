@@ -3,7 +3,7 @@ include 'ink2.php';
 
 //	Version of the client required
 
-$versionRequired = 5;
+$versionRequired = 6;
 
 //	Valid range for $n
 
@@ -205,7 +205,7 @@ else
 //	or:			"No tasks"
 //	or:			"Error ... "
 
-function getTask($clientID,$ip,$pi)
+function getTask($cid,$ip,$pi)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -221,14 +221,14 @@ else
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
 		
-	$wres = $mysqli->query("SELECT * FROM workers WHERE id=$clientID AND instance_num=$pi AND IP='$ip' FOR UPDATE");
+	$wres = $mysqli->query("SELECT * FROM workers WHERE id=$cid AND instance_num=$pi AND IP='$ip' FOR UPDATE");
 	if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	else
 		{
 		if ($wres->num_rows == 0) $result = "Error: No client found with those details\n";
 		else
 			{
-			if (!$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$clientID"))
+			if (!$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid"))
 				 $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 			else
 				{
@@ -245,14 +245,26 @@ else
 						$access = $row['access'];
 						$n = $row['n'];
 						$w = $row['waste'];
+	
+						$res0 = $mysqli->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w");
+						if (!$mysqli->errno && $res0->num_rows == 1)
+							{
+							$res0->data_seek(0);
+							$row0 = $res0->fetch_array();
+							$p0 = intval($row0[0]);
+							}
+						else $p0 = -1;
+	
 						$str = $row['prefix'];
-						$pte = $row['perm_to_exceed'];
+						$pte = intval($row['perm_to_exceed']);
+						if ($p0 > $pte) $pte=$p0;
+						
 						$ppro = $row['prev_perm_ruled_out'];
 						$br = $row['branch_order'];
-						if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($pte) && is_string($ppro) && is_string($br))
+						if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($ppro) && is_string($br))
 							{
-							if ($mysqli->real_query("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=$clientID WHERE id=$id") &&
-								$mysqli->real_query("UPDATE workers SET current_task=$id WHERE id=$clientID"))
+							if ($mysqli->real_query("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=$cid WHERE id=$id") &&
+								$mysqli->real_query("UPDATE workers SET current_task=$id WHERE id=$cid"))
 								{
 								$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
 								
@@ -284,11 +296,9 @@ else
 	};
 }
 
-//	Function to increment the checkin_count of a specified task
-//
-//	Returns: "OK" or "Error: ... "
+//	Function to increment the checkin_count of a specified task and return the current maximum permutation for (n,w)
 
-function checkIn($id, $access, $clientID, $ip, $pi)
+function checkMax($id, $access, $cid, $ip, $pi, $n, $w)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -298,7 +308,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, workers WRITE"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, workers WRITE, witness_strings READ"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -311,8 +321,30 @@ else
 		if ($row[0]=='A')
 			{
 			if ($mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access") &&
-			$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$clientID AND instance_num=$pi AND IP='$ip'"))
-				$result = "OK\n";
+				$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid AND instance_num=$pi AND IP='$ip'"))
+				{
+				$res = $mysqli->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w");
+				if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+				else
+					{
+					if ($res->num_rows == 0)
+						{
+						//	No data at all for this (n,w) pair
+						
+						$result = "($n, $w, -1)\n";
+						}
+					else
+						{
+						//	There is existing data for this (n,w) pair, so check to see if we have a greater permutation count
+						
+						$res->data_seek(0);
+						$row = $res->fetch_array();
+						$p0 = intval($row[0]);
+						
+						$result = "($n, $w, $p0)\n";
+						};
+					};
+				}
 			else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 			}
 		else if ($row[0]=='F') $result = "Error: The task checking in was marked finalised, which was unexpected\n";
@@ -370,11 +402,11 @@ else
 				if ($stall > $maxMin)
 					{
 					$id = $row[0];
-					$clientID = $row[2];
+					$cid = $row[2];
 					$access = mt_rand($A_LO,$A_HI);
 
 					if (!($mysqli->real_query("UPDATE tasks SET status='U', access=$access WHERE id=$id") &&
-						$mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$clientID")))
+						$mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$cid")))
 						{
 						$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 						break;
@@ -591,8 +623,8 @@ else
 
 						//	Remove this as current task for client
 						
-						$clientID = $row['client_id'];
-						if (intval($clientID)>0) $mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$clientID");
+						$cid = $row['client_id'];
+						if (intval($cid)>0) $mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$cid");
 						}
 					else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					}
@@ -764,14 +796,14 @@ $qs = $_SERVER['QUERY_STRING'];
 
 if (is_string($qs))
 	{
-	parse_str($qs, $queryOutput);
+	parse_str($qs, $q);
 	
-	$version = $queryOutput['version'];
+	$version = $q['version'];
 	if ((!is_string($version)) || intval($version) < $versionRequired)
 		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
 	else
 		{
-		$action = $queryOutput['action'];
+		$action = $q['action'];
 		
 		if (is_string($action))
 			{
@@ -782,7 +814,7 @@ if (is_string($qs))
 				}
 			else if ($action == "register")
 				{
-				$pi = $queryOutput['programInstance'];
+				$pi = $q['programInstance'];
 				if (is_string($pi))
 					{
 					$queryOK = TRUE;
@@ -791,34 +823,21 @@ if (is_string($qs))
 				}
 			else if ($action == "getTask")
 				{
-				$pi = $queryOutput['programInstance'];
-				$clientID = $queryOutput['clientID'];
-				$ip = $queryOutput['IP'];
-				if (is_string($pi) && is_string($clientID) && is_string($ip))
+				$pi = $q['programInstance'];
+				$cid = $q['clientID'];
+				$ip = $q['IP'];
+				if (is_string($pi) && is_string($cid) && is_string($ip))
 					{
 					$queryOK = TRUE;
-					echo getTask($clientID,$ip,$pi);
-					};
-				}
-			else if ($action == "checkIn")
-				{
-				$id = $queryOutput['id'];
-				$access = $queryOutput['access'];
-				$pi = $queryOutput['programInstance'];
-				$clientID = $queryOutput['clientID'];
-				$ip = $queryOutput['IP'];
-				if (is_string($id) && is_string($access) && is_string($pi) && is_string($clientID) && is_string($ip))
-					{
-					$queryOK = TRUE;
-					echo checkIn($id, $access, $clientID, $ip, $pi);
+					echo getTask($cid,$ip,$pi);
 					};
 				}
 			else if ($action == "splitTask")
 				{
-				$id = $queryOutput['id'];
-				$access = $queryOutput['access'];
-				$new_pref = $queryOutput['newPrefix'];
-				$branchOrder = $queryOutput['branchOrder'];
+				$id = $q['id'];
+				$access = $q['access'];
+				$new_pref = $q['newPrefix'];
+				$branchOrder = $q['branchOrder'];
 				if (is_string($id) && is_string($access) && is_string($new_pref) && is_string($branchOrder))
 					{
 					$queryOK = TRUE;
@@ -827,9 +846,9 @@ if (is_string($qs))
 				}
 			else if ($action == "cancelStalledTasks")
 				{
-				$maxMins_str = $queryOutput['maxMins'];
+				$maxMins_str = $q['maxMins'];
 				$maxMins = intval($maxMins_str);
-				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$queryOutput['pwd'])
+				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
 					{
 					$queryOK = TRUE;
 					echo cancelStalledTasks($maxMins);
@@ -837,9 +856,9 @@ if (is_string($qs))
 				}
 			else if ($action == "cancelStalledClients")
 				{
-				$maxMins_str = $queryOutput['maxMins'];
+				$maxMins_str = $q['maxMins'];
 				$maxMins = intval($maxMins_str);
-				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$queryOutput['pwd'])
+				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
 					{
 					$queryOK = TRUE;
 					echo cancelStalledClients($maxMins);
@@ -847,10 +866,10 @@ if (is_string($qs))
 				}
 			else if ($action == "finishTask")
 				{
-				$id = $queryOutput['id'];
-				$access = $queryOutput['access'];
-				$pro_str = $queryOutput['pro'];
-				$str = $queryOutput['str'];
+				$id = $q['id'];
+				$access = $q['access'];
+				$pro_str = $q['pro'];
+				$str = $q['str'];
 				if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str))
 					{
 					$pro = intval($pro_str);
@@ -863,28 +882,34 @@ if (is_string($qs))
 				}
 			else
 				{
-				$n_str = $queryOutput['n'];
-				$w_str = $queryOutput['w'];
+				$n_str = $q['n'];
+				$w_str = $q['w'];
 				if (is_string($n_str) && is_string($w_str))
 					{
 					$n = intval($n_str);
 					$w = intval($w_str);
 					if ($n >= $min_n && $n <= $max_n && $w >= 0)
 						{
-						//	"checkMax" action just queries current maximum permutation count.
-						//
-						//	Query arguments: n, w.
+						//	"checkMax" action checks in and queries current maximum permutation count.
 						//
 						//	Returns:  (n, w, p) for current maximum p, or "Error: ... "
 						
 						if ($action == "checkMax")
 							{
-							$queryOK = TRUE;
-							echo maybeUpdateWitnessStrings($n, $w, -1, "", -1);
+							$id = $q['id'];
+							$access = $q['access'];
+							$cid = $q['clientID'];
+							$ip = $q['IP'];
+							$pi = $q['programInstance'];
+							if (is_string($id) && is_string($access) && is_string($pi) && is_string($cid) && is_string($ip))
+								{
+								$queryOK = TRUE;
+								echo checkMax($id, $access, $cid, $ip, $pi, $n, $w);
+								};
 							}
 						else
 							{
-							$str = $queryOutput['str'];
+							$str = $q['str'];
 							if (is_string($str))
 								{
 								//	"witnessString" action verifies and possibly records a witness to a certain number of distinct permutations being
@@ -903,9 +928,14 @@ if (is_string($qs))
 										{
 										$queryOK = TRUE;
 										echo "Valid string $str with $p permutations\n";
-										$pro_str = $queryOutput['pro'];
-										if (is_string($pro_str)) $pro = intval($pro_str);
-										else $pro = -1;
+										$pp = strpos($qs,'pro');
+										if ($pp===FALSE) $pro = -1;
+										else
+											{
+											$pro_str = $q['pro'];
+											if (is_string($pro_str)) $pro = intval($pro_str);
+											else $pro = -1;
+											};
 										echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro);
 										}
 									else if ($p<0) $err = 'Invalid string';
@@ -922,8 +952,8 @@ if (is_string($qs))
 								
 								else if ($action == "createTask")
 									{
-									$p_str = $queryOutput['pte'];
-									if (is_string($p_str) && $pwd==$queryOutput['pwd'])
+									$p_str = $q['pte'];
+									if (is_string($p_str) && $pwd==$q['pwd'])
 										{
 										$p = intval($p_str);
 										if ($p > 0 && analyseString($str,$n) > 0)

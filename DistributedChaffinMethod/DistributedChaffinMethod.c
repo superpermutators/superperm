@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 5.1
-Last Updated: 29 April 2019
+Version: 6.0
+Last Updated: 30 April 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -77,9 +77,14 @@ another instance of the program.
 
 #define DBITS 3
 
+//	Set NO_SERVER to TRUE to run a debugging version that makes no contact with the server, and just
+//	performs a search with parameters that need to be inserted into the source code (in getTask()) manually.
+
+#define NO_SERVER FALSE 
+
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=5&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=6&"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
@@ -110,19 +115,23 @@ another instance of the program.
 
 #define TIME_BETWEEN_SERVER_CHECKINS (3*MINUTE)
 
-//	Time to spend on a branch before splitting the search
+//	Time to spend on a prefix before splitting the search
 
 #define TIME_BEFORE_SPLIT (5*MINUTE)
+
+//	Maximum time to spend exploring a subtree when splitting
+
+#define MAX_TIME_IN_SUBTREE 5
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
 
-#define NODES_BEFORE_TIME_CHECK 100000000
+#define NODES_BEFORE_TIME_CHECK 5000000000
 
 //	Set a floor and ceiling so we can't waste an absurd amount of time doing time checks,
 //	or take too long between them.
 
-#define MIN_NODES_BEFORE_TIME_CHECK 1000000
+#define MIN_NODES_BEFORE_TIME_CHECK 100000000
 #define MAX_NODES_BEFORE_TIME_CHECK 10000000000
 
 //	Size of general-purpose buffer for messages from server, log, etc.
@@ -213,14 +222,27 @@ char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","
 #define N_CLIENT_STRINGS 3
 char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
 
-unsigned long int nodesChecked;		//	Count of nodes checked since last time check
-unsigned long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
+long int totalNodeCount, subTreesSplit, subTreesCompleted;
+long int nodesChecked;		//	Count of nodes checked since last time check
+long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
+long int nodesToProbe, nodesLeft;
 time_t startedCurrentTask;			//	Time we started current task
 time_t timeOfLastCheckin;			//	Time we last contacted the server
 
 
 static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
 static char LOG_FILE_NAME[FILE_NAME_SIZE];
+
+//	Known values from previous calculations
+
+int known3[][2]={{0,3},{1,6}};
+int known4[][2]={{0,4},{1,8},{2,12},{3,14},{4,18},{5,20},{6,24}};
+int known5[][2]={{0,5},{1,10},{2,15},{3,20},{4,23},{5,28},{6,33},{7,36},{8,41},{9,46},{10,49},{11,53},{12,58},{13,62},{14,66},{15,70},{16,74},{17,79},{18,83},{19,87},{20,92},{21,96},{22,99},{23,103},{24,107},{25,111},{26,114},{27,116},{28,118},{29,120}};
+int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{9,56},{10,62},{11,68},{12,74},{13,78},{14,84},{15,90},{16,94},{17,100},{18,106},{19,112},{20,116},{21,122},{22,128},{23,134},{24,138},{25,144},{26,150},{27,154},{28,160},{29,166},{30,172},{31,176},{32,182},{33,188},{34,192},{35,198},{36,203},{37,209},{38,214},{39,220},{40,225},{41,230},{42,236},{43,241},{44,246},{45,252},{46,257},{47,262},{48,268},{49,274},{50,279},{51,284},{52,289},{53,295},{54,300},{55,306},{56,311},{57,316},{58,322},{59,327},{60,332},{61,338},{62,344},{63,349},{64,354},{65,360},{66,364},{67,370},{68,375},{69,380},{70,386},{71,391},{72,396},{73,402},{74,407},{75,412},{76,418},{77,423},{78,429},{79,434},{80,439},{81,445},{82,450},{83,455},{84,461},{85,465},{86,470},{87,476},{88,481},{89,486},{90,492},{91,497},{92,502},{93,507},{94,512},{95,518},{96,523},{97,528},{98,534},{99,539},{100,543},{101,548},{102,552},{103,558},{104,564},{105,568},{106,572},{107,578},{108,583},{109,589},{110,594},{111,599},{112,604},{113,608}};
+
+int *knownN=NULL;
+int maxKnownW=0;
+
 
 //	Function definitions
 //	--------------------
@@ -233,11 +255,11 @@ void sendServerCommandAndLog(const char *s);
 int logServerResponse(const char *reqd);
 void registerClient(void);
 int getTask(struct task *tsk);
-int getMax(int nval, int wval, int oldMax);
+int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi);
 void doTask(void);
 void splitTask(int pos);
 void fillStr(int pos, int pfound, int partNum);
-int fillStrDL(int pos, int pfound, int partNum, int depth);
+int fillStrNL(int pos, int pfound, int partNum);
 int fac(int k);
 void makePerms(int n, int **permTab);
 void witnessCurrentString(int size);
@@ -334,6 +356,10 @@ while (TRUE)
 		logString(buffer);
 		
 		doTask();
+		
+		#if NO_SERVER
+		break;
+		#endif
 		};
 	};
 return 0;
@@ -369,6 +395,27 @@ maxW = fn;
 
 MFREE(mperm_res)
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
+
+#if NO_SERVER
+if (n==3) {knownN = &known3[0][0]; maxKnownW=sizeof(known3)/(sizeof(int))/2;}
+else if (n==4) {knownN = &known4[0][0]; maxKnownW=sizeof(known4)/(sizeof(int))/2;}
+else if (n==5) {knownN = &known5[0][0]; maxKnownW=sizeof(known5)/(sizeof(int))/2;}
+else if (n==6) {knownN = &known6[0][0]; maxKnownW=sizeof(known6)/(sizeof(int))/2;}
+else
+	{
+	printf("Error: No data available for n=%d\n",n);
+	exit(EXIT_FAILURE);
+	};
+	
+if (currentTask.w_value > maxKnownW)
+	{
+	printf("Error: No data available for w=%d\n",currentTask.w_value);
+	exit(EXIT_FAILURE);
+	};
+	
+for (int i=0; i<currentTask.w_value; i++) mperm_res[i] = knownN[2*i+1];
+
+#endif
 
 //	Compute number of bits we will shift final digit
 
@@ -611,6 +658,9 @@ ocpTrackingOff = !ocpTrackingOn;
 //	Set baseline times
 
 nodesChecked = 0;
+totalNodeCount = 0;
+subTreesSplit = 0;
+subTreesCompleted = 0;
 time(&startedCurrentTask);
 time(&timeOfLastCheckin);
 
@@ -619,27 +669,34 @@ time(&timeOfLastCheckin);
 done=FALSE;
 splitMode=FALSE;
 max_perm = currentTask.perm_to_exceed;
-max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
 
 if (max_perm+1 < currentTask.prev_perm_ruled_out)
 	{
-	fillStr(currentTask.prefixLen,pf,partNum0);;
+	fillStr(currentTask.prefixLen,pf,partNum0);
 	};
 
 //	Finish with current task with the server
 
-sprintf(buffer,"Finished current search, bestSeenP=%d",bestSeenP);
+sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%ld",
+	bestSeenP,totalNodeCount);
 logString(buffer);
+if (splitMode)
+	{
+	sprintf(buffer,"Delegated %ld sub-trees, completed %ld locally",subTreesSplit,subTreesCompleted);
+	logString(buffer);
+	};
 
 for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
 asciiString[bestSeenLen] = '\0';
 
+#if !NO_SERVER
 sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u",
 	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1);
 sendServerCommandAndLog(buffer);
 
 free(currentTask.prefix);
 free(currentTask.branchOrder);
+#endif
 }
 
 
@@ -651,7 +708,22 @@ if (done) return;
 
 if (splitMode)
 	{
-	if (!fillStrDL(pos,pfound,partNum,n+1)) splitTask(pos);
+	nodesLeft = nodesToProbe;
+	if (fillStrNL(pos,pfound,partNum))
+		{
+		if ((subTreesCompleted++)%10==0)
+			{
+			printf("Completed %ld sub-trees locally so far ...\n",subTreesCompleted);
+			};
+		}
+	else
+		{
+		splitTask(pos);
+		if ((subTreesSplit++)%10==0)
+			{
+			printf("Delegated %ld sub-trees so far ...\n",subTreesSplit);
+			};
+		};
 	return;
 	};
 
@@ -661,7 +733,8 @@ if (pfound > bestSeenP)
 	bestSeenLen = pos;
 	for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
 	};
-	
+
+totalNodeCount++;
 if (++nodesChecked >= nodesBeforeTimeCheck)
 	{
 	//	We have hit a threshold for nodes checked, so time to check the time
@@ -674,30 +747,26 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	//	time closer to the target
 	
 	printf("ElapsedTime=%lf\n",elapsedTime);
-	printf("Current nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+	printf("Current nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
 	
-	unsigned long int nbtc = nodesBeforeTimeCheck;
-	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (unsigned long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+	long int nbtc = nodesBeforeTimeCheck;
+	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
 
 	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%lu\n",nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
 
-	nodesChecked = 0;
 	timeOfLastCheckin = t;
+	nodesChecked = 0;
 	
 	//	We have hit a threshold for elapsed time since last check in with the server
+	//	Check in and get current maximum for the (n,w) pair we are working on
 	
-	sprintf(buffer,"action=checkIn&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
+	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm,
 		currentTask.task_id, currentTask.access_code,clientID,ipAddress,programInstance);
-	sendServerCommandAndLog(buffer);
-	
-	//	Also check for current maximum for the (n,w) pair we are working on
-	
-	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm);
 	if (max_perm+1 >= currentTask.prev_perm_ruled_out)
 		{
 		done=TRUE;
@@ -710,7 +779,9 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		//	We have hit a threshold for elapsed time since we started this task, so split the task
 		
 		startedCurrentTask = t;
-		logString("Splitting current task ...");
+		nodesToProbe = (unsigned long int) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
+		sprintf(buffer,"Splitting current task, will examine up to %ld nodes in each subtree ...",nodesToProbe);
+		logString(buffer);
 		splitMode=TRUE;
 		};
 	};
@@ -863,12 +934,13 @@ if (deferredRepeat)
 	};
 }
 
-//	Depth-limited version of fillStr()
+//	Node-limited version of fillStr()
 
-int fillStrDL(int pos, int pfound, int partNum, int depthLimit)
+int fillStrNL(int pos, int pfound, int partNum)
 {
 if (done) return TRUE;
-if (depthLimit < 0) return FALSE;
+if (--nodesLeft < 0) return FALSE;
+int res = TRUE;
 
 if (pfound > bestSeenP)
 	{
@@ -974,7 +1046,7 @@ for	(int y=0; y<nm; y++)
 			oneCycleBins[prevC-1]++;
 		
 			curi[pos] = childIndex++;
-			if (!fillStrDL(pos+1, pfound+1, ndz->nextPart,depthLimit-1)) return FALSE;
+			res = fillStrNL(pos+1, pfound+1, ndz->nextPart);
 		
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
@@ -983,7 +1055,7 @@ for	(int y=0; y<nm; y++)
 		else
 			{
 			curi[pos] = childIndex++;
-			if (!fillStrDL(pos+1, pfound+1, ndz->nextPart, depthLimit-1)) return FALSE;
+			res = fillStrNL(pos+1, pfound+1, ndz->nextPart);
 			};
 		unvisited[tperm]=TRUE;
 		}
@@ -1000,7 +1072,7 @@ for	(int y=0; y<nm; y++)
 			if	(d > 0)
 				{
 				curi[pos] = childIndex++;
-				if (!fillStrDL(pos+1, pfound, ndz->nextPart,depthLimit-1)) return FALSE;
+				res = fillStrNL(pos+1, pfound, ndz->nextPart);
 				}
 			else
 				{
@@ -1008,6 +1080,7 @@ for	(int y=0; y<nm; y++)
 				};
 			};
 		};
+	if (!res) return FALSE;
 	};
 	
 //	If we encountered a choice that led to a repeat visit to a permutation, we follow (or prune) that branch now.
@@ -1020,11 +1093,11 @@ if (deferredRepeat)
 		{
 		curstr[pos] = nd->digit;
 		curi[pos] = childIndex++;
-		if (!fillStrDL(pos+1, pfound, nd->nextPart,depthLimit-1)) return FALSE;
+		res = fillStrNL(pos+1, pfound, nd->nextPart);
 		};
 	};
 	
-return TRUE;
+return res;
 }
 
 // this function computes the factorial of a number
@@ -1086,10 +1159,13 @@ asciiString[size] = '\0';
 sprintf(buffer, "Found %d permutations in string %s", max_perm, asciiString);
 logString(buffer);
 
+#if !NO_SERVER
+
 //	Log it with the server
 
 sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,tot_bl,asciiString);
 sendServerCommandAndLog(buffer);
+#endif
 }
 
 //	Compare two digitScore structures for quicksort()
@@ -1214,6 +1290,15 @@ fclose(fp);
 //
 //	Returns non-zero if an error was encountered 
 
+#if NO_SERVER
+
+int sendServerCommand(const char *command)
+{
+return 0;
+}
+
+#else
+
 int sendServerCommand(const char *command)
 {
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
@@ -1240,11 +1325,22 @@ free(cmd);
 return res;
 }
 
+#endif
+
 //	Read the server's response into the log;
 //	If first argument is not null, it is a string that the first line must match.
 //
 //	Return TRUE if all OK, FALSE if any line starts with "Error" or "<" (the latter indicates a
 //	server HTML error file)
+
+#if NO_SERVER
+
+int logServerResponse(const char *reqd)
+{
+return TRUE;
+}
+
+#else
 
 int logServerResponse(const char *reqd)
 {
@@ -1282,6 +1378,8 @@ while (!feof(fp))
 fclose(fp);
 return result;
 }
+
+#endif
 
 int parseTaskParameters(const char *s, unsigned long int slen, struct task *tsk, int taskItems, int *tif)
 {
@@ -1355,6 +1453,32 @@ return taskItems;
 //	0	no task available
 //	-1	quit instruction from server
 //	n	n value for task
+
+#if NO_SERVER
+
+//	Insert details of the search to run here
+
+int getTask(struct task *tsk)
+{
+tsk->task_id = 0;
+tsk->access_code = 0;
+
+tsk->n_value = 6;
+tsk->w_value = 105;
+tsk->prefix =
+"1234561234516234512634512364512346512436512463512465312465132465134265134625134652134562135";
+tsk->branchOrder =
+"0000000000000000000000000000000000000100000000000000000000000000020000000000000000000100001";
+tsk->perm_to_exceed = 567;
+tsk->prev_perm_ruled_out = 569;
+
+tsk->prefixLen = (unsigned int)strlen(tsk->prefix);
+tsk->branchOrderLen = (unsigned int)strlen(tsk->branchOrder);
+setupForN(tsk->n_value);
+return tsk->n_value;
+}
+
+#else
 
 int getTask(struct task *tsk)
 {
@@ -1431,6 +1555,8 @@ if (taskItems == N_TASK_STRINGS) return tsk->n_value;
 return 0;
 }
 
+#endif
+
 void sendServerCommandAndLog(const char *s)
 {
 sprintf(lbuffer,"To server: %s",s);
@@ -1450,9 +1576,18 @@ if (!logServerResponse(NULL))
 	};
 }
 
-int getMax(int nval, int wval, int oldMax)
+
+int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi)
 {
-sprintf(buffer,"action=checkMax&n=%d&w=%d",	nval, wval);
+#if NO_SERVER
+
+return oldMax;
+
+#else
+
+sprintf(buffer,
+	"action=checkMax&n=%d&w=%d&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
+		nval, wval, tid, acc, cid, ip, pi);
 sendServerCommandAndLog(buffer);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
@@ -1492,6 +1627,7 @@ while (!feof(fp))
 fclose(fp);
 
 return max;
+#endif
 }
 
 //	Create a new task to delegate a branch exploration that the current task would have performed
@@ -1509,6 +1645,15 @@ sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
 sendServerCommandAndLog(buffer);
 sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);
 }
+
+#if NO_SERVER
+
+void registerClient()
+{
+return;
+}
+
+#else
 
 void registerClient()
 {
@@ -1581,3 +1726,5 @@ if (clientItems!=N_CLIENT_STRINGS)
 	exit(EXIT_FAILURE);
 	};
 }
+
+#endif
