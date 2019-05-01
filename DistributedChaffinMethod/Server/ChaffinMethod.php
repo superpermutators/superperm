@@ -7,7 +7,7 @@ $versionRequired = 6;
 
 //	Maximum number of clients to register
 
-$maxClients = 20;
+$maxClients = 24;
 
 //	Valid range for $n
 
@@ -18,6 +18,42 @@ $max_n = 7;
 
 $A_LO = 100000000;
 $A_HI = 999999999;
+
+//	Record number of instances of this script
+
+function instanceCount($inc,$def)
+{
+$fname = "InstanceCount.txt";
+$fp = fopen($fname, "r+");
+if ($fp===FALSE)
+	{
+	$fp = fopen($fname, "w");
+	if (!($fp===FALSE))
+		{
+		fwrite($fp, $def<10?"0$def":"$def");
+		fclose($fp);
+		};
+	}
+else	
+	{
+	for ($i=0; $i<3; $i++)
+		{
+		if (flock($fp, LOCK_EX))	// acquire an exclusive lock
+			{
+			$ic = fgets($fp);
+			$id=intval($ic);
+			$iq = intval($ic)+$inc;
+			fseek($fp,0,SEEK_SET);
+			fwrite($fp, $iq<10?"0$iq":"$iq");
+			fflush($fp);            // flush output before releasing the lock
+			flock($fp, LOCK_UN);    // release the lock
+			break;
+			};
+		sleep(1);
+		}
+	fclose($fp);
+	};
+}
 
 //	Function to check (what should be) a digit string to see if it is valid, and count the number of distinct permutations it visits.
 
@@ -808,13 +844,14 @@ else
 	};
 }
 
-
 //	Process query string
 //	====================
 
 $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
+
+instanceCount(1,1);
 
 if (is_string($qs))
 	{
@@ -995,5 +1032,7 @@ if (is_string($qs))
 	};
 
 if (!$queryOK) echo "Error: $err \n";
+
+instanceCount(-1,0);
 
 ?>

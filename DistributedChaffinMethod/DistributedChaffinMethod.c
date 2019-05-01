@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 6.0
-Last Updated: 30 April 2019
+Version: 6.1
+Last Updated: 1 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -85,6 +85,10 @@ another instance of the program.
 //	Server URL
 
 #define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=6&"
+
+//	URL for InstanceCount file
+
+#define IC_URL "http://www.gregegan.net/SCIENCE/Superpermutations/InstanceCount.txt"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
@@ -266,6 +270,7 @@ void witnessCurrentString(int size);
 int compareDS(const void *ii0, const void *jj0);
 void rClassMin(int *p, int n);
 int pruneOnPerms(int w, int d0);
+int getServerInstanceCount(void);
 
 //	Main program
 //	------------
@@ -1286,6 +1291,54 @@ fprintf(fp,"%s %s\n",tsb, s);
 fclose(fp);
 }
 
+//	Get the Instance Count of the server process
+
+#if NO_SERVER
+
+int getServerInstanceCount()
+{
+return 0
+}
+
+#else
+
+int getServerInstanceCount()
+{
+//	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
+//	current command fails.
+
+FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
+if (fp==NULL)
+	{
+	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	exit(EXIT_FAILURE);
+	};
+fclose(fp);
+
+unsigned long int ulen = strlen(URL_UTILITY);
+unsigned long int slen = strlen(IC_URL);
+unsigned long int flen = strlen(SERVER_RESPONSE_FILE_NAME);
+unsigned long int len = ulen+slen+flen+10;
+char *cmd;
+CHECK_MEM( cmd = malloc(len*sizeof(char)) )
+sprintf(cmd,"%s \"%s\" > %s",URL_UTILITY,IC_URL,SERVER_RESPONSE_FILE_NAME);
+int res = system(cmd);
+free(cmd);
+if (res!=0) return 1;
+
+fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
+if (fp==NULL)
+	{
+	printf("Error: Unable to read server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	exit(EXIT_FAILURE);
+	};
+if (fscanf(fp,"%d",&res)!=1) res=1;
+fclose(fp);
+return res;
+}
+
+#endif
+
 //	Send a command string via URL_UTILITY to the server at SERVER_URL, putting the response in the file SERVER_RESPONSE_FILE_NAME
 //
 //	Returns non-zero if an error was encountered 
@@ -1301,6 +1354,16 @@ return 0;
 
 int sendServerCommand(const char *command)
 {
+//	Wait for instance count to drop to zero
+
+while (TRUE)
+	{
+	int ic = getServerInstanceCount();
+	if (ic==0) break;
+	logString("Waiting for server to be free");
+	sleep(ic);
+	};
+	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
 //	current command fails.
 
