@@ -1361,7 +1361,7 @@ while (TRUE)
 	int ic = getServerInstanceCount();
 	if (ic==0) break;
 	logString("Waiting for server to be free");
-	sleep(ic);
+	sleepForSecs(ic);
 	};
 	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
