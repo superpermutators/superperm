@@ -7,7 +7,7 @@ $versionRequired = 6;
 
 //	Maximum number of clients to register
 
-$maxClients = 24;
+$maxClients = 48;
 
 //	Valid range for $n
 
@@ -53,6 +53,29 @@ else
 		}
 	fclose($fp);
 	};
+}
+
+//	Function to check that a string contains only the characters 0-9 and .
+
+function checkString($str)
+{
+$sp = str_split($str);
+$sl = count($sp);
+$ok = TRUE;
+for ($i=0; $i<$sl; $i++)
+	{
+	$c = $sp[$i];
+	if ($c!='.' && $c!='0')
+		{
+		$v = intval($c);
+		if ($v<1 || $v>9)
+			{
+			$ok=FALSE;
+			break;
+			};
+		};
+	};
+return $ok;
 }
 
 //	Function to check (what should be) a digit string to see if it is valid, and count the number of distinct permutations it visits.
@@ -857,6 +880,24 @@ if (is_string($qs))
 	{
 	parse_str($qs, $q);
 	
+	//	Validate query string arguments
+	
+	reset($q);
+	$ok = TRUE;
+	for ($i=0; $i<count($q); $i++)
+		{
+		$k = key($q);
+		$v = current($q);
+		next($q);
+		if ($k!='action' && $k!='pwd' && !checkString($v))
+			{
+			$ok=FALSE;
+			break;
+			};
+		};
+	
+	if ($ok)
+	{
 	$version = $q['version'];
 	if ((!is_string($version)) || intval($version) < $versionRequired)
 		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
@@ -1029,6 +1070,7 @@ if (is_string($qs))
 				};
 			};
 		};
+	};
 	};
 
 if (!$queryOK) echo "Error: $err \n";
