@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 6.1
+Version: 6.2
 Last Updated: 1 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -102,6 +102,11 @@ another instance of the program.
 //	Name of log file
 
 #define LOG_FILE_NAME_TEMPLATE "DCMLog_%u.txt"
+
+//	Name of stop files
+
+#define STOP_FILE_NAME_TEMPLATE "STOP_%u.txt"
+#define STOP_FILE_ALL "STOP_ALL.txt"
 
 //	Max size of file names
 
@@ -236,6 +241,7 @@ time_t timeOfLastCheckin;			//	Time we last contacted the server
 
 static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
 static char LOG_FILE_NAME[FILE_NAME_SIZE];
+static char STOP_FILE_NAME[FILE_NAME_SIZE];
 
 //	Known values from previous calculations
 
@@ -258,6 +264,7 @@ int sendServerCommand(const char *command);
 void sendServerCommandAndLog(const char *s);
 int logServerResponse(const char *reqd);
 void registerClient(void);
+void unregisterClient(void);
 int getTask(struct task *tsk);
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi);
 void doTask(void);
@@ -277,6 +284,8 @@ int getServerInstanceCount(void);
 
 int main(int argc, const char * argv[])
 {
+FILE *fp;
+
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
 
@@ -290,10 +299,11 @@ while(TRUE)
 	programInstance=rand();
 	sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,programInstance);
 	sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,programInstance);
+	sprintf(STOP_FILE_NAME,STOP_FILE_NAME_TEMPLATE,programInstance);
 	
 	//	Check for pre-existing files to avoid any collisions
 	
-	FILE *fp = fopen(LOG_FILE_NAME,"r");
+	fp = fopen(LOG_FILE_NAME,"r");
 	if (fp!=NULL)
 		{
 		fclose(fp);
@@ -310,6 +320,10 @@ while(TRUE)
 	};
 	
 sprintf(buffer,"Program instance number: %u",programInstance);
+logString(buffer);
+sprintf(buffer,
+	"To stop the program automatically between tasks, create a file %s or %s in the working directory\n",
+	STOP_FILE_NAME,STOP_FILE_ALL);
 logString(buffer);
 
 int justTest = argc==2 && strcmp(argv[1],"test")==0;
@@ -333,6 +347,24 @@ registerClient();
 
 while (TRUE)
 	{
+	//	Check for STOP files
+	
+	fp = fopen(STOP_FILE_NAME,"r");
+	if (fp!=NULL)
+		{
+		printf("Detected the presence of the file %s, so stopping\n",STOP_FILE_NAME);
+		unregisterClient();
+		exit(0);
+		};
+	
+	fp = fopen(STOP_FILE_ALL,"r");
+	if (fp!=NULL)
+		{
+		printf("Detected the presence of the file %s, so stopping\n",STOP_FILE_ALL);
+		unregisterClient();
+		exit(0);
+		};
+	
 	sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);	//	Put a floor under the frequency of server contacts
 	
 	int t = getTask(&currentTask);
@@ -1788,6 +1820,25 @@ if (clientItems!=N_CLIENT_STRINGS)
 	printf("Error: Incomplete response from server, only saw %d of %d items\n",clientItems,N_CLIENT_STRINGS);
 	exit(EXIT_FAILURE);
 	};
+}
+
+#endif
+
+#if NO_SERVER
+
+void unregisterClient()
+{
+return;
+}
+
+#else
+
+void unregisterClient()
+{
+sprintf(buffer,
+	"action=unregister&clientID=%u&IP=%s&programInstance=%u",
+		clientID, ipAddress, programInstance);
+sendServerCommandAndLog(buffer);
 }
 
 #endif

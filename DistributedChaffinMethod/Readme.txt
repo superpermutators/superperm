@@ -2,7 +2,7 @@ Readme.txt
 ==========
 
 Author:			Greg Egan
-Date:			24 April 2019
+Date:			1 May 2019
 
 Building and testing
 --------------------
@@ -32,6 +32,16 @@ computations.
 
 It is also best if the program can be left running continuously, but if you do kill the program or shut down the computer it is
 running on, then (eventually) the task it was assigned will be reassigned to another instance of the program.
+
+You can tell the program to shut down between tasks by placing a file in its working directory with the name:
+
+STOP_NNNNNNNNNN.txt
+
+where NNNNNNN is the same program instance number as used to distinguish the log files.  Or, if you use the name:
+
+STOP_ALL.txt
+
+then any instance of the program using that directory will treat that as a signal to shut down.
 
 
 Files written

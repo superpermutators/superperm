@@ -867,6 +867,39 @@ else
 	};
 }
 
+
+//	Function to unregister a worker, using their supplied program instance number, client ID and IP address
+
+function unregister($cid,$ip,$pi)
+{
+global $host, $user_name, $pwd, $dbase;
+
+$mysqli = new mysqli($host, $user_name, $pwd, $dbase);
+if ($mysqli->connect_errno)
+	{
+	return "Error: Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error . "\n";
+	}
+else
+	{
+	if (!$mysqli->real_query("LOCK TABLES workers WRITE"))
+		{
+		$mysqli->close();
+		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		};
+		
+	if (!$mysqli->real_query("DELETE FROM workers WHERE id=$cid AND instance_num=$pi AND IP='$ip'"))
+		$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	else
+		{
+		$result = "OK, client record deleted\n";
+		};
+	
+	$mysqli->real_query("UNLOCK TABLES");
+	$mysqli->close();
+	return $result;
+	};
+}
+
 //	Process query string
 //	====================
 
@@ -930,6 +963,17 @@ if (is_string($qs))
 					{
 					$queryOK = TRUE;
 					echo getTask($cid,$ip,$pi);
+					};
+				}
+			else if ($action == "unregister")
+				{
+				$pi = $q['programInstance'];
+				$cid = $q['clientID'];
+				$ip = $q['IP'];
+				if (is_string($pi) && is_string($cid) && is_string($ip))
+					{
+					$queryOK = TRUE;
+					echo unregister($cid,$ip,$pi);
 					};
 				}
 			else if ($action == "splitTask")
