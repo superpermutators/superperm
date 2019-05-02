@@ -86,7 +86,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethodTest.php?version=6&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=6&"
 
 //	URL for InstanceCount file
 
