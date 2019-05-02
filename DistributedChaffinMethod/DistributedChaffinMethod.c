@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 6.2
-Last Updated: 1 May 2019
+Version: 6.2.1
+Last Updated: 2 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -40,6 +40,7 @@ another instance of the program.
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <stdint.h>
 
 #ifdef _WIN32
 
@@ -84,7 +85,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=6&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethodTest.php?version=6&"
 
 //	URL for InstanceCount file
 
@@ -231,10 +232,10 @@ char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","
 #define N_CLIENT_STRINGS 3
 char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
 
-long int totalNodeCount, subTreesSplit, subTreesCompleted;
-long int nodesChecked;		//	Count of nodes checked since last time check
-long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
-long int nodesToProbe, nodesLeft;
+int64_t totalNodeCount, subTreesSplit, subTreesCompleted;
+int64_t nodesChecked;		//	Count of nodes checked since last time check
+int64_t nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
+int64_t nodesToProbe, nodesLeft;
 time_t startedCurrentTask;			//	Time we started current task
 time_t timeOfLastCheckin;			//	Time we last contacted the server
 
@@ -714,12 +715,12 @@ if (max_perm+1 < currentTask.prev_perm_ruled_out)
 
 //	Finish with current task with the server
 
-sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%ld",
+sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%lld",
 	bestSeenP,totalNodeCount);
 logString(buffer);
 if (splitMode)
 	{
-	sprintf(buffer,"Delegated %ld sub-trees, completed %ld locally",subTreesSplit,subTreesCompleted);
+	sprintf(buffer,"Delegated %lld sub-trees, completed %lld locally",subTreesSplit,subTreesCompleted);
 	logString(buffer);
 	};
 
@@ -750,7 +751,7 @@ if (splitMode)
 		{
 		if ((subTreesCompleted++)%10==0)
 			{
-			printf("Completed %ld sub-trees locally so far ...\n",subTreesCompleted);
+			printf("Completed %lld sub-trees locally so far ...\n",subTreesCompleted);
 			};
 		}
 	else
@@ -758,7 +759,7 @@ if (splitMode)
 		splitTask(pos);
 		if ((subTreesSplit++)%10==0)
 			{
-			printf("Delegated %ld sub-trees so far ...\n",subTreesSplit);
+			printf("Delegated %lld sub-trees so far ...\n",subTreesSplit);
 			};
 		};
 	return;
@@ -784,17 +785,17 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	//	time closer to the target
 	
 	printf("ElapsedTime=%lf\n",elapsedTime);
-	printf("Current nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	printf("Current nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
 	
-	long int nbtc = nodesBeforeTimeCheck;
-	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	int64_t nbtc = nodesBeforeTimeCheck;
+	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (int64_t) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
 
 	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
 
 	timeOfLastCheckin = t;
 	nodesChecked = 0;
@@ -816,8 +817,8 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		//	We have hit a threshold for elapsed time since we started this task, so split the task
 		
 		startedCurrentTask = t;
-		nodesToProbe = (unsigned long int) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
-		sprintf(buffer,"Splitting current task, will examine up to %ld nodes in each subtree ...",nodesToProbe);
+		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
+		sprintf(buffer,"Splitting current task, will examine up to %lld nodes in each subtree ...",nodesToProbe);
 		logString(buffer);
 		splitMode=TRUE;
 		};
@@ -1306,7 +1307,7 @@ ct = localtime(&t1);
 static char tsb[30];
 char *ts = asctime(ct);
 strcpy(tsb,ts);
-unsigned long int tlen = strlen(tsb);
+size_t tlen = strlen(tsb);
 if (tsb[tlen-1]=='\n') tsb[tlen-1]='\0';
 
 //	Output string with time stamps
@@ -1347,10 +1348,10 @@ if (fp==NULL)
 	};
 fclose(fp);
 
-unsigned long int ulen = strlen(URL_UTILITY);
-unsigned long int slen = strlen(IC_URL);
-unsigned long int flen = strlen(SERVER_RESPONSE_FILE_NAME);
-unsigned long int len = ulen+slen+flen+10;
+size_t ulen = strlen(URL_UTILITY);
+size_t slen = strlen(IC_URL);
+size_t flen = strlen(SERVER_RESPONSE_FILE_NAME);
+size_t len = ulen+slen+flen+10;
 char *cmd;
 CHECK_MEM( cmd = malloc(len*sizeof(char)) )
 sprintf(cmd,"%s \"%s\" > %s",URL_UTILITY,IC_URL,SERVER_RESPONSE_FILE_NAME);
@@ -1407,11 +1408,11 @@ if (fp==NULL)
 	};
 fclose(fp);
 
-unsigned long int ulen = strlen(URL_UTILITY);
-unsigned long int slen = strlen(SERVER_URL);
-unsigned long int clen = strlen(command);
-unsigned long int flen = strlen(SERVER_RESPONSE_FILE_NAME);
-unsigned long int len = ulen+slen+clen+flen+10;
+size_t ulen = strlen(URL_UTILITY);
+size_t slen = strlen(SERVER_URL);
+size_t clen = strlen(command);
+size_t flen = strlen(SERVER_RESPONSE_FILE_NAME);
+size_t len = ulen+slen+clen+flen+10;
 char *cmd;
 CHECK_MEM( cmd = malloc(len*sizeof(char)) )
 sprintf(cmd,"%s \"%s%s\" > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FILE_NAME);
@@ -1454,7 +1455,7 @@ while (!feof(fp))
 	
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
-	unsigned long int blen = strlen(buffer);
+	size_t blen = strlen(buffer);
 	if (buffer[blen-1]=='\n')
 		{
 		buffer[blen-1]='\0';
@@ -1476,13 +1477,13 @@ return result;
 
 #endif
 
-int parseTaskParameters(const char *s, unsigned long int slen, struct task *tsk, int taskItems, int *tif)
+int parseTaskParameters(const char *s, size_t slen, struct task *tsk, int taskItems, int *tif)
 {
 //	Look for a task parameter
 
 for (int i=0;i<N_TASK_STRINGS;i++)
 	{
-	unsigned long int len = strlen(taskStrings[i]);
+	size_t len = strlen(taskStrings[i]);
 	if (strncmp(s,taskStrings[i],len)==0)
 		{
 		switch(i)
@@ -1600,7 +1601,7 @@ while (!feof(fp))
 	
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
-	unsigned long int blen = strlen(buffer);
+	size_t blen = strlen(buffer);
 	if (buffer[blen-1]=='\n')
 		{
 		buffer[blen-1]='\0';
@@ -1699,7 +1700,7 @@ while (!feof(fp))
 	
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
-	unsigned long int blen = strlen(buffer);
+	size_t blen = strlen(buffer);
 	if (buffer[blen-1]=='\n')
 		{
 		buffer[blen-1]='\0';
@@ -1770,7 +1771,7 @@ while (!feof(fp))
 	
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
-	unsigned long int blen = strlen(buffer);
+	size_t blen = strlen(buffer);
 	if (buffer[blen-1]=='\n')
 		{
 		buffer[blen-1]='\0';
@@ -1779,7 +1780,7 @@ while (!feof(fp))
 
 	for (int i=0;i<N_CLIENT_STRINGS;i++)
 		{
-		unsigned long int len = strlen(clientStrings[i]);
+		size_t len = strlen(clientStrings[i]);
 		if (strncmp(buffer,clientStrings[i],len)==0)
 			{
 			switch(i)
