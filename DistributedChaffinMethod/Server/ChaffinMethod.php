@@ -17,7 +17,7 @@ $versionForNewTasks = 6;
 
 //	Maximum number of clients to register
 
-$maxClients = 48;
+$maxClients = 60;
 
 //	Valid range for $n
 
@@ -748,6 +748,7 @@ else
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
 	$res = $mysqli->query("SELECT * FROM tasks WHERE id=$id AND access=$access FOR UPDATE");
+	
 	if ($res->num_rows==1)
 		{
 		$res->data_seek(0);
@@ -766,6 +767,7 @@ else
 
 			if (substr($new_pref,0,$pref_len)==$pref)
 				{
+				
 				//	See if we have a higher permutation in the witness_strings database, to supersede the original task's perm_to_exceed
 				
 				$w = $row['waste'];
@@ -780,14 +782,16 @@ else
 					$pw = intval($pw_str);
 					if ($pw > $pte) $pte = $pw;
 					};
-
+				
 				//	Base the new task on the old one
 				
 				$new_access = mt_rand($A_LO,$A_HI);
 				$fieldList = "";
 				$valuesList = "";
 				$c = 0;
+				
 				reset($row);
+				
 				for ($j=0; $j < count($row); $j++)
 					{
 					$field = key($row);
@@ -810,10 +814,8 @@ else
 					next($row);
 					};
 					
-				$ok = $mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")");
-				if (!$ok) break;
-				
-				$result = "OK\n"; 
+				if ($mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")")) $result = "OK\n";
+				else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 				}
 			else $result = "Error: Invalid new prefix string $new_pref\n";
 			}
@@ -829,8 +831,10 @@ else
 	$mysqli->real_query("UNLOCK TABLES");
 	$mysqli->close();
 	return $result;
+	
 	};
-} 
+}
+
 
 //	Function to register a worker, using their supplied program instance number and their IP address
 
@@ -924,7 +928,7 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
-instanceCount(1,1);
+instanceCount(2,2);
 
 if (is_string($qs))
 	{
@@ -1149,6 +1153,6 @@ if (is_string($qs))
 
 if (!$queryOK) echo "Error: $err \n";
 
-instanceCount(-1,0);
+instanceCount(-2,0);
 
 ?>
