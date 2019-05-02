@@ -41,6 +41,7 @@ another instance of the program.
 #include <stdlib.h>
 #include <time.h>
 #include <stdint.h>
+#include <inttypes.h>
 
 #ifdef _WIN32
 
@@ -715,12 +716,12 @@ if (max_perm+1 < currentTask.prev_perm_ruled_out)
 
 //	Finish with current task with the server
 
-sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%lld",
+sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%"PRId64,
 	bestSeenP,totalNodeCount);
 logString(buffer);
 if (splitMode)
 	{
-	sprintf(buffer,"Delegated %lld sub-trees, completed %lld locally",subTreesSplit,subTreesCompleted);
+	sprintf(buffer,"Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
 	logString(buffer);
 	};
 
@@ -751,7 +752,7 @@ if (splitMode)
 		{
 		if ((subTreesCompleted++)%10==0)
 			{
-			printf("Completed %lld sub-trees locally so far ...\n",subTreesCompleted);
+			printf("Completed %"PRId64" sub-trees locally so far ...\n",subTreesCompleted);
 			};
 		}
 	else
@@ -759,7 +760,7 @@ if (splitMode)
 		splitTask(pos);
 		if ((subTreesSplit++)%10==0)
 			{
-			printf("Delegated %lld sub-trees so far ...\n",subTreesSplit);
+			printf("Delegated %"PRId64" sub-trees so far ...\n",subTreesSplit);
 			};
 		};
 	return;
@@ -785,17 +786,17 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	//	time closer to the target
 	
 	printf("ElapsedTime=%lf\n",elapsedTime);
-	printf("Current nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
+	printf("Current nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 	
 	int64_t nbtc = nodesBeforeTimeCheck;
 	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (int64_t) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 
 	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%lld\n",nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 
 	timeOfLastCheckin = t;
 	nodesChecked = 0;
@@ -818,7 +819,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		
 		startedCurrentTask = t;
 		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
-		sprintf(buffer,"Splitting current task, will examine up to %lld nodes in each subtree ...",nodesToProbe);
+		sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 		logString(buffer);
 		splitMode=TRUE;
 		};
