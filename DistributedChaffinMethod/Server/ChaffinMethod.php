@@ -1,9 +1,19 @@
 <?php
 include 'ink2.php';
 
-//	Version of the client required
+//	Version of the client ABSOLUTELY required.
+//  Note that if this is changed while clients are running tasks,
+//	those tasks will be disrupted and will need to be cancelled and reallocated
+//	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
+//	with a call to cancelStalledClients.
 
-$versionRequired = 6;
+$versionAbsolutelyRequired = 6;
+
+//	Version of the client required for new registrations and new tasks to be allocated.
+//	If this is changed while clients are running tasks, the task will continue uninterrupted;
+//	the client will be unregistered and will exit cleanly the next time it asks for a new task.
+
+$versionForNewTasks = 6;
 
 //	Maximum number of clients to register
 
@@ -678,7 +688,14 @@ else
 				
 				if (analyseString($str,$n) > 0)
 					{
-					if ($mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access"))
+					//	See if we have found a string that makes other searches redundant
+										
+					$ppro = intval($row['prev_perm_ruled_out']);
+					if ($ppro>0 && $pro >= $ppro)
+						$qry = "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'";
+					else $qry = "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access";
+					
+					if ($mysqli->real_query($qry))
 						{
 						$res2 = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND (status='A' OR status='U') LIMIT 1");
 						if ($res2->num_rows==0) $result = finishedAllTasks($n, $w, $iter, $mysqli);
@@ -931,9 +948,9 @@ if (is_string($qs))
 	
 	if ($ok)
 	{
-	$version = $q['version'];
-	if ((!is_string($version)) || intval($version) < $versionRequired)
-		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+	$version = intval($q['version']);
+	if ($version < $versionAbsolutelyRequired)
+		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionAbsolutelyRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
 	else
 		{
 		$action = $q['action'];
@@ -947,11 +964,16 @@ if (is_string($qs))
 				}
 			else if ($action == "register")
 				{
-				$pi = $q['programInstance'];
-				if (is_string($pi))
+				if ($version < $versionForNewTasks)
+					$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+				else
 					{
-					$queryOK = TRUE;
-					echo register($pi);
+							$pi = $q['programInstance'];
+							if (is_string($pi))
+								{
+								$queryOK = TRUE;
+								echo register($pi);
+								};
 					};
 				}
 			else if ($action == "getTask")
@@ -961,8 +983,16 @@ if (is_string($qs))
 				$ip = $q['IP'];
 				if (is_string($pi) && is_string($cid) && is_string($ip))
 					{
-					$queryOK = TRUE;
-					echo getTask($cid,$ip,$pi);
+					if ($version < $versionForNewTasks)
+						{
+						unregister($cid,$ip,$pi);
+						$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+						}
+					else
+						{
+						$queryOK = TRUE;
+						echo getTask($cid,$ip,$pi);
+						};
 					};
 				}
 			else if ($action == "unregister")
