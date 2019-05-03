@@ -386,7 +386,8 @@ logString(buffer);
 #if UNIX_LIKE
 
 sigIntAction.sa_handler = sigIntHandler;
-sigIntAction.sa_mask = 0;
+sigemptyset(&sigIntAction.sa_mask);
+sigaddset(&sigIntAction.sa_mask, SIGINT);
 sigIntAction.sa_flags = 0;
 if (sigaction(SIGINT, &sigIntAction,NULL)==0) logString("CTRL-C / SIGINT will be trapped, so you can use it to tell the program to quit after it has finished the current task.\n");
 else logString("Unable to set a handler for CTRL-C / SIGINT, so these actions will kill the program immediately.\n");
