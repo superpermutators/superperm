@@ -40,6 +40,8 @@ another instance of the program.
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 #ifdef _WIN32
 
@@ -222,10 +224,10 @@ char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","
 #define N_CLIENT_STRINGS 3
 char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
 
-long int totalNodeCount, subTreesSplit, subTreesCompleted;
-long int nodesChecked;		//	Count of nodes checked since last time check
-long int nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
-long int nodesToProbe, nodesLeft;
+int64_t totalNodeCount, subTreesSplit, subTreesCompleted;
+int64_t nodesChecked;		//	Count of nodes checked since last time check
+int64_t nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
+int64_t nodesToProbe, nodesLeft;
 time_t startedCurrentTask;			//	Time we started current task
 time_t timeOfLastCheckin;			//	Time we last contacted the server
 
@@ -677,12 +679,12 @@ if (max_perm+1 < currentTask.prev_perm_ruled_out)
 
 //	Finish with current task with the server
 
-sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%ld",
+sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%"PRId64,
 	bestSeenP,totalNodeCount);
 logString(buffer);
 if (splitMode)
 	{
-	sprintf(buffer,"Delegated %ld sub-trees, completed %ld locally",subTreesSplit,subTreesCompleted);
+	sprintf(buffer,"Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
 	logString(buffer);
 	};
 
@@ -713,7 +715,7 @@ if (splitMode)
 		{
 		if ((subTreesCompleted++)%10==0)
 			{
-			printf("Completed %ld sub-trees locally so far ...\n",subTreesCompleted);
+			printf("Completed %"PRId64" sub-trees locally so far ...\n",subTreesCompleted);
 			};
 		}
 	else
@@ -721,7 +723,7 @@ if (splitMode)
 		splitTask(pos);
 		if ((subTreesSplit++)%10==0)
 			{
-			printf("Delegated %ld sub-trees so far ...\n",subTreesSplit);
+			printf("Delegated %"PRId64" sub-trees so far ...\n",subTreesSplit);
 			};
 		};
 	return;
@@ -747,17 +749,17 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	//	time closer to the target
 	
 	printf("ElapsedTime=%lf\n",elapsedTime);
-	printf("Current nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	printf("Current nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 	
-	long int nbtc = nodesBeforeTimeCheck;
-	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (long int) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	int64_t nbtc = nodesBeforeTimeCheck;
+	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (int64_t) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 
 	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%ld\n",nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 
 	timeOfLastCheckin = t;
 	nodesChecked = 0;
@@ -779,8 +781,8 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		//	We have hit a threshold for elapsed time since we started this task, so split the task
 		
 		startedCurrentTask = t;
-		nodesToProbe = (unsigned long int) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
-		sprintf(buffer,"Splitting current task, will examine up to %ld nodes in each subtree ...",nodesToProbe);
+		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
+		sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 		logString(buffer);
 		splitMode=TRUE;
 		};
