@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 6.2.1
-Last Updated: 2 May 2019
+Version: 7.0
+Last Updated: 3 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -42,6 +42,9 @@ another instance of the program.
 #include <time.h>
 #include <stdint.h>
 #include <inttypes.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
 
 #ifdef _WIN32
 
@@ -49,22 +52,24 @@ another instance of the program.
 
 #include <windows.h>
 #include <process.h>
+#include <io.h>
+#define UNIX_LIKE FALSE
 
 #else
 
 //	Compiling for MacOS or Linux
 
 #include <unistd.h>
+#include <signal.h>
+
+#define TRUE (1==1)
+#define FALSE (1==0)
+#define UNIX_LIKE TRUE
 
 #endif
 
 //	Constants
 //	---------
-
-//	Logical truth values
-
-#define TRUE (1==1)
-#define FALSE (1==0)
 
 //	Smallest and largest values of n accepted
 
@@ -86,7 +91,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=6&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=7&"
 
 //	URL for InstanceCount file
 
@@ -222,9 +227,6 @@ int ocpTrackingOn, ocpTrackingOff;
 //	For n=0,1,2,3,4,5,6,7
 int ocpThreshold[]={1000,1000,1000,1000, 6, 24, 120, 720};
 
-char buffer[BUFFER_SIZE];
-char lbuffer[BUFFER_SIZE];
-
 struct task currentTask;
 
 #define N_TASK_STRINGS 8
@@ -237,20 +239,37 @@ int64_t totalNodeCount, subTreesSplit, subTreesCompleted;
 int64_t nodesChecked;		//	Count of nodes checked since last time check
 int64_t nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
 int64_t nodesToProbe, nodesLeft;
+time_t startedRunning;				//	Time program started running
 time_t startedCurrentTask;			//	Time we started current task
 time_t timeOfLastCheckin;			//	Time we last contacted the server
 
+#if UNIX_LIKE
+
+//	Signal action structure
+
+struct sigaction sigIntAction;
+int hadSigInt;
+
+#endif
 
 static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
 static char LOG_FILE_NAME[FILE_NAME_SIZE];
 static char STOP_FILE_NAME[FILE_NAME_SIZE];
 
-//	Known values from previous calculations
+//	Time quota, in minutes
+//	The default is for the "timeLimit" option with no argument;
+//	default behaviour is to keep running indefinitely
+
+#define DEFAULT_TIME_LIMIT 60
+
+int timeQuotaMins=0;
+
+//	Known values from previous calculations (these are used for debugging without access to the server)
 
 int known3[][2]={{0,3},{1,6}};
 int known4[][2]={{0,4},{1,8},{2,12},{3,14},{4,18},{5,20},{6,24}};
 int known5[][2]={{0,5},{1,10},{2,15},{3,20},{4,23},{5,28},{6,33},{7,36},{8,41},{9,46},{10,49},{11,53},{12,58},{13,62},{14,66},{15,70},{16,74},{17,79},{18,83},{19,87},{20,92},{21,96},{22,99},{23,103},{24,107},{25,111},{26,114},{27,116},{28,118},{29,120}};
-int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{9,56},{10,62},{11,68},{12,74},{13,78},{14,84},{15,90},{16,94},{17,100},{18,106},{19,112},{20,116},{21,122},{22,128},{23,134},{24,138},{25,144},{26,150},{27,154},{28,160},{29,166},{30,172},{31,176},{32,182},{33,188},{34,192},{35,198},{36,203},{37,209},{38,214},{39,220},{40,225},{41,230},{42,236},{43,241},{44,246},{45,252},{46,257},{47,262},{48,268},{49,274},{50,279},{51,284},{52,289},{53,295},{54,300},{55,306},{56,311},{57,316},{58,322},{59,327},{60,332},{61,338},{62,344},{63,349},{64,354},{65,360},{66,364},{67,370},{68,375},{69,380},{70,386},{71,391},{72,396},{73,402},{74,407},{75,412},{76,418},{77,423},{78,429},{79,434},{80,439},{81,445},{82,450},{83,455},{84,461},{85,465},{86,470},{87,476},{88,481},{89,486},{90,492},{91,497},{92,502},{93,507},{94,512},{95,518},{96,523},{97,528},{98,534},{99,539},{100,543},{101,548},{102,552},{103,558},{104,564},{105,568},{106,572},{107,578},{108,583},{109,589},{110,594},{111,599},{112,604},{113,608}};
+int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{9,56},{10,62},{11,68},{12,74},{13,78},{14,84},{15,90},{16,94},{17,100},{18,106},{19,112},{20,116},{21,122},{22,128},{23,134},{24,138},{25,144},{26,150},{27,154},{28,160},{29,166},{30,172},{31,176},{32,182},{33,188},{34,192},{35,198},{36,203},{37,209},{38,214},{39,220},{40,225},{41,230},{42,236},{43,241},{44,246},{45,252},{46,257},{47,262},{48,268},{49,274},{50,279},{51,284},{52,289},{53,295},{54,300},{55,306},{56,311},{57,316},{58,322},{59,327},{60,332},{61,338},{62,344},{63,349},{64,354},{65,360},{66,364},{67,370},{68,375},{69,380},{70,386},{71,391},{72,396},{73,402},{74,407},{75,412},{76,418},{77,423},{78,429},{79,434},{80,439},{81,445},{82,450},{83,455},{84,461},{85,465},{86,470},{87,476},{88,481},{89,486},{90,492},{91,497},{92,502},{93,507},{94,512},{95,518},{96,523},{97,528},{98,534},{99,539},{100,543},{101,548},{102,552},{103,558},{104,564},{105,568},{106,572},{107,578},{108,583},{109,589},{110,594},{111,599},{112,604},{113,608},{114,613}};
 
 int *knownN=NULL;
 int maxKnownW=0;
@@ -263,7 +282,7 @@ void logString(const char *s);
 void sleepForSecs(int secs);
 void setupForN(int nval);
 int sendServerCommand(const char *command);
-void sendServerCommandAndLog(const char *s);
+void sendServerCommandAndLog(const char *s, const char *reqd);
 int logServerResponse(const char *reqd);
 void registerClient(void);
 void unregisterClient(void);
@@ -280,20 +299,23 @@ int compareDS(const void *ii0, const void *jj0);
 void rClassMin(int *p, int n);
 int pruneOnPerms(int w, int d0);
 int getServerInstanceCount(void);
+void sigIntHandler(int a);
 
 //	Main program
 //	------------
 
 int main(int argc, const char * argv[])
 {
+static char buffer[BUFFER_SIZE];
 FILE *fp;
+int justTest=FALSE;
+timeQuotaMins=0;
 
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
 
-time_t t0;
-time(&t0);
-int rseed=(int)( (t0 + clock()) % (1<<31) );
+time(&startedRunning);
+int rseed=(int)( (startedRunning + clock()) % (1<<31) );
 srand(rseed);
 
 while(TRUE)
@@ -323,25 +345,54 @@ while(TRUE)
 	
 sprintf(buffer,"Program instance number: %u",programInstance);
 logString(buffer);
+
+//	Process command line arguments
+
+for (int i=1;i<argc;i++)
+	{
+	if (strcmp(argv[i],"test")==0) justTest=TRUE;
+	else if (strcmp(argv[i],"timeLimit")==0)
+		{
+		if (i+1<argc)
+			{
+			if (sscanf(argv[i+1],"%d",&timeQuotaMins) != 1 || timeQuotaMins <= 0) timeQuotaMins = DEFAULT_TIME_LIMIT;
+			else i++;
+			}
+		else timeQuotaMins = DEFAULT_TIME_LIMIT;
+		
+		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
+		logString(buffer);
+		}
+	else
+		{
+		printf("Unknown option %s\n",argv[i]);
+		exit(EXIT_FAILURE);
+		};
+	};
+
+//	First, just check we can establish contact with the server
+
+sendServerCommandAndLog("action=hello","Hello world.");
+
+if (justTest) exit(0);
+
 sprintf(buffer,
 	"To stop the program automatically between tasks, create a file %s or %s in the working directory\n",
 	STOP_FILE_NAME,STOP_FILE_ALL);
 logString(buffer);
 
-int justTest = argc==2 && strcmp(argv[1],"test")==0;
+//	Set up handler for SIGINT (e.g. from CTRL-C)
 
-//	First, just check we can establish contact with the server
+#if UNIX_LIKE
 
-int s1 = sendServerCommand("action=hello");
-int s2 = logServerResponse("Hello world.");
+sigIntAction.sa_handler = sigIntHandler;
+sigIntAction.sa_mask = 0;
+sigIntAction.sa_flags = 0;
+if (sigaction(SIGINT, &sigIntAction,NULL)==0) logString("CTRL-C / SIGINT will be trapped, so you can use it to tell the program to quit after it has finished the current task.\n");
+else logString("Unable to set a handler for CTRL-C / SIGINT, so these actions will kill the program immediately.\n");
+hadSigInt=FALSE;
 
-if (s1!=0 || (!s2))
-	{
-	logString("Error: Failed to make contact with the server\n");
-	exit(EXIT_FAILURE);
-	};
-	
-if (justTest) exit(0);
+#endif
 
 //	Register with the server, offering to do actual work
 
@@ -349,12 +400,26 @@ registerClient();
 
 while (TRUE)
 	{
+	//	Check for CTRL-C / SIGINT
+	
+	#if UNIX_LIKE
+	
+	if (hadSigInt)
+		{
+		logString("Received CTRL-C / SIGINT, so stopping.\n");
+		unregisterClient();
+		exit(0);
+		};
+	
+	#endif
+	
 	//	Check for STOP files
 	
 	fp = fopen(STOP_FILE_NAME,"r");
 	if (fp!=NULL)
 		{
-		printf("Detected the presence of the file %s, so stopping\n",STOP_FILE_NAME);
+		sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",STOP_FILE_NAME);
+		logString(buffer);
 		unregisterClient();
 		exit(0);
 		};
@@ -362,9 +427,26 @@ while (TRUE)
 	fp = fopen(STOP_FILE_ALL,"r");
 	if (fp!=NULL)
 		{
-		printf("Detected the presence of the file %s, so stopping\n",STOP_FILE_ALL);
+		sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",STOP_FILE_ALL);
+		logString(buffer);
 		unregisterClient();
 		exit(0);
+		};
+		
+	//	Check to see if we exceed time quota
+	
+	if (timeQuotaMins > 0)
+		{
+		time_t currentTime;
+		time(&currentTime);
+		double elapsedTime = difftime(currentTime, startedRunning);
+		if (elapsedTime / 60 > timeQuotaMins)
+			{
+			sprintf(buffer,"Program has exceeded the time quota of %d minutes, so stopping.\n",timeQuotaMins);
+			logString(buffer);
+			unregisterClient();
+			exit(0);
+			};
 		};
 	
 	sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);	//	Put a floor under the frequency of server contacts
@@ -650,6 +732,8 @@ mperm_res[0] = n;		//	With no wasted characters, we can visit n permutations
 
 void doTask()
 {
+static char buffer[BUFFER_SIZE];
+
 tot_bl = currentTask.w_value;
 
 //	Initialise all permutations as unvisited
@@ -731,7 +815,7 @@ asciiString[bestSeenLen] = '\0';
 #if !NO_SERVER
 sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u",
 	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 
 free(currentTask.prefix);
 free(currentTask.branchOrder);
@@ -743,6 +827,7 @@ free(currentTask.branchOrder);
 
 void fillStr(int pos, int pfound, int partNum)
 {
+static char buffer[BUFFER_SIZE];
 if (done) return;
 
 if (splitMode)
@@ -1188,6 +1273,8 @@ else
 
 void witnessCurrentString(int size)
 {
+static char buffer[BUFFER_SIZE];
+
 //	Convert current digit string to null-terminated ASCII string
 
 for (int k=0;k<size;k++) asciiString[k] = '0'+curstr[k];
@@ -1203,7 +1290,7 @@ logString(buffer);
 //	Log it with the server
 
 sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,tot_bl,asciiString);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 #endif
 }
 
@@ -1424,24 +1511,29 @@ return res;
 
 #endif
 
-//	Read the server's response into the log;
+//	Read the server's last response into the log.
 //	If first argument is not null, it is a string that the first line must match.
 //
-//	Return TRUE if all OK, FALSE if any line starts with "Error" or "<" (the latter indicates a
-//	server HTML error file)
+//	Returns:
+//
+//	0 if all is OK
+//	1 if it contains a Wait request, or "<", indicating HTML (server-generated error page, probably due to resource limit)
+//	-1 if there was an Error
 
 #if NO_SERVER
 
 int logServerResponse(const char *reqd)
 {
-return TRUE;
+return 0;
 }
 
 #else
 
 int logServerResponse(const char *reqd)
 {
-int result = TRUE;
+static char buffer[BUFFER_SIZE], lbuffer[BUFFER_SIZE];
+int error=FALSE, wait=FALSE;
+	
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
@@ -1464,16 +1556,18 @@ while (!feof(fp))
 		};
 	lineNumber++;
 		
-	if (strncmp(buffer,"Error",5)==0 || buffer[0]=='<') result=FALSE;
-	
-	if (lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) result=FALSE;
+	if (strncmp(buffer,"Error",5)==0) error=TRUE;
+	if (strncmp(buffer,"Wait",4)==0 || buffer[0]=='<') wait=TRUE;
+	if (!wait && lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) error=TRUE;
 	
 	sprintf(lbuffer,"Server: %s",buffer);
 	logString(lbuffer);
 	};
-	
 fclose(fp);
-return result;
+	
+if (error) return -1;
+if (wait) return 1;
+return 0;
 }
 
 #endif
@@ -1579,8 +1673,9 @@ return tsk->n_value;
 
 int getTask(struct task *tsk)
 {
+static char buffer[BUFFER_SIZE];
 sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u",clientID,ipAddress,programInstance);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -1654,28 +1749,37 @@ return 0;
 
 #endif
 
-void sendServerCommandAndLog(const char *s)
+void sendServerCommandAndLog(const char *s, const char *reqd)
 {
-sprintf(lbuffer,"To server: %s",s);
-logString(lbuffer);
+static char buffer[BUFFER_SIZE];
+sprintf(buffer,"To server: %s",s);
+logString(buffer);
 
 while (TRUE)
 	{
-	int srep = sendServerCommand(s);
-	if (srep==0) break;
-	logString("Unable to send command to server, will retry shortly");
-	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
-	};
-
-if (!logServerResponse(NULL))
-	{
-	exit(EXIT_FAILURE);
+	int sleepTime = 0;
+	int srep=sendServerCommand(s);
+	if (srep==0)
+		{
+		int sr = logServerResponse(reqd);
+		if (sr==0) return;
+		
+		if (sr<0) exit(EXIT_FAILURE);
+		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS;
+		}
+	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
+	
+	sprintf(buffer,"Unable to send command to server, will retry after %d seconds\n",sleepTime);
+	logString(buffer);
+	sleepForSecs(sleepTime);
 	};
 }
 
 
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi)
 {
+static char buffer[BUFFER_SIZE];
+
 #if NO_SERVER
 
 return oldMax;
@@ -1685,7 +1789,7 @@ return oldMax;
 sprintf(buffer,
 	"action=checkMax&n=%d&w=%d&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
 		nval, wval, tid, acc, cid, ip, pi);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -1731,6 +1835,8 @@ return max;
 
 void splitTask(int pos)
 {
+static char buffer[BUFFER_SIZE];
+
 for (int i=0;i<pos;i++) asciiString[i]='0'+curstr[i];
 asciiString[pos]='\0';
 
@@ -1739,7 +1845,7 @@ asciiString2[pos]='\0';
 
 sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
 	currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);
 }
 
@@ -1754,8 +1860,10 @@ return;
 
 void registerClient()
 {
+static char buffer[BUFFER_SIZE];
+
 sprintf(buffer,"action=register&programInstance=%u",programInstance);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -1837,10 +1945,24 @@ return;
 
 void unregisterClient()
 {
+static char buffer[BUFFER_SIZE];
+
 sprintf(buffer,
 	"action=unregister&clientID=%u&IP=%s&programInstance=%u",
 		clientID, ipAddress, programInstance);
-sendServerCommandAndLog(buffer);
+sendServerCommandAndLog(buffer,NULL);
 }
 
+#endif
+
+//	Handler for SIGINT
+
+#if UNIX_LIKE
+
+void sigIntHandler(int a)
+{
+hadSigInt=TRUE;
+printf("\n");
+logString("CTRL-C / SIGINT received, so program will quit after the current task.\n");
+}
 #endif

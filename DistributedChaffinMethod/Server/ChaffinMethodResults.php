@@ -77,8 +77,9 @@ if (is_string($str))
 return "";
 }
 
-
 include 'ink1.php';
+
+if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
  
 $min_n = 3;
 $max_n = 7;

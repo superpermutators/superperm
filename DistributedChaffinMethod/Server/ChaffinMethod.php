@@ -17,7 +17,7 @@ $versionForNewTasks = 6;
 
 //	Maximum number of clients to register
 
-$maxClients = 60;
+$maxClients = 80;
 
 //	Valid range for $n
 
@@ -33,6 +33,7 @@ $A_HI = 999999999;
 
 function instanceCount($inc,$def)
 {
+$ii=0;
 $fname = "InstanceCount.txt";
 $fp = fopen($fname, "r+");
 if ($fp===FALSE)
@@ -46,23 +47,25 @@ if ($fp===FALSE)
 	}
 else	
 	{
+	$ii=1;
 	for ($i=0; $i<3; $i++)
 		{
-		if (flock($fp, LOCK_EX))	// acquire an exclusive lock
+		if (flock($fp, LOCK_EX))
 			{
 			$ic = fgets($fp);
-			$id=intval($ic);
-			$iq = intval($ic)+$inc;
+			$ii = intval($ic);
+			$iq = $ii+$inc;
 			fseek($fp,0,SEEK_SET);
 			fwrite($fp, $iq<10?"0$iq":"$iq");
-			fflush($fp);            // flush output before releasing the lock
-			flock($fp, LOCK_UN);    // release the lock
+			fflush($fp);
+			flock($fp, LOCK_UN);
 			break;
 			};
 		sleep(1);
-		}
+		};
 	fclose($fp);
 	};
+return $ii; 
 }
 
 //	Function to check that a string contains only the characters 0-9 and .
@@ -928,7 +931,7 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
-instanceCount(2,2);
+$ic=instanceCount(2,2);
 
 if (is_string($qs))
 	{
@@ -957,187 +960,195 @@ if (is_string($qs))
 		$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionAbsolutelyRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
 	else
 		{
-		$action = $q['action'];
-		
-		if (is_string($action))
+		if ($version >= 7 && $ic != 0)
 			{
-			if ($action == "hello")
+			$queryOK = TRUE;
+			echo "Wait\n";
+			}
+		else
+			{
+			$action = $q['action'];
+			
+			if (is_string($action))
 				{
-				$queryOK = TRUE;
-				echo "Hello world.\n";
-				}
-			else if ($action == "register")
-				{
-				if ($version < $versionForNewTasks)
-					$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
-				else
+				if ($action == "hello")
 					{
-							$pi = $q['programInstance'];
-							if (is_string($pi))
-								{
-								$queryOK = TRUE;
-								echo register($pi);
-								};
-					};
-				}
-			else if ($action == "getTask")
-				{
-				$pi = $q['programInstance'];
-				$cid = $q['clientID'];
-				$ip = $q['IP'];
-				if (is_string($pi) && is_string($cid) && is_string($ip))
+					$queryOK = TRUE;
+					echo "Hello world.\n";
+					}
+				else if ($action == "register")
 					{
 					if ($version < $versionForNewTasks)
-						{
-						unregister($cid,$ip,$pi);
 						$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
-						}
 					else
 						{
-						$queryOK = TRUE;
-						echo getTask($cid,$ip,$pi);
+								$pi = $q['programInstance'];
+								if (is_string($pi))
+									{
+									$queryOK = TRUE;
+									echo register($pi);
+									};
 						};
-					};
-				}
-			else if ($action == "unregister")
-				{
-				$pi = $q['programInstance'];
-				$cid = $q['clientID'];
-				$ip = $q['IP'];
-				if (is_string($pi) && is_string($cid) && is_string($ip))
+					}
+				else if ($action == "getTask")
 					{
-					$queryOK = TRUE;
-					echo unregister($cid,$ip,$pi);
-					};
-				}
-			else if ($action == "splitTask")
-				{
-				$id = $q['id'];
-				$access = $q['access'];
-				$new_pref = $q['newPrefix'];
-				$branchOrder = $q['branchOrder'];
-				if (is_string($id) && is_string($access) && is_string($new_pref) && is_string($branchOrder))
-					{
-					$queryOK = TRUE;
-					echo splitTask($id, $access, $new_pref, $branchOrder);
-					};
-				}
-			else if ($action == "cancelStalledTasks")
-				{
-				$maxMins_str = $q['maxMins'];
-				$maxMins = intval($maxMins_str);
-				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
-					{
-					$queryOK = TRUE;
-					echo cancelStalledTasks($maxMins);
-					};
-				}
-			else if ($action == "cancelStalledClients")
-				{
-				$maxMins_str = $q['maxMins'];
-				$maxMins = intval($maxMins_str);
-				if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
-					{
-					$queryOK = TRUE;
-					echo cancelStalledClients($maxMins);
-					};
-				}
-			else if ($action == "finishTask")
-				{
-				$id = $q['id'];
-				$access = $q['access'];
-				$pro_str = $q['pro'];
-				$str = $q['str'];
-				if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str))
-					{
-					$pro = intval($pro_str);
-					if ($pro > 0)
+					$pi = $q['programInstance'];
+					$cid = $q['clientID'];
+					$ip = $q['IP'];
+					if (is_string($pi) && is_string($cid) && is_string($ip))
 						{
-						$queryOK = TRUE;
-						echo finishTask($id, $access, $pro, $str);
-						};
-					};
-				}
-			else
-				{
-				$n_str = $q['n'];
-				$w_str = $q['w'];
-				if (is_string($n_str) && is_string($w_str))
-					{
-					$n = intval($n_str);
-					$w = intval($w_str);
-					if ($n >= $min_n && $n <= $max_n && $w >= 0)
-						{
-						//	"checkMax" action checks in and queries current maximum permutation count.
-						//
-						//	Returns:  (n, w, p) for current maximum p, or "Error: ... "
-						
-						if ($action == "checkMax")
+						if ($version < $versionForNewTasks)
 							{
-							$id = $q['id'];
-							$access = $q['access'];
-							$cid = $q['clientID'];
-							$ip = $q['IP'];
-							$pi = $q['programInstance'];
-							if (is_string($id) && is_string($access) && is_string($pi) && is_string($cid) && is_string($ip))
-								{
-								$queryOK = TRUE;
-								echo checkMax($id, $access, $cid, $ip, $pi, $n, $w);
-								};
+							unregister($cid,$ip,$pi);
+							$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
 							}
 						else
 							{
-							$str = $q['str'];
-							if (is_string($str))
+							$queryOK = TRUE;
+							echo getTask($cid,$ip,$pi);
+							};
+						};
+					}
+				else if ($action == "unregister")
+					{
+					$pi = $q['programInstance'];
+					$cid = $q['clientID'];
+					$ip = $q['IP'];
+					if (is_string($pi) && is_string($cid) && is_string($ip))
+						{
+						$queryOK = TRUE;
+						echo unregister($cid,$ip,$pi);
+						};
+					}
+				else if ($action == "splitTask")
+					{
+					$id = $q['id'];
+					$access = $q['access'];
+					$new_pref = $q['newPrefix'];
+					$branchOrder = $q['branchOrder'];
+					if (is_string($id) && is_string($access) && is_string($new_pref) && is_string($branchOrder))
+						{
+						$queryOK = TRUE;
+						echo splitTask($id, $access, $new_pref, $branchOrder);
+						};
+					}
+				else if ($action == "cancelStalledTasks")
+					{
+					$maxMins_str = $q['maxMins'];
+					$maxMins = intval($maxMins_str);
+					if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
+						{
+						$queryOK = TRUE;
+						echo cancelStalledTasks($maxMins);
+						};
+					}
+				else if ($action == "cancelStalledClients")
+					{
+					$maxMins_str = $q['maxMins'];
+					$maxMins = intval($maxMins_str);
+					if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd'])
+						{
+						$queryOK = TRUE;
+						echo cancelStalledClients($maxMins);
+						};
+					}
+				else if ($action == "finishTask")
+					{
+					$id = $q['id'];
+					$access = $q['access'];
+					$pro_str = $q['pro'];
+					$str = $q['str'];
+					if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str))
+						{
+						$pro = intval($pro_str);
+						if ($pro > 0)
+							{
+							$queryOK = TRUE;
+							echo finishTask($id, $access, $pro, $str);
+							};
+						};
+					}
+				else
+					{
+					$n_str = $q['n'];
+					$w_str = $q['w'];
+					if (is_string($n_str) && is_string($w_str))
+						{
+						$n = intval($n_str);
+						$w = intval($w_str);
+						if ($n >= $min_n && $n <= $max_n && $w >= 0)
+							{
+							//	"checkMax" action checks in and queries current maximum permutation count.
+							//
+							//	Returns:  (n, w, p) for current maximum p, or "Error: ... "
+							
+							if ($action == "checkMax")
 								{
-								//	"witnessString" action verifies and possibly records a witness to a certain number of distinct permutations being
-								//	visited by a string with a certain number of wasted characters.
-								//
-								//	Query arguments: n, w, str.
-								//
-								//	Returns:  "Valid string ... " / (n, w, p) for current maximum p, or "Error: ... "
-								
-								if ($action == "witnessString")
+								$id = $q['id'];
+								$access = $q['access'];
+								$cid = $q['clientID'];
+								$ip = $q['IP'];
+								$pi = $q['programInstance'];
+								if (is_string($id) && is_string($access) && is_string($pi) && is_string($cid) && is_string($ip))
 									{
-									$p = analyseString($str,$n);
-									$slen = strlen($str);
-									$p0 = $slen - $w - $n + 1;
-									if ($p == $p0)
-										{
-										$queryOK = TRUE;
-										echo "Valid string $str with $p permutations\n";
-										$pp = strpos($qs,'pro');
-										if ($pp===FALSE) $pro = -1;
-										else
-											{
-											$pro_str = $q['pro'];
-											if (is_string($pro_str)) $pro = intval($pro_str);
-											else $pro = -1;
-											};
-										echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro);
-										}
-									else if ($p<0) $err = 'Invalid string';
-									else $err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";
-									}
+									$queryOK = TRUE;
+									echo checkMax($id, $access, $cid, $ip, $pi, $n, $w);
+									};
+								}
+							else
+								{
+								$str = $q['str'];
+								if (is_string($str))
+									{
+									//	"witnessString" action verifies and possibly records a witness to a certain number of distinct permutations being
+									//	visited by a string with a certain number of wasted characters.
+									//
+									//	Query arguments: n, w, str.
+									//
+									//	Returns:  "Valid string ... " / (n, w, p) for current maximum p, or "Error: ... "
 									
-								//	"createTask" action puts a new task into the tasks database.
-								//
-								//	Query arguments: n, w, str, pte, pwd.
-								//
-								//	where "pte" is the number of permutations to exceed in any strings the task finds.
-								//
-								//	Returns: "Task id: ... " or "Error: ... "
-								
-								else if ($action == "createTask")
-									{
-									$p_str = $q['pte'];
-									if (is_string($p_str) && $pwd==$q['pwd'])
+									if ($action == "witnessString")
 										{
-										$p = intval($p_str);
-										if ($p > 0 && analyseString($str,$n) > 0)
+										$p = analyseString($str,$n);
+										$slen = strlen($str);
+										$p0 = $slen - $w - $n + 1;
+										if ($p == $p0)
 											{
 											$queryOK = TRUE;
-											echo makeTask($n, $w, $p, $str);
+											echo "Valid string $str with $p permutations\n";
+											$pp = strpos($qs,'pro');
+											if ($pp===FALSE) $pro = -1;
+											else
+												{
+												$pro_str = $q['pro'];
+												if (is_string($pro_str)) $pro = intval($pro_str);
+												else $pro = -1;
+												};
+											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro);
+											}
+										else if ($p<0) $err = 'Invalid string';
+										else $err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";
+										}
+										
+									//	"createTask" action puts a new task into the tasks database.
+									//
+									//	Query arguments: n, w, str, pte, pwd.
+									//
+									//	where "pte" is the number of permutations to exceed in any strings the task finds.
+									//
+									//	Returns: "Task id: ... " or "Error: ... "
+									
+									else if ($action == "createTask")
+										{
+										$p_str = $q['pte'];
+										if (is_string($p_str) && $pwd==$q['pwd'])
+											{
+											$p = intval($p_str);
+											if ($p > 0 && analyseString($str,$n) > 0)
+												{
+												$queryOK = TRUE;
+												echo makeTask($n, $w, $p, $str);
+												};
 											};
 										};
 									};
