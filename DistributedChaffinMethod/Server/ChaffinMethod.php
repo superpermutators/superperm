@@ -29,6 +29,9 @@ $max_n = 7;
 $A_LO = 100000000;
 $A_HI = 999999999;
 
+//	Currently not using instanceCount
+
+/*
 //	Record number of instances of this script
 
 function instanceCount($inc,$def,&$didUpdate)
@@ -64,6 +67,7 @@ else
 	};
 return $ii; 
 }
+*/
 
 function factorial($n)
 {
@@ -952,8 +956,15 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
+//	Currently not using instanceCount
+
+/*
 $didUpdate=FALSE;
 $ic=instanceCount(2,2,$didUpdate);
+*/
+//	We set $ic to zero to say "OK to run, we don't care how many instances of the script are running
+
+$ic = 0;
 
 if (is_string($qs))
 	{
@@ -1186,6 +1197,8 @@ if (is_string($qs))
 
 if (!$queryOK) echo "Error: $err \n";
 
-if ($didUpdate) instanceCount(-2,0);
+//	Currently not using instanceCount
+
+//	if ($didUpdate) instanceCount(-2,0);
 
 ?>
