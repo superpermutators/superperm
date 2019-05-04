@@ -146,16 +146,17 @@ if ($res->rowCount() != 0)
 		};
 
 	$res = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
+
+
 	$distinctIP = $res->rowCount();
 
 	$maxTPI = 0;
 	// for ($i=0; $i < $distinctIP; $i++)
-	while ($row2 = $res->fetch())
+	while ($row = $res->fetch())
 		{
-			print_r($row2);
 		// $res->data_seek($i);
 		// $row2 = $res->fetch_array();
-		$tpi = intval($row2['COUNT(id)']);
+		$tpi = intval($row['COUNT(id)']);
 		if ($tpi > $maxTPI) $maxTPI=$tpi;
 		};
 	echo "<tr><td class='left' colspan='$nFields0'>$distinctIP distinct IP address".($distinctIP>1?"es":"")."</td></tr>\n";
