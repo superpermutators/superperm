@@ -100,6 +100,11 @@ $fieldAlign2 = array('center','right');
 $nFields2 = count($fieldNamesDisplay2);
 $statusAssoc2 = array("F"=>"Finished","U"=>"Unassigned","A"=>"Assigned");
 
+$fieldNames3 = array('ts','str');
+$fieldNamesDisplay3 = array('time stamp','superpermutation');
+$fieldAlign3 = array('center','str');
+$nFields3 = count($fieldNames3);
+
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 if ($mysqli->connect_errno)
 	{
@@ -148,6 +153,12 @@ else
 		};
 	$res->close();
 
+	$res = $mysqli->query("SHOW TABLE STATUS FROM $dbase LIKE 'superperms'");
+	$res->data_seek(0);
+	$row = $res->fetch_assoc();
+	$upd = $row['Update_time'];
+	$updTS0 = strtotime($upd);
+	
 	$res = $mysqli->query("SHOW TABLE STATUS FROM $dbase LIKE 'witness_strings'");
 	$res->data_seek(0);
 	$row = $res->fetch_assoc();
@@ -183,6 +194,46 @@ else
 			};
 		$res->close();
 
+		$fname0 = "Super$n.html";
+		
+		//	Create a fresh HTML file if the database has been updated since the file was modified
+		
+		if ((!file_exists($fname0)) || $updTS0 > filemtime($fname0))
+			{
+			$fp=fopen($fname0,"w");
+			$res = $mysqli->query("SELECT * FROM superperms WHERE n=$n ORDER BY ts DESC");
+
+			if ($res->num_rows != 0)
+				{
+				$noResults = FALSE;
+				
+				fwrite($fp,"<table class='strings'><caption>Superpermutations for <i>n</i> = $n</caption>\n<tr>\n");
+				for ($i = 0; $i < $nFields3; $i++)
+					{
+					fwrite($fp,"<th class='". $fieldAlign3[$i] ."'>" . $fieldNamesDisplay3[$i] . "</th>\n");
+					};
+				fwrite($fp,"</tr>\n");
+				for ($row_no = 0; $row_no < $res->num_rows; $row_no++)
+					{
+					fwrite($fp,"<tr>\n");
+					$res->data_seek($row_no);
+					$row = $res->fetch_assoc();
+					for ($i = 0; $i < $nFields3; $i++)
+						{
+						$val = $row[$fieldNames3[$i]];
+						if ($i==1) $val=decorateString($val, $n);
+						fwrite($fp,"<td class='". $fieldAlign3[$i] ."'>" . $val . "</td>\n");
+						};
+					fwrite($fp,"</tr>\n");
+					};
+				fwrite($fp,"</table>\n");
+				};
+			$res->close();
+			fclose($fp);
+			};
+			
+		echo file_get_contents($fname0);
+		
 		$fname = "Witness$n.html";
 		
 		//	Create a fresh HTML file if the database has been updated since the file was modified

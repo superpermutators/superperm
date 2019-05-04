@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 7.2
+Version: 8
 Last Updated: 4 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -91,7 +91,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=7&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=8&"
 
 //	URL for InstanceCount file
 
@@ -147,7 +147,7 @@ another instance of the program.
 
 //	Maximum time to spend exploring a subtree when splitting
 
-#define MAX_TIME_IN_SUBTREE 8
+#define MAX_TIME_IN_SUBTREE 10
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
@@ -229,6 +229,7 @@ int oneCycleBins[MAX_N+1];	//	The numbers of 1-cycles that have 0 ... n unvisite
 
 int done=FALSE;				//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
 int splitMode=FALSE;		//	Set TRUE when we are splitting the task
+int isSuper=FALSE;			//	Set TRUE when we have found a superpermutation
 
 //	Monitoring 1-cycle tracking
 
@@ -283,15 +284,15 @@ static char STOP_FILE_NAME[FILE_NAME_SIZE];
 
 int timeQuotaMins=0;
 
-//	Known values from previous calculations (these are used for debugging without access to the server)
+//	Known values from previous calculations
 
 int known3[][2]={{0,3},{1,6}};
 int known4[][2]={{0,4},{1,8},{2,12},{3,14},{4,18},{5,20},{6,24}};
 int known5[][2]={{0,5},{1,10},{2,15},{3,20},{4,23},{5,28},{6,33},{7,36},{8,41},{9,46},{10,49},{11,53},{12,58},{13,62},{14,66},{15,70},{16,74},{17,79},{18,83},{19,87},{20,92},{21,96},{22,99},{23,103},{24,107},{25,111},{26,114},{27,116},{28,118},{29,120}};
-int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{9,56},{10,62},{11,68},{12,74},{13,78},{14,84},{15,90},{16,94},{17,100},{18,106},{19,112},{20,116},{21,122},{22,128},{23,134},{24,138},{25,144},{26,150},{27,154},{28,160},{29,166},{30,172},{31,176},{32,182},{33,188},{34,192},{35,198},{36,203},{37,209},{38,214},{39,220},{40,225},{41,230},{42,236},{43,241},{44,246},{45,252},{46,257},{47,262},{48,268},{49,274},{50,279},{51,284},{52,289},{53,295},{54,300},{55,306},{56,311},{57,316},{58,322},{59,327},{60,332},{61,338},{62,344},{63,349},{64,354},{65,360},{66,364},{67,370},{68,375},{69,380},{70,386},{71,391},{72,396},{73,402},{74,407},{75,412},{76,418},{77,423},{78,429},{79,434},{80,439},{81,445},{82,450},{83,455},{84,461},{85,465},{86,470},{87,476},{88,481},{89,486},{90,492},{91,497},{92,502},{93,507},{94,512},{95,518},{96,523},{97,528},{98,534},{99,539},{100,543},{101,548},{102,552},{103,558},{104,564},{105,568},{106,572},{107,578},{108,583},{109,589},{110,594},{111,599},{112,604},{113,608},{114,613}};
+int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{9,56},{10,62},{11,68},{12,74},{13,78},{14,84},{15,90},{16,94},{17,100},{18,106},{19,112},{20,116},{21,122},{22,128},{23,134},{24,138},{25,144},{26,150},{27,154},{28,160},{29,166},{30,172},{31,176},{32,182},{33,188},{34,192},{35,198},{36,203},{37,209},{38,214},{39,220},{40,225},{41,230},{42,236},{43,241},{44,246},{45,252},{46,257},{47,262},{48,268},{49,274},{50,279},{51,284},{52,289},{53,295},{54,300},{55,306},{56,311},{57,316},{58,322},{59,327},{60,332},{61,338},{62,344},{63,349},{64,354},{65,360},{66,364},{67,370},{68,375},{69,380},{70,386},{71,391},{72,396},{73,402},{74,407},{75,412},{76,418},{77,423},{78,429},{79,434},{80,439},{81,445},{82,450},{83,455},{84,461},{85,465},{86,470},{87,476},{88,481},{89,486},{90,492},{91,497},{92,502},{93,507},{94,512},{95,518},{96,523},{97,528},{98,534},{99,539},{100,543},{101,548},{102,552},{103,558},{104,564},{105,568},{106,572},{107,578},{108,583},{109,589},{110,594},{111,599},{112,604},{113,608},{114,613},{115,618}};
 
 int *knownN=NULL;
-int maxKnownW=0;
+int numKnownW=0;
 
 
 //	Function definitions
@@ -543,25 +544,29 @@ maxW = fn;
 MFREE(mperm_res)
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
 
+if (n==3) {knownN = &known3[0][0]; numKnownW=sizeof(known3)/(sizeof(int))/2;}
+else if (n==4) {knownN = &known4[0][0]; numKnownW=sizeof(known4)/(sizeof(int))/2;}
+else if (n==5) {knownN = &known5[0][0]; numKnownW=sizeof(known5)/(sizeof(int))/2;}
+else if (n==6) {knownN = &known6[0][0]; numKnownW=sizeof(known6)/(sizeof(int))/2;}
+else knownN = NULL;
+
+if (knownN)
+	{
+	for (int i=0; i<numKnownW; i++) mperm_res[i] = knownN[2*i+1];
+	};
+
 #if NO_SERVER
-if (n==3) {knownN = &known3[0][0]; maxKnownW=sizeof(known3)/(sizeof(int))/2;}
-else if (n==4) {knownN = &known4[0][0]; maxKnownW=sizeof(known4)/(sizeof(int))/2;}
-else if (n==5) {knownN = &known5[0][0]; maxKnownW=sizeof(known5)/(sizeof(int))/2;}
-else if (n==6) {knownN = &known6[0][0]; maxKnownW=sizeof(known6)/(sizeof(int))/2;}
-else
+if (knownN==NULL)
 	{
 	printf("Error: No data available for n=%d\n",n);
 	exit(EXIT_FAILURE);
 	};
 	
-if (currentTask.w_value > maxKnownW)
+if (currentTask.w_value > numKnownW)
 	{
 	printf("Error: No data available for w=%d\n",currentTask.w_value);
 	exit(EXIT_FAILURE);
 	};
-	
-for (int i=0; i<currentTask.w_value; i++) mperm_res[i] = knownN[2*i+1];
-
 #endif
 
 //	Compute number of bits we will shift final digit
@@ -818,8 +823,9 @@ time(&timeOfLastCheckin);
 done=FALSE;
 splitMode=FALSE;
 max_perm = currentTask.perm_to_exceed;
+isSuper = (max_perm==fn);
 
-if (max_perm+1 < currentTask.prev_perm_ruled_out)
+if (isSuper || max_perm+1 < currentTask.prev_perm_ruled_out)
 	{
 	fillStr(currentTask.prefixLen,pf,partNum0);
 	};
@@ -920,7 +926,8 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	
 	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm,
 		currentTask.task_id, currentTask.access_code,clientID,ipAddress,programInstance);
-	if (max_perm+1 >= currentTask.prev_perm_ruled_out)
+	isSuper = (max_perm==fn);
+	if (max_perm+1 >= currentTask.prev_perm_ruled_out && !isSuper)
 		{
 		done=TRUE;
 		return;
@@ -1011,6 +1018,7 @@ for	(int y=0; y<nm; y++)
 		if (pfound+1>max_perm)
 			{
 			max_perm = pfound+1;
+			isSuper = (max_perm==fn);
 			witnessCurrentString(pos+1);
 
 			if (pfound+1 > bestSeenP)
@@ -1020,11 +1028,15 @@ for	(int y=0; y<nm; y++)
 				for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
 				};
 
-			if (max_perm+1 >= currentTask.prev_perm_ruled_out)
+			if (max_perm+1 >= currentTask.prev_perm_ruled_out && !isSuper)
 				{
 				done=TRUE;
 				return;
 				};
+			}
+		else if (isSuper && pfound+1 == max_perm)
+			{
+			witnessCurrentString(pos+1);
 			};
 
 		unvisited[tperm]=FALSE;
@@ -1060,7 +1072,7 @@ for	(int y=0; y<nm; y++)
 		else
 			{
 			int d = pruneOnPerms(spareW0, pfound - max_perm);
-			if	(d > 0)
+			if	(d > 0 || (isSuper && d>=0))
 				{
 				curi[pos] = childIndex++;
 				fillStr(pos+1, pfound, ndz->nextPart);
@@ -1079,7 +1091,7 @@ for	(int y=0; y<nm; y++)
 if (deferredRepeat)
 	{
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
-	if	(d>0)
+	if	(d>0 || (isSuper && d>=0))
 		{
 		curstr[pos] = nd->digit;
 		curi[pos] = childIndex++;
@@ -1174,6 +1186,7 @@ for	(int y=0; y<nm; y++)
 		if (pfound+1>max_perm)
 			{
 			max_perm = pfound+1;
+			isSuper = (max_perm==fn);
 			witnessCurrentString(pos+1);
 
 			if (pfound+1 > bestSeenP)
@@ -1183,11 +1196,15 @@ for	(int y=0; y<nm; y++)
 				for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
 				};
 
-			if (max_perm+1 >= currentTask.prev_perm_ruled_out)
+			if (max_perm+1 >= currentTask.prev_perm_ruled_out && !isSuper)
 				{
 				done=TRUE;
 				return TRUE;
 				};
+			}
+		else if (isSuper && pfound+1 == max_perm)
+			{
+			witnessCurrentString(pos+1);
 			};
 
 		unvisited[tperm]=FALSE;
@@ -1223,7 +1240,7 @@ for	(int y=0; y<nm; y++)
 		else
 			{
 			int d = pruneOnPerms(spareW0, pfound - max_perm);
-			if	(d > 0)
+			if	(d > 0 || (isSuper && d>=0))
 				{
 				curi[pos] = childIndex++;
 				res = fillStrNL(pos+1, pfound, ndz->nextPart);
@@ -1243,7 +1260,7 @@ for	(int y=0; y<nm; y++)
 if (deferredRepeat)
 	{
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
-	if	(d>0)
+	if	(d>0 || (isSuper && d>=0))
 		{
 		curstr[pos] = nd->digit;
 		curi[pos] = childIndex++;
@@ -1448,7 +1465,7 @@ fclose(fp);
 
 int getServerInstanceCount()
 {
-return 0
+return 0;
 }
 
 #else
@@ -1556,7 +1573,7 @@ return res;
 //	Returns:
 //
 //	0 if all is OK
-//	1 if it contains a Wait request, or "<", indicating HTML (server-generated error page, probably due to resource limit)
+//	1 if it contains a Wait request
 //	-1 if there was an Error
 
 #if NO_SERVER
@@ -1595,8 +1612,8 @@ while (!feof(fp))
 		};
 	lineNumber++;
 		
-	if (strncmp(buffer,"Error",5)==0) error=TRUE;
-	if (strncmp(buffer,"Wait",4)==0 || buffer[0]=='<') wait=TRUE;
+	if (strncmp(buffer,"Error",5)==0  || buffer[0]=='<') error=TRUE;
+	if (strncmp(buffer,"Wait",4)==0) wait=TRUE;
 	if (!wait && lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) error=TRUE;
 	
 	sprintf(lbuffer,"Server: %s",buffer);
@@ -1790,6 +1807,7 @@ return 0;
 
 void sendServerCommandAndLog(const char *s, const char *reqd)
 {
+#if !NO_SERVER
 static char buffer[BUFFER_SIZE];
 sprintf(buffer,"To server: %s",s);
 logString(buffer);
@@ -1808,23 +1826,23 @@ while (TRUE)
 		}
 	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
 	
-	sprintf(buffer,"Unable to send command to server, will retry after %d seconds\n",sleepTime);
+	sprintf(buffer,"Unable to send command to server, will retry after %d seconds",sleepTime);
 	logString(buffer);
 	sleepForSecs(sleepTime);
 	};
+#endif
 }
 
 
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi)
 {
-static char buffer[BUFFER_SIZE];
-
 #if NO_SERVER
 
 return oldMax;
 
 #else
 
+static char buffer[BUFFER_SIZE];
 sprintf(buffer,
 	"action=checkMax&n=%d&w=%d&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
 		nval, wval, tid, acc, cid, ip, pi);

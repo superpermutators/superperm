@@ -7,13 +7,13 @@ include 'ink2.php';
 //	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
 //	with a call to cancelStalledClients.
 
-$versionAbsolutelyRequired = 6;
+$versionAbsolutelyRequired = 8;
 
 //	Version of the client required for new registrations and new tasks to be allocated.
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 6;
+$versionForNewTasks = 8;
 
 //	Maximum number of clients to register
 
@@ -31,7 +31,7 @@ $A_HI = 999999999;
 
 //	Record number of instances of this script
 
-function instanceCount($inc,$def)
+function instanceCount($inc,$def,&$didUpdate)
 {
 $ii=0;
 $fname = "InstanceCount.txt";
@@ -48,25 +48,29 @@ if ($fp===FALSE)
 else	
 	{
 	$ii=1;
-	for ($i=0; $i<3; $i++)
+	if (flock($fp, LOCK_EX))
 		{
-		if (flock($fp, LOCK_EX))
-			{
-			$ic = fgets($fp);
-			$ii = intval($ic);
-			$iq = $ii+$inc;
-			fseek($fp,0,SEEK_SET);
-			fwrite($fp, $iq<10?"0$iq":"$iq");
-			fflush($fp);
-			flock($fp, LOCK_UN);
-			break;
-			};
-		sleep(1);
-		};
+		$ic = fgets($fp);
+		$ii = intval($ic);
+		$iq = $ii+$inc;
+		fseek($fp,0,SEEK_SET);
+		fwrite($fp, $iq<10?"0$iq":"$iq");
+		fflush($fp);
+		flock($fp, LOCK_UN);
+		$didUpdate=TRUE;
+		}
+	else $didUpdate=FALSE;
 	fclose($fp);
 	};
 return $ii; 
 }
+
+function factorial($n)
+{
+if ($n==1) return 1;
+return $n*factorial($n-1);
+}
+
 
 //	Function to check that a string contains only the characters 0-9 and .
 
@@ -138,10 +142,14 @@ return -1;
 //	If called with $p=-1, simply returns the current (n,w,p) for maximum p, or an error message, ignoring $str.
 //
 //	If $pro > 0, it describes a permutation count ruled out for this number of wasted characters.
+//
+//	If $p = n!, a copy of the string is stored in the separate "superperms" database
 
 function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro)
 {
 if ($pro > 0 && $pro <= $p) return "Error: Trying to set permutations ruled out to $pro while exhibiting a string with $p permutations\n";
+
+$isSuper = ($p==factorial($n));
 
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -151,11 +159,23 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES witness_strings " . ($p>=0 ? "WRITE" : "READ")))
+	if (!$mysqli->real_query("LOCK TABLES witness_strings " . ($p>=0 ? "WRITE" : "READ") . ($isSuper ? ", superperms WRITE" :"")))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		};
+		
+	if ($isSuper)
+		{
+		$ip = $_SERVER['REMOTE_ADDR'];
+		if (!$mysqli->real_query("INSERT INTO superperms (n,waste,perms,str,IP) VALUES($n, $w, $p, '$str', '$ip')"))
+			{
+			$mysqli->real_query("UNLOCK TABLES");
+			$mysqli->close();
+			return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+			};
+		};
+		
 	$res = $mysqli->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w" . ($p>=0 ? " FOR UPDATE" : ""));
 	if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 	else
@@ -281,7 +301,7 @@ else
 //	or:			"No tasks"
 //	or:			"Error ... "
 
-function getTask($cid,$ip,$pi)
+function getTask($cid,$ip,$pi,$version)
 {
 global $host, $user_name, $pwd, $dbase;
 $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -344,9 +364,13 @@ else
 								{
 								$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
 								
-								//	Output all finalised (w,p) pairs
+								//	Output finalised (w,p) pairs
+								//	Clients from v8 make use of known values for n=6, w<=115
 								
-								$res2 = $mysqli->query("SELECT waste, perms FROM witness_strings WHERE n=$n AND final='Y' ORDER BY waste ASC");
+								$w0=0;
+								if ($version>=8 && $n==6) $w0 = 115;
+								
+								$res2 = $mysqli->query("SELECT waste, perms FROM witness_strings WHERE n=$n AND waste>$w0 AND final='Y' ORDER BY waste ASC");
 								if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 								else
 									{
@@ -561,12 +585,6 @@ else
 	};
 }
 
-function factorial($n)
-{
-if ($n==1) return 1;
-return $n*factorial($n-1);
-}
-
 //	Function to do further processing if we have finished all tasks for the current (n,w,iter) search
 
 function finishedAllTasks($n, $w, $iter, $mysqli)
@@ -694,11 +712,11 @@ else
 					//	See if we have found a string that makes other searches redundant
 										
 					$ppro = intval($row['prev_perm_ruled_out']);
-					if ($ppro>0 && $pro >= $ppro)
-						$qry = "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'";
-					else $qry = "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access";
 					
-					if ($mysqli->real_query($qry))
+					if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1)
+						$mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'");
+					
+					if ($mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access"))
 						{
 						$res2 = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND (status='A' OR status='U') LIMIT 1");
 						if ($res2->num_rows==0) $result = finishedAllTasks($n, $w, $iter, $mysqli);
@@ -745,7 +763,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, witness_strings READ"))
+	if (!$mysqli->real_query("LOCK TABLES tasks WRITE, workers WRITE, witness_strings READ"))
 		{
 		$mysqli->close();
 		return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -765,6 +783,7 @@ else
 			$pref_len = strlen($pref);
 			$n_str = $row['n'];
 			$n = intval($n_str);
+			$cid = intval($row['client_id']);
 				
 			//	Check that the new prefix extends the old one
 
@@ -817,7 +836,9 @@ else
 					next($row);
 					};
 					
-				if ($mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")")) $result = "OK\n";
+				if ($mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")")
+				&& $mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access")
+				&& ($cid==0 || $mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid"))) $result = "OK\n";
 				else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 				}
 			else $result = "Error: Invalid new prefix string $new_pref\n";
@@ -931,7 +952,8 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
-$ic=instanceCount(2,2);
+$didUpdate=FALSE;
+$ic=instanceCount(2,2,$didUpdate);
 
 if (is_string($qs))
 	{
@@ -1005,7 +1027,7 @@ if (is_string($qs))
 						else
 							{
 							$queryOK = TRUE;
-							echo getTask($cid,$ip,$pi);
+							echo getTask($cid,$ip,$pi,$version);
 							};
 						};
 					}
@@ -1164,6 +1186,6 @@ if (is_string($qs))
 
 if (!$queryOK) echo "Error: $err \n";
 
-instanceCount(-2,0);
+if ($didUpdate) instanceCount(-2,0);
 
 ?>
