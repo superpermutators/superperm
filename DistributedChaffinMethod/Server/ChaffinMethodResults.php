@@ -145,15 +145,15 @@ if ($res->rowCount() != 0)
 		echo "</tr>\n";
 		};
 
-	$res2 = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
-	$distinctIP = $res2->rowCount();
+	$res = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
+	$distinctIP = $res->rowCount();
 
 	$maxTPI = 0;
 	// for ($i=0; $i < $distinctIP; $i++)
-	while ($row2 = $res2->fetch())
+	while ($row2 = $res->fetch())
 		{
-		// $res2->data_seek($i);
-		// $row2 = $res2->fetch_array();
+		// $res->data_seek($i);
+		// $row2 = $res->fetch_array();
 		$tpi = intval($row2[0]);
 		if ($tpi > $maxTPI) $maxTPI=$tpi;
 		};
@@ -205,6 +205,13 @@ for ($n = $max_n; $n >= $min_n; $n--)
 				};
 			echo "</tr>\n";
 			};
+
+		$res = $pdo->query("SELECT num_finished from num_finished_tasks");
+		if ($res->rowCount() != 0){
+			$row = $res->fetch();
+			echo "<td class='center'>Finished</td>\n";
+			echo "<td class='right'>" . $row['num_finished'] . "</td>\n";
+		}
 		echo "</table>\n";
 		};
 	// $res->close();
