@@ -80,7 +80,8 @@ return "";
 
 include '../config.php';
 
-// if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
+//	Used if we want to keep server from running too many processes.
+//	if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
  
 $min_n = 3;
 $max_n = 7;

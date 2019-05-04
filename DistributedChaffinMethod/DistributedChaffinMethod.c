@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 8
+Version: 8.1
 Last Updated: 4 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -71,6 +71,44 @@ another instance of the program.
 //	Constants
 //	---------
 
+//	Choose whether to use an "InstanceCount" file on the server to avoid running more than one PHP process at once
+
+#define USE_SERVER_INSTANCE_COUNTS FALSE
+
+//	Choose whether to use a "server lock" file on the client computer to coordinate server access between multiple client instances
+
+#define USE_SERVER_LOCK_FILE FALSE
+
+//	Set NO_SERVER to TRUE to run a debugging version that makes no contact with the server, and just
+//	performs a search with parameters that need to be inserted into the source code (in getTask()) manually.
+
+#define NO_SERVER FALSE 
+
+//	Server URL
+
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=8&"
+
+#if USE_SERVER_INSTANCE_COUNTS
+
+//	URL for InstanceCount file
+
+	#define IC_URL "http://www.gregegan.net/SCIENCE/Superpermutations/InstanceCount.txt"
+	
+#endif
+
+#if USE_SERVER_LOCK_FILE
+
+//	Name of server lock file shared by sibling clients running with a shared working directory
+
+	#define SERVER_LOCK_FILE_NAME "ServerLock.txt"
+	
+//	Maximum number of times we sleep consecutively waiting for siblings to free the lock on the server;
+//	if this is exceeded, we assume something has gone awry with the lock file.
+
+	#define MAX_SLEEP_WAITING_ON_SIBS 20
+	
+#endif
+
 //	Smallest and largest values of n accepted
 
 //	(Note that if we went higher than n=7, DBITS would need to increase, and we would also need to change some variables
@@ -83,19 +121,6 @@ another instance of the program.
 //	Number of bits allowed for each digit in integer representation of permutations
 
 #define DBITS 3
-
-//	Set NO_SERVER to TRUE to run a debugging version that makes no contact with the server, and just
-//	performs a search with parameters that need to be inserted into the source code (in getTask()) manually.
-
-#define NO_SERVER FALSE 
-
-//	Server URL
-
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=8&"
-
-//	URL for InstanceCount file
-
-#define IC_URL "http://www.gregegan.net/SCIENCE/Superpermutations/InstanceCount.txt"
 
 //	Command-line utility that gets response from a supplied URL
 //	Current choice is curl (with options to suppress progress meter but display any errors)
@@ -115,10 +140,6 @@ another instance of the program.
 #define STOP_FILE_NAME_TEMPLATE "STOP_%u.txt"
 #define STOP_FILE_ALL "STOP_ALL.txt"
 
-//	Name of server lock file shared by sibling clients running with a shared working directory
-
-#define SERVER_LOCK_FILE_NAME "ServerLock.txt"
-
 //	Max size of file names
 
 #define FILE_NAME_SIZE 128
@@ -132,10 +153,6 @@ another instance of the program.
 #define MIN_TIME_BETWEEN_SERVER_CHECKINS 2
 #define VAR_TIME_BETWEEN_SERVER_CHECKINS 4
 
-//	Maximum number of times we sleep consecutively waiting for siblings to free the lock on the server;
-//	if this is exceeded, we assume something has gone awry with the lock file.
-
-#define MAX_SLEEP_WAITING_ON_SIBS 20
 
 //	Time we aim to check in with the server, when checking for tasks or running a task	
 
@@ -1461,7 +1478,7 @@ fclose(fp);
 
 //	Get the Instance Count of the server process
 
-#if NO_SERVER
+#if NO_SERVER || (!USE_SERVER_INSTANCE_COUNTS)
 
 int getServerInstanceCount()
 {
@@ -1526,7 +1543,7 @@ int sendServerCommand(const char *command)
 
 sleepUntilSiblingsFreeServer();
 
-//	Wait for instance count to drop to zero
+//	Maybe wait for server instance count to drop to zero
 
 while (TRUE)
 	{
@@ -2026,7 +2043,7 @@ logString("CTRL-C / SIGINT received, so program will quit after the current task
 
 //	(Maybe) sleep until siblings free server
 
-#if UNIX_LIKE
+#if (UNIX_LIKE && USE_SERVER_LOCK_FILE)
 
 void sleepUntilSiblingsFreeServer()
 {
