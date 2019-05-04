@@ -136,7 +136,7 @@ if ($res->rowCount() != 0)
 		echo "<tr>\n";
 		// $res->data_seek($row_no);
 		// $row = $res->fetch_array();
-		$rowNames = ['current_task', 'COUNT(id)'];
+		$rowNames = ['current_task!=0', 'COUNT(id)'];
 		for ($i = 0; $i < $nFields0; $i++)
 			{
 			if ($i==0) echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$rowNames[$i]]] . "</td>\n";
@@ -152,9 +152,10 @@ if ($res->rowCount() != 0)
 	// for ($i=0; $i < $distinctIP; $i++)
 	while ($row2 = $res->fetch())
 		{
+			print_r($row2);
 		// $res->data_seek($i);
 		// $row2 = $res->fetch_array();
-		$tpi = intval($row2[0]);
+		$tpi = intval($row2['COUNT(id)']);
 		if ($tpi > $maxTPI) $maxTPI=$tpi;
 		};
 	echo "<tr><td class='left' colspan='$nFields0'>$distinctIP distinct IP address".($distinctIP>1?"es":"")."</td></tr>\n";
