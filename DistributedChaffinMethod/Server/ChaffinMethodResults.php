@@ -136,10 +136,11 @@ if ($res->rowCount() != 0)
 		echo "<tr>\n";
 		// $res->data_seek($row_no);
 		// $row = $res->fetch_array();
+		$rowNames = ['current_task', 'COUNT(id)'];
 		for ($i = 0; $i < $nFields0; $i++)
 			{
-			if ($i==0) echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$i]] . "</td>\n";
-			else echo "<td class='". $fieldAlign0[$i] ."'>" . $row[$i] . "</td>\n";
+			if ($i==0) echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$rowNames[$i]]] . "</td>\n";
+			else echo "<td class='". $fieldAlign0[$i] ."'>" . $row[$rowNames[$i]] . "</td>\n";
 			};
 		echo "</tr>\n";
 		};
@@ -162,14 +163,14 @@ if ($res->rowCount() != 0)
 	};
 // $res->close();
 
-$res = $pdo->query("SHOW TABLE STATUS FROM $dbase LIKE 'superperms'");
+$res = $pdo->query("SHOW TABLE STATUS FROM $db LIKE 'superperms'");
 // $res->data_seek(0);
 // $row = $res->fetch_assoc();
 $row = $res->fetch();
 $upd = $row['Update_time'];
 $updTS0 = strtotime($upd);
 
-$res = $pdo->query("SHOW TABLE STATUS FROM $dbase LIKE 'witness_strings'");
+$res = $pdo->query("SHOW TABLE STATUS FROM $db LIKE 'witness_strings'");
 // $res->data_seek(0);
 // $row = $res->fetch_assoc();
 $row = $res->fetch();
@@ -196,10 +197,11 @@ for ($n = $max_n; $n >= $min_n; $n--)
 			echo "<tr>\n";
 			// $res->data_seek($row_no);
 			// $row = $res->fetch_array();
+			$rowNames = ['status', 'COUNT(id)'];
 			for ($i = 0; $i < $nFields2; $i++)
 				{
-				if ($i==0) echo "<td class='". $fieldAlign2[$i] ."'>" . $statusAssoc2[$row[$i]] . "</td>\n";
-				else echo "<td class='". $fieldAlign2[$i] ."'>" . $row[$i] . "</td>\n";
+				if ($i==0) echo "<td class='". $fieldAlign2[$i] ."'>" . $statusAssoc2[$row[$rowNames[$i]]] . "</td>\n";
+				else echo "<td class='". $fieldAlign2[$i] ."'>" . $row[$rowNames[$i]] . "</td>\n";
 				};
 			echo "</tr>\n";
 			};
