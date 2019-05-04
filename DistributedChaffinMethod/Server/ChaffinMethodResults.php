@@ -77,7 +77,7 @@ if (is_string($str))
 return "";
 }
 
-include 'ink1.php';
+include '../ink2.php';
 
 if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
  
@@ -107,7 +107,7 @@ if ($mysqli->connect_errno)
 	}
 else
 	{
-	echo "<h1>Chaffin Method Results</h1>\n";
+	echo "<h1>ADA &mdash; Chaffin Method Results</h1>\n";
 	
 	$res = $mysqli->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
 	if ($res->num_rows != 0)
