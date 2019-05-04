@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 7.0
-Last Updated: 3 May 2019
+Version: 7.1
+Last Updated: 4 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -115,6 +115,10 @@ another instance of the program.
 #define STOP_FILE_NAME_TEMPLATE "STOP_%u.txt"
 #define STOP_FILE_ALL "STOP_ALL.txt"
 
+//	Name of server lock file shared by sibling clients running with a shared working directory
+
+#define SERVER_LOCK_FILE_NAME "ServerLock.txt"
+
 //	Max size of file names
 
 #define FILE_NAME_SIZE 128
@@ -126,6 +130,12 @@ another instance of the program.
 //	Ensure we don't contact the server in a burst, even when we are completing calculations very rapidly
 
 #define MIN_TIME_BETWEEN_SERVER_CHECKINS 2
+#define VAR_TIME_BETWEEN_SERVER_CHECKINS 4
+
+//	Maximum number of times we sleep consecutively waiting for siblings to free the lock on the server;
+//	if this is exceeded, we assume something has gone awry with the lock file.
+
+#define MAX_SLEEP_WAITING_ON_SIBS 20
 
 //	Time we aim to check in with the server, when checking for tasks or running a task	
 
@@ -250,6 +260,15 @@ time_t timeOfLastCheckin;			//	Time we last contacted the server
 struct sigaction sigIntAction;
 int hadSigInt;
 
+//	Flag to say we should use a lock file to stop siblings trying to talk to server simultaneously
+
+int useServerLock;
+
+//	File descriptor for server lock
+
+int serverLockFD;
+
+
 #endif
 
 static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
@@ -300,6 +319,8 @@ void rClassMin(int *p, int n);
 int pruneOnPerms(int w, int d0);
 int getServerInstanceCount(void);
 void sigIntHandler(int a);
+void sleepUntilSiblingsFreeServer(void);
+void releaseServerLock(void);
 
 //	Main program
 //	------------
@@ -392,6 +413,10 @@ sigIntAction.sa_flags = 0;
 if (sigaction(SIGINT, &sigIntAction,NULL)==0) logString("CTRL-C / SIGINT will be trapped, so you can use it to tell the program to quit after it has finished the current task.\n");
 else logString("Unable to set a handler for CTRL-C / SIGINT, so these actions will kill the program immediately.\n");
 hadSigInt=FALSE;
+
+//	Flag to say we should use a lock file to stop siblings trying to talk to server simultaneously
+
+useServerLock = TRUE;
 
 #endif
 
@@ -1476,6 +1501,10 @@ return 0;
 
 int sendServerCommand(const char *command)
 {
+//	Maybe get a local lock on server access
+
+sleepUntilSiblingsFreeServer();
+
 //	Wait for instance count to drop to zero
 
 while (TRUE)
@@ -1483,7 +1512,7 @@ while (TRUE)
 	int ic = getServerInstanceCount();
 	if (ic==0) break;
 	logString("Waiting for server to be free");
-	sleepForSecs(ic);
+	sleepForSecs(ic + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS);
 	};
 	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
@@ -1507,6 +1536,11 @@ CHECK_MEM( cmd = malloc(len*sizeof(char)) )
 sprintf(cmd,"%s \"%s%s\" > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FILE_NAME);
 int res = system(cmd);
 free(cmd);
+
+//	Release local lock on server access
+
+releaseServerLock();
+
 return res;
 }
 
@@ -1766,7 +1800,7 @@ while (TRUE)
 		if (sr==0) return;
 		
 		if (sr<0) exit(EXIT_FAILURE);
-		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS;
+		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
 		}
 	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
 	
@@ -1966,4 +2000,64 @@ hadSigInt=TRUE;
 printf("\n");
 logString("CTRL-C / SIGINT received, so program will quit after the current task.\n");
 }
+#endif
+
+//	(Maybe) sleep until siblings free server
+
+#if UNIX_LIKE
+
+void sleepUntilSiblingsFreeServer()
+{
+static char buffer[128];
+if (useServerLock)
+	{
+	int serverLockIsOurs = FALSE;
+	for (int i=0;i<MAX_SLEEP_WAITING_ON_SIBS;i++)
+		{
+		serverLockFD = open(SERVER_LOCK_FILE_NAME, O_RDWR|O_CREAT|O_EXCL, 0666);
+		if (serverLockFD<0)
+			{
+			int sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
+			sprintf(buffer,"Sibling program has lock on server, sleeping for %d seconds",sleepTime);
+			logString(buffer);
+			sleepForSecs(sleepTime);
+			}
+		else
+			{
+			serverLockIsOurs=TRUE;
+			logString("Obtained local lock on server access");
+			break;
+			};
+		};
+		
+	if (!serverLockIsOurs)
+		{
+		sprintf(buffer,"Unable to lock file %s after %d attempts, so giving up on locking",
+			SERVER_LOCK_FILE_NAME,MAX_SLEEP_WAITING_ON_SIBS);
+		logString(buffer);
+		useServerLock=FALSE;
+		};
+	};
+}
+
+void releaseServerLock()
+{
+if (useServerLock && serverLockFD >=0)
+	{
+	close(serverLockFD);
+	unlink(SERVER_LOCK_FILE_NAME);
+	logString("Released local lock on server access");
+	};
+}
+
+#else
+
+void sleepUntilSiblingsFreeServer()
+{
+}
+
+void releaseServerLock()
+{
+}
+
 #endif
