@@ -4,7 +4,7 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 7.1
+Version: 7.2
 Last Updated: 4 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -147,7 +147,7 @@ another instance of the program.
 
 //	Maximum time to spend exploring a subtree when splitting
 
-#define MAX_TIME_IN_SUBTREE 5
+#define MAX_TIME_IN_SUBTREE 8
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
@@ -912,6 +912,9 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	timeOfLastCheckin = t;
 	nodesChecked = 0;
 	
+	/*	Version 7.2: Since a change in the maximum permutation is a rare event, it's not really worth the overhead to
+		check for it within a task's run.
+	
 	//	We have hit a threshold for elapsed time since last check in with the server
 	//	Check in and get current maximum for the (n,w) pair we are working on
 	
@@ -922,6 +925,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		done=TRUE;
 		return;
 		};
+	*/
 	
 	elapsedTime = difftime(t, startedCurrentTask);
 	if (elapsedTime > TIME_BEFORE_SPLIT)
