@@ -154,6 +154,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 
 	$isSuper = ($p==factorial($n));
 
+	global $pdo;
 	// global $host, $user_name, $pwd, $dbase;
 	// $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 	// if ($mysqli->connect_errno)
@@ -272,7 +273,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 
 function makeTask($n, $w, $pte, $str) {
 	// global $host, $user_name, $pwd, $dbase, $A_LO, $A_HI;
-	global $A_LO, $A_HI;
+	global $A_LO, $A_HI, $pdo;
 
 	// $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 	// if ($mysqli->connect_errno)
@@ -330,6 +331,7 @@ function makeTask($n, $w, $pte, $str) {
 
 function getTask($cid,$ip,$pi,$version) {
 // global $host, $user_name, $pwd, $dbase;
+	global $pdo;
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
 	// {
@@ -452,6 +454,7 @@ function getTask($cid,$ip,$pi,$version) {
 function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 // global $host, $user_name, $pwd, $dbase;
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
+	global $pdo;
 // if ($mysqli->connect_errno)
 	// {
 	// return "Error: Failed to connect to MySQL: (" . $mysqli->connect_errno . ") " . $mysqli->connect_error . "\n";
@@ -547,7 +550,7 @@ function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 
 function cancelStalledTasks($maxMin) {
 // global $host, $user_name, $pwd, $dbase, $A_LO, $A_HI;
-	global $A_LO, $A_HI;
+	global $A_LO, $A_HI, $pdo;
 
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
@@ -632,6 +635,7 @@ function cancelStalledTasks($maxMin) {
 function cancelStalledClients($maxMin)
 {
 // global $host, $user_name, $pwd, $dbase;
+	global $pdo;
 
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
@@ -701,7 +705,7 @@ function cancelStalledClients($maxMin)
 //	Function to do further processing if we have finished all tasks for the current (n,w,iter) search
 
 function finishedAllTasks($n, $w, $iter) {
-	global $A_LO, $A_HI;
+	global $A_LO, $A_HI, $pdo;
 
 	//	Find the highest value of perm_ruled_out from all tasks for this (n,w,iter); no strings were found with this number of perms or
 	//	higher, across the whole search.
@@ -810,6 +814,7 @@ function finishedAllTasks($n, $w, $iter) {
 
 function finishTask($id, $access, $pro, $str) {
 // global $host, $user_name, $pwd, $dbase;
+	global $pdo;
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
 	// {
@@ -927,7 +932,7 @@ function finishTask($id, $access, $pro, $str) {
 
 function splitTask($id, $access, $new_pref, $branchOrder) {
 // global $host, $user_name, $pwd, $dbase, $A_LO, $A_HI;
-	global $A_LO, $A_HI;
+	global $A_LO, $A_HI, $pdo;
 
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
@@ -1063,7 +1068,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 
 function register($pi) {
 // global $host, $user_name, $pwd, $dbase, $maxClients;
-	global $maxClients;
+	global $maxClients, $pdo;
 
 	$ra = $_SERVER['REMOTE_ADDR'];
 	if (!is_string($ra)) return "Error: Unable to determine connection's IP address\n";
@@ -1101,7 +1106,7 @@ function register($pi) {
 		
 		if ($ok) {
 			$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered) VALUES(?, ?, NOW())");
-			$res->execute(["'$ra'", $pi$]);
+			$res->execute(["'$ra'", $pi]);
 
 			// if (!$mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())"))
 				// $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -1111,7 +1116,7 @@ function register($pi) {
 				// };
 		}
 		
-		$pdo->commit()/
+		$pdo->commit();
 		// $mysqli->real_query("UNLOCK TABLES");
 		// $mysqli->close();
 		return $result;
@@ -1128,6 +1133,7 @@ function register($pi) {
 function unregister($cid,$ip,$pi)
 {
 // global $host, $user_name, $pwd, $dbase;
+	global $pdo;
 
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
 // if ($mysqli->connect_errno)
@@ -1143,7 +1149,7 @@ function unregister($cid,$ip,$pi)
 		// };
 		
 	try {
-		$pdo->beginTransaction()
+		$pdo->beginTransaction();
 		$res = $pdo->prepare("DELETE FROM workers WHERE id=? AND instance_num=? AND IP=?");
 		$res->execute([$cid, $pi, "'$ip'"]);
 
@@ -1157,7 +1163,7 @@ function unregister($cid,$ip,$pi)
 		$pdo->commit();
 		// $mysqli->real_query("UNLOCK TABLES");
 		// $mysqli->close();
-		return $result
+		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
 		throw $e;
