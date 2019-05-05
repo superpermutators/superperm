@@ -406,7 +406,7 @@ function getTask($cid,$ip,$pi,$version) {
 					$pte = $p0;
 				}
 				
-				if (is_string($id) && is_string($access) && is_string($n) && is_string($w) && is_string($str) && is_string($ppro) && is_string($br)) {
+				if (is_integer($id) && is_integer($access) && is_integer($n) && is_integer($w) && is_string($str) && is_integer($ppro) && is_string($br)) {
 					$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=? WHERE id=?");
 					$res->execute([$cid, $id]);
 
