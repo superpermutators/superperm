@@ -793,8 +793,8 @@ function finishedAllTasks($n, $w, $iter) {
 			$access = mt_rand($A_LO,$A_HI);
 			$iter1 = $iter+1;
 
-			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro,$br]);
+			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+			$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
 
 			// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro,'$br')"))
 			
