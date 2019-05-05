@@ -862,16 +862,16 @@ function finishTask($id, $access, $pro, $str) {
 						
 						if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1) {
 							
-							$res = $dbo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'");
+							$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'");
 							$res->execute([$pro, $n, $w, $iter]);
 
 							// $mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'");
 						}
 
-						$res = $dbo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
+						$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
 						$res->execute([$pro, "'$str'", $id, $access]);
 
-						$res = $dbo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
+						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
 						$res->execute([$n, $w, $iter]);
 
 						if ($res->rowCount() == 0) {
@@ -882,7 +882,7 @@ function finishTask($id, $access, $pro, $str) {
 
 						$cid = $row['client_id'];
 						if (intval($cid) > 0) {
-							$res = $dbo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
+							$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
 							$res->execute([$cid]);
 						}
 						
@@ -915,7 +915,7 @@ function finishTask($id, $access, $pro, $str) {
 			$result = "Error: No match to id=$id, access=$access for the task being finalised\n";
 		}
 			
-		$dbo->commit();
+		$pdo->commit();
 		// $mysqli->real_query("UNLOCK TABLES");
 		// $mysqli->close();
 		return $result;
@@ -949,9 +949,9 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 		// 	return "Error: Unable to lock database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// 	};
 
-		$dbo->beginTransaction();
+		$pdo->beginTransaction();
 
-		$res = $dbo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
+		$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
 		$res->execute([$id, $access]);
 		// $res = $mysqli->query("SELECT * FROM tasks WHERE id=$id AND access=$access FOR UPDATE");
 		
