@@ -190,7 +190,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 		// $res = $mysqli->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w" . ($p>=0 ? " FOR UPDATE" : ""));
 		$pdo->beginTransaction();
 		$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
-		$res->execute($n, $w);
+		$res->execute([$n, $w]);
 
 		// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// else
@@ -263,7 +263,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -318,7 +318,7 @@ function makeTask($n, $w, $pte, $str) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -445,7 +445,7 @@ function getTask($cid,$ip,$pi,$version) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -540,7 +540,7 @@ function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -624,7 +624,7 @@ function cancelStalledTasks($maxMin) {
 		
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -698,7 +698,7 @@ function cancelStalledClients($maxMin)
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -804,7 +804,7 @@ function finishedAllTasks($n, $w, $iter) {
 		}
 	// } catch (Exception $e) {
 		// $pdo->rollback();
-		// throw $e;
+		// print("Error: " . $e->getMessage());;
 	// }
 }
 
@@ -861,8 +861,6 @@ function finishTask($id, $access, $pro, $str) {
 											
 						$ppro = intval($row['prev_perm_ruled_out']);
 
-						print_r([$ppro, $pro, factorial($n)]);
-						
 						if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1) {
 							
 							$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'");
@@ -871,20 +869,11 @@ function finishTask($id, $access, $pro, $str) {
 							// $mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'");
 						}
 
-						print("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
-						print_r([$pro, $str, $id, $access]);
-
 						$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
 						$res->execute([$pro, $str, $id, $access]);
 
-						echo "ABC";
-
 						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
 						$res->execute([$n, $w, $iter]);
-
-						echo "DEF";
-						print($res->rowCount());
-						echo "GHI";
 
 						if ($res->rowCount() == 0) {
 							$result = finishedAllTasks($n, $w, $iter);
@@ -892,16 +881,13 @@ function finishTask($id, $access, $pro, $str) {
 							$result = "OK\n";
 						}
 
-						echo "JKL";
-
 						$cid = $row['client_id'];
 						if (intval($cid) > 0) {
 							$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
 							$res->execute([$cid]);
 						}
 
-						echo "MNO";
-						
+					
 						// if ($mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access"))
 						// 	{
 						// 	$res2 = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND (status='A' OR status='U') LIMIT 1");
@@ -937,7 +923,7 @@ function finishTask($id, $access, $pro, $str) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -1075,7 +1061,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -1139,7 +1125,7 @@ function register($pi) {
 
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
@@ -1182,7 +1168,7 @@ function unregister($cid,$ip,$pi)
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		throw $e;
+		print("Error: " . $e->getMessage());;
 	}
 }
 
