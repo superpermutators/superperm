@@ -346,7 +346,7 @@ function getTask($cid,$ip,$pi,$version) {
 
 		$pdo->beginTransaction();
 
-		$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP='?' FOR UPDATE");
+		$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP=? FOR UPDATE");
 		$res->execute([$cid, $pi, "'$ip'"]);
 
 		// $wres = $mysqli->query("SELECT * FROM workers WHERE id=$cid AND instance_num=$pi AND IP='$ip' FOR UPDATE");
