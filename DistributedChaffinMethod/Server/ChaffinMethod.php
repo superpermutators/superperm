@@ -829,8 +829,10 @@ function finishTask($id, $access, $pro, $str) {
 		// 	};
 
 		$pdo->beginTransaction();
+
 		$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
 		$res->execute([$id, $access]);
+
 		// $res = $mysqli->query("SELECT * FROM tasks WHERE id=$id AND access=$access FOR UPDATE");
 		// if ($res->num_rows==1)
 		if ($row = $res->fetch()) {
@@ -839,7 +841,6 @@ function finishTask($id, $access, $pro, $str) {
 			// $row = $res->fetch_assoc();
 			
 			//	Check that task is still active
-			
 			if ($row['status']=='A') {
 				//	Check that the exclusion string starts with the expected prefix.
 				
@@ -859,6 +860,8 @@ function finishTask($id, $access, $pro, $str) {
 						//	See if we have found a string that makes other searches redundant
 											
 						$ppro = intval($row['prev_perm_ruled_out']);
+
+						print_r([$ppro, $pro, factorial($n)]);
 						
 						if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1) {
 							
@@ -868,11 +871,20 @@ function finishTask($id, $access, $pro, $str) {
 							// $mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'");
 						}
 
+						print("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
+						print_r([$pro, "'$str'", $id, $access]);
+
 						$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
 						$res->execute([$pro, "'$str'", $id, $access]);
 
+						echo "ABC";
+
 						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
 						$res->execute([$n, $w, $iter]);
+
+						echo "DEF";
+						print($res->rowCount());
+						echo "GHI";
 
 						if ($res->rowCount() == 0) {
 							$result = finishedAllTasks($n, $w, $iter);
@@ -880,11 +892,15 @@ function finishTask($id, $access, $pro, $str) {
 							$result = "OK\n";
 						}
 
+						echo "JKL";
+
 						$cid = $row['client_id'];
 						if (intval($cid) > 0) {
 							$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
 							$res->execute([$cid]);
 						}
+
+						echo "MNO";
 						
 						// if ($mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='$str' WHERE id=$id AND access=$access"))
 						// 	{
