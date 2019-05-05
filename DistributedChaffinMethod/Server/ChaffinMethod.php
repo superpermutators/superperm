@@ -595,6 +595,10 @@ function finishedAllTasks($n, $w, $iter, $mysqli)
 {
 global $A_LO, $A_HI;
 
+//	Start with the assumption that we're not completely done yet
+
+$needTighterBound = TRUE;
+
 //	Find the highest value of perm_ruled_out from all tasks for this (n,w,iter); no strings were found with this number of perms or
 //	higher, across the whole search.
 
@@ -605,7 +609,7 @@ $row = $res->fetch_array();
 $pro = intval($row[0]);
 $res->close();
 
-//	Was any string found for this search?
+//	Was any string found for this search (or maybe for the same (n,w), but by other means)?
 
 $res = $mysqli->query("SELECT perms, excl_perms FROM witness_strings WHERE n=$n AND waste=$w FOR UPDATE");
 if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -621,13 +625,28 @@ if ($res->num_rows > 0)
 	$pro0_str = $row[1];
 	$pro0 = intval($pro0_str);
 	
-	if ($pro < $pro0)
+	//	User the lower of any recorded exclusion and that from the search
+	
+	if ($pro0 > 0 && $pro0 < $pro) $pro = $pro0;
+	
+	//	Are we done?
+
+	if ($pro == $p+1)
 		{
-		$final = ($pro == $p+1) ? "Y" : "N";
-		if (!$mysqli->real_query("UPDATE witness_strings SET excl_perms=$pro, final='$final' WHERE n=$n AND waste=$w"))
-			return "Error: Unable to update database (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		$final = 'Y';
+		$needTighterBound = FALSE;
+		}
+	else
+		{
+		$final = 'N';
+		$needTighterBound = TRUE;
 		};
-		
+	if (!$mysqli->real_query("UPDATE witness_strings SET excl_perms=$pro, final='$final' WHERE n=$n AND waste=$w"))
+		return "Error: Unable to update database (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	};
+	
+if (!$needTighterBound)
+	{
 	//	Maybe create a new task for a higher w value
 	
 	$fn = factorial($n);
@@ -648,7 +667,7 @@ if ($res->num_rows > 0)
 	}
 else
 	{
-	//	The search came up with nothing, so we need to backtrack and search for a lower perm_to_exceed
+	//	We need to backtrack and search for a lower perm_to_exceed
 	
 	$res = $mysqli->query("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
 	if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
