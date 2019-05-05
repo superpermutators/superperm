@@ -358,7 +358,7 @@ function getTask($cid,$ip,$pi,$version) {
 		} else {
 
 			$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
-			$pdo->execute([$cid]);
+			$res->execute([$cid]);
 
 			// if (!$mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid"))
 				 // $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -385,8 +385,8 @@ function getTask($cid,$ip,$pi,$version) {
 				$br = $row['branch_order'];
 
 
-				$res = $pdo->query("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
-				$res->execute();
+				$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
+				$res->execute([$n, $w]);
 
 				if ($row = $res->fetch(PDO::FETCH_NUM)) {
 					$p0 = intval($row[0]);
@@ -471,7 +471,7 @@ function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 			// };
 
 		$res = $pdo->prepare("SELECT status FROM tasks WHERE id=? AND access=? FOR UPDATE");
-		$pdo->execute([$id, $access]);
+		$res->execute([$id, $access]);
 
 		// $res = $mysqli->query("SELECT status FROM tasks WHERE id=$id AND access=$access FOR UPDATE");
 		if ($row = $res->fetch(PDO::FETCH_NUM)) {
@@ -674,7 +674,7 @@ function cancelStalledClients($maxMin)
 					$id = $row[0];
 
 					$pdo->prepare("DELETE FROM workers WHERE id=$id");
-					$pdo->execute([$id]);
+					$res->execute([$id]);
 
 					// if (!$mysqli->real_query("DELETE FROM workers WHERE id=$id"))
 					// 	{
