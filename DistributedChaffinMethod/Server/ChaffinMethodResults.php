@@ -266,9 +266,9 @@ for ($n = $max_n; $n >= $min_n; $n--)
 	if ((!file_exists($fname)) || $updTS > filemtime($fname))
 		{
 		$fp=fopen($fname,"w");
-		$res = $mysqli->query("SELECT * FROM witness_strings WHERE n=$n ORDER BY waste DESC");
+		$res = $pdo->query("SELECT * FROM witness_strings WHERE n=$n ORDER BY waste DESC");
 
-		if ($res->num_rows != 0)
+		if ($res->rowCount() != 0)
 			{
 			$noResults = FALSE;
 			
@@ -278,11 +278,12 @@ for ($n = $max_n; $n >= $min_n; $n--)
 				fwrite($fp,"<th class='". $fieldAlign[$i] ."'>" . $fieldNamesDisplay[$i] . "</th>\n");
 				};
 			fwrite($fp,"</tr>\n");
-			for ($row_no = 0; $row_no < $res->num_rows; $row_no++)
-				{
+			// for ($row_no = 0; $row_no < $res->num_rows; $row_no++)
+				// {
+			while ($row = $res->fetch()) {
 				fwrite($fp,"<tr>\n");
-				$res->data_seek($row_no);
-				$row = $res->fetch_assoc();
+				// $res->data_seek($row_no);
+				// $row = $res->fetch_assoc();
 				for ($i = 0; $i < $nFields; $i++)
 					{
 					$val = $row[$fieldNames[$i]];
