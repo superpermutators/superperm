@@ -1025,7 +1025,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 						next($row);
 					}
 						
-					$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . str_repeat("?", count($valuesList)) .")");
+					$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList))) .")");
 					$res->execute($valuesList);
 
 					$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
@@ -1371,7 +1371,7 @@ if (is_string($qs))
 										if ($p == $p0)
 											{
 											$queryOK = TRUE;
-											echo "Valid string $str with $p permutations\n";
+											// echo "Valid string $str with $p permutations\n";
 											$pp = strpos($qs,'pro');
 											if ($pp===FALSE) $pro = -1;
 											else
