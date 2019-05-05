@@ -176,7 +176,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 			$ip = $_SERVER['REMOTE_ADDR'];
 
 			$res = $pdo->prepare("INSERT INTO superperms (n,waste,perms,str,IP) VALUES(?, ?, ?, ?, ?)");
-			$res->execute([$n, $w, $p, "'$str'", "'$ip'"]);
+			$res->execute([$n, $w, $p, $str, $ip]);
 
 			
 			// if (!$mysqli->real_query("INSERT INTO superperms (n,waste,perms,str,IP) VALUES($n, $w, $p, '$str', '$ip')"))
@@ -208,14 +208,14 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES(?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, "'$str'", $pro, "'$final'"]);
+					$res->execute([$n, $w, $p, $str, $pro, $final]);
 					$result = "($n, $w, $p)\n";
 				} else {
 					// if ($mysqli->real_query("INSERT INTO witness_strings (n,waste,perms,str) VALUES($n, $w, $p, '$str')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str) VALUES(?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, "'$str'"]);
+					$res->execute([$n, $w, $p, $str]);
 					$result = "($n, $w, $p)\n";
 				}
 			} else {
@@ -239,14 +239,14 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES(?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, "'$str'", $pro, "'$final'"]);
+					$res->execute([$n, $w, $p, $str, $pro, $final]);
 					$result = "($n, $w, $p)\n";
 				} else {
 					// if ($mysqli->real_query("REPLACE INTO witness_strings (n,waste,perms,str) VALUES($n, $w, $p, '$str')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str) VALUES(?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, "'$str'"]);
+					$res->execute([$n, $w, $p, $str]);
 					$result = "($n, $w, $p)\n";
 				}
 			} else {
@@ -290,7 +290,7 @@ function makeTask($n, $w, $pte, $str) {
 		$pdo->beginTransaction();
 
 		$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND prefix=? AND perm_to_exceed=?");
-		$res->execute([$n, $w, "'$str'", $pte]);
+		$res->execute([$n, $w, $str, $pte]);
 			
 		// $res = $mysqli->query("SELECT id FROM tasks WHERE n=$n AND waste=$w AND prefix='$str' AND perm_to_exceed=$pte");
 		// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -305,7 +305,7 @@ function makeTask($n, $w, $pte, $str) {
 			$br = substr("000000000",0,$n);
 
 			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES(?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w, "'$str'", $pte, "'$br'"]);
+			$res->execute([$access, $n, $w, $str, $pte, $br]);
 
 			// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES($access, $n, $w, '$str', $pte,'$br')"))
 			$result = "Task id: " . $pdo->lastInsertId() . "\n";
@@ -347,7 +347,7 @@ function getTask($cid,$ip,$pi,$version) {
 		$pdo->beginTransaction();
 
 		$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP=? FOR UPDATE");
-		$res->execute([$cid, $pi, "'$ip'"]);
+		$res->execute([$cid, $pi, $ip]);
 
 		// $wres = $mysqli->query("SELECT * FROM workers WHERE id=$cid AND instance_num=$pi AND IP='$ip' FOR UPDATE");
 		// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -485,7 +485,7 @@ function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 				$res->execute([$id, $access]);
 
 				$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=? AND instance_num=? AND IP=?");
-				$res->execute([$cid, $pi, "'$ip'"]);
+				$res->execute([$cid, $pi, $ip]);
 
 				// if ($mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access") &&
 					// $mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid AND instance_num=$pi AND IP='$ip'"))
@@ -710,7 +710,7 @@ function finishedAllTasks($n, $w, $iter) {
 	//	Find the highest value of perm_ruled_out from all tasks for this (n,w,iter); no strings were found with this number of perms or
 	//	higher, across the whole search.
 
-	try {
+	// try {
 		// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
 
 		$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
@@ -745,7 +745,7 @@ function finishedAllTasks($n, $w, $iter) {
 				$final = ($pro == $p+1) ? "Y" : "N";
 
 				$res = $pdo->prepare("UPDATE witness_strings SET excl_perms=?, final=? WHERE n=? AND waste=?");
-				$res->execute([$pro, "'$final'", $n, $w]);
+				$res->execute([$pro, $final, $n, $w]);
 				// if (!$mysqli->real_query("UPDATE witness_strings SET excl_perms=$pro, final='$final' WHERE n=$n AND waste=$w")) {
 				// 	return "Error: Unable to update database (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 				// }
@@ -764,7 +764,7 @@ function finishedAllTasks($n, $w, $iter) {
 				$access = mt_rand($A_LO,$A_HI);
 
 				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-				$res->execute([$access, $n, $w1, "'$str'", $pte, $pro2, "'$br'"]);
+				$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
 				return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
 
 				// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w1, '$str', $pte, $pro2,'$br')"))
@@ -794,7 +794,7 @@ function finishedAllTasks($n, $w, $iter) {
 			$iter1 = $iter+1;
 
 			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w, "'$str'", $pte, $iter1, $pro,"'$br'"]);
+			$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro,$br]);
 
 			// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro,'$br')"))
 			
@@ -802,10 +802,10 @@ function finishedAllTasks($n, $w, $iter) {
 			
 			// else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		}
-	} catch (Exception $e) {
-		$pdo->rollback();
-		throw $e;
-	}
+	// } catch (Exception $e) {
+		// $pdo->rollback();
+		// throw $e;
+	// }
 }
 
 //	Function to mark a task as finished, and if all tasks are finished do some further processing
@@ -872,10 +872,10 @@ function finishTask($id, $access, $pro, $str) {
 						}
 
 						print("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
-						print_r([$pro, "'$str'", $id, $access]);
+						print_r([$pro, $str, $id, $access]);
 
 						$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness=? WHERE id=? AND access=?");
-						$res->execute([$pro, "'$str'", $id, $access]);
+						$res->execute([$pro, $str, $id, $access]);
 
 						echo "ABC";
 
@@ -1021,12 +1021,12 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 						$field = key($row);
 						$value = current($row);
 						if ($field=='access') $value = $new_access;
-						else if ($field=='prefix') $value = "'$new_pref'"; 
+						else if ($field=='prefix') $value = $new_pref; 
 						else if ($field=='perm_to_exceed') $value = $pte; 
 						else if ($field=='ts_allocated') $value = 'NOW()';
-						else if ($field=='status') $value = "'U'";
-						else if ($field=='branch_order') $value = "'$branchOrder'";
-						else $value = "'$value'";
+						else if ($field=='status') $value = 'U';
+						else if ($field=='branch_order') $value = $branchOrder;
+						else $value = $value;
 						
 						if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && $field != 'ts_allocated' && $field != 'checkin_count' && $field != 'client_id') {
 							$pre = ($c==0) ? "": ", ";
@@ -1122,7 +1122,7 @@ function register($pi) {
 		
 		if ($ok) {
 			$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered) VALUES(?, ?, NOW())");
-			$res->execute(["'$ra'", $pi]);
+			$res->execute([$ra, $pi]);
 
 			// if (!$mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())"))
 				// $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -1167,7 +1167,7 @@ function unregister($cid,$ip,$pi)
 	try {
 		$pdo->beginTransaction();
 		$res = $pdo->prepare("DELETE FROM workers WHERE id=? AND instance_num=? AND IP=?");
-		$res->execute([$cid, $pi, "'$ip'"]);
+		$res->execute([$cid, $pi, $ip]);
 
 		// if (!$mysqli->real_query("DELETE FROM workers WHERE id=$cid AND instance_num=$pi AND IP='$ip'"))
 		// 	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
