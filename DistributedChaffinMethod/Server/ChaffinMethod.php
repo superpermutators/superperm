@@ -1025,7 +1025,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 						next($row);
 					}
 						
-					$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList))) .")");
+					$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList), "?")) .")");
 					$res->execute($valuesList);
 
 					$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
@@ -1035,6 +1035,8 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 						$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
 						$res->execute([$cid]);
 					}
+
+					$result = "OK\n";
 					// if ($mysqli->real_query("INSERT INTO tasks (" . $fieldList .") VALUES( " . $valuesList .")")
 					// && $mysqli->real_query("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=$id AND access=$access")
 					// && ($cid==0 || $mysqli->real_query("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=$cid"))) $result = "OK\n";
