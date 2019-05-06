@@ -873,7 +873,9 @@ function finishTask($id, $access, $pro, $str) {
 						$ppro = intval($row['prev_perm_ruled_out']);
 
 						if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1) {
-							// echo "TRYING TO MARK AS REDUNDANT\n";
+							echo "TRYING TO MARK AS REDUNDANT\n";
+							echo "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'\n";
+							print_r($pro, $n, $w, $iter]);
 							mail("jay.pantone@gmail.com", "Trying to mark as redundant", print_r($row));
 							$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'");
 							$res->execute([$pro, $n, $w, $iter]);
