@@ -841,9 +841,9 @@ if (deferredRepeat)
 		};
 	};
 
-if (deltaMaxPerm)
+if (deltaMaxPerm && fallBackTo > 0)
 	{
-	printf("[deltaMaxPerm=%d]\n",deltaMaxPerm);
+	printf("[level=%d, deltaMaxPerm=%d]\n",pos,deltaMaxPerm);
 	for (int i=n+1;i<=pos;i++) dvals[i]-=deltaMaxPerm;
 	for (int i=n+1;i<pos;i++)
 		{
