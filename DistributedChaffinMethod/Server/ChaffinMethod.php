@@ -838,7 +838,7 @@ function finishTask($id, $access, $pro, $str) {
 
 		// I think we have to lock the whole table to prevent deadlocks where we mark reundant things here
 		//   but someone else is trying to get a task in getTask
-		$pdo->exec("LOCK TABLES tasks WRITE, witness_strings WRITE, workers WRITE");		
+		// $pdo->exec("LOCK TABLES tasks WRITE, witness_strings WRITE, workers WRITE");		
 		// End attempt
 
 		$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? AND status='A' FOR UPDATE");
@@ -928,7 +928,7 @@ function finishTask($id, $access, $pro, $str) {
 			$result = "Error: No match to id=$id, access=$access for the task being finalised. (It may have already been unexpectedly finalized.)\n";
 		}
 		
-		$pdo->exec("UNLOCK TABLES");
+		// $pdo->exec("UNLOCK TABLES");
 		$pdo->commit();
 		// $mysqli->real_query("UNLOCK TABLES");
 		// $mysqli->close();
