@@ -86,13 +86,13 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=8&"
+#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=8&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 
 //	URL for InstanceCount file
 
-	#define IC_URL "http://www.gregegan.net/SCIENCE/Superpermutations/InstanceCount.txt"
+	#define IC_URL "http://ada.mscsnet.mu.edu/InstanceCount.txt"
 	
 #endif
 
@@ -353,8 +353,17 @@ timeQuotaMins=0;
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
 
+
 time(&startedRunning);
-int rseed=(int)( (startedRunning + clock()) % (1<<31) );
+
+#ifdef _WIN32
+	int rseed=(int)( (startedRunning + clock() + _getpid()) % (1<<31) );
+#else
+	int rseed=(int)( (startedRunning + clock()  + (int) getpid()) % (1<<31) );
+#endif
+
+
+printf("Random seed is: %d\n", rseed);
 srand(rseed);
 
 while(TRUE)
