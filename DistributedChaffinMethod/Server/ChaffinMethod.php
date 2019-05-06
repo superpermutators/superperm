@@ -69,6 +69,12 @@ return $ii;
 }
 */
 
+function handlePDOError($e) {
+	print("Error: " . $e->getMessage());
+	mail("jay.pantone@gmail.com", "PDO ERROR :(", $e->getMessage());
+	mail("jay.pantone@marquette.edu", "PDO ERROR :(", $e->getMessage());
+}
+
 function factorial($n)
 {
 if ($n==1) return 1;
@@ -263,7 +269,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -318,7 +324,7 @@ function makeTask($n, $w, $pte, $str) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -445,7 +451,7 @@ function getTask($cid,$ip,$pi,$version) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -540,7 +546,7 @@ function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -624,7 +630,7 @@ function cancelStalledTasks($maxMin) {
 		
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -698,7 +704,7 @@ function cancelStalledClients($maxMin)
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -804,7 +810,7 @@ function finishedAllTasks($n, $w, $iter) {
 		}
 	// } catch (Exception $e) {
 		// $pdo->rollback();
-		// print("Error: " . $e->getMessage());;
+		// handlePDOError($e);;
 	// }
 }
 
@@ -929,7 +935,7 @@ function finishTask($id, $access, $pro, $str) {
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);
 	}
 }
 
@@ -1069,7 +1075,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -1133,7 +1139,7 @@ function register($pi) {
 
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
@@ -1176,7 +1182,7 @@ function unregister($cid,$ip,$pi)
 		return $result;
 	} catch (Exception $e) {
 		$pdo->rollback();
-		print("Error: " . $e->getMessage());;
+		handlePDOError($e);;
 	}
 }
 
