@@ -713,101 +713,117 @@ function cancelStalledClients($maxMin)
 function finishedAllTasks($n, $w, $iter) {
 	global $A_LO, $A_HI, $pdo;
 
+	$needTighterBound = TRUE;
+
 	//	Find the highest value of perm_ruled_out from all tasks for this (n,w,iter); no strings were found with this number of perms or
 	//	higher, across the whole search.
 
 	// try {
-		// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
+	// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
 
-		$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+	$res->execute([$n, $w, $iter]);
+
+	// $res = $mysqli->query("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
+	// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	// $res->data_seek(0);
+	// $row = $res->fetch_array();
+
+	// What happens if there is no row? Could that happen?
+	$row = $res->fetch(PDO::FETCH_NUM);
+	$pro = intval($row[0]);
+	// $res->close();
+
+	//	Was any string found for this search (or maybe for the same (n,w), but by other means)?
+	$res = $pdo->prepare("SELECT perms, excl_perms FROM witness_strings WHERE n=? AND waste=? FOR UPDATE");
+	$res->execute([$n, $w]);
+	// $res = $mysqli->query("SELECT perms, excl_perms FROM witness_strings WHERE n=$n AND waste=$w FOR UPDATE");
+	// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+
+	if ($res->rowCount() > 0) {
+		//	Yes.  Update the excl_perms and final fields.
+		
+		$row = $res->fetch(PDO::FETCH_NUM);
+		$p_str = $row[0];
+		$p = intval($p_str);
+		$pro0_str = $row[1];
+		$pro0 = intval($pro0_str);
+		
+		// if ($pro < $pro0) {
+		if ($pro0 > 0 && $pro0 < $pro) {
+			$pro = $pro0;
+		}
+
+		if ($pro == $p + 1) {
+			$final = 'Y';
+			$needTighterBound = FALSE;
+		} else {
+			// $final = ($pro == $p+1) ? "Y" : "N";
+			$final = 'N';
+			$needTighterBound = TRUE;
+		}
+
+		$res = $pdo->prepare("UPDATE witness_strings SET excl_perms=?, final=? WHERE n=? AND waste=?");
+		$res->execute([$pro, $final, $n, $w]);
+			// if (!$mysqli->real_query("UPDATE witness_strings SET excl_perms=$pro, final='$final' WHERE n=$n AND waste=$w")) {
+			// 	return "Error: Unable to update database (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+			// }
+	}
+
+	if (!$needTighterBound) {	
+			
+		//	Maybe create a new task for a higher w value
+		$fn = factorial($n);
+		if ($p < $fn) {
+			$w1 = $w+1;
+			$str = substr("123456789",0,$n);
+			$br = substr("000000000",0,$n);
+			$pte = $p + 2*($n-4);
+			if ($pte >= $fn) $pte = $fn-1;
+			$pro2 = $p+$n+1;
+			$access = mt_rand($A_LO,$A_HI);
+
+			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
+			$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
+			return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+
+			// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w1, '$str', $pte, $pro2,'$br')"))
+			// 	return "OK\nTask id: $mysqli->insert_id\n";
+			// else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+			// }
+		}
+		else {
+			return "OK\n";
+		}
+	} else {
+		//	We need to backtrack and search for a lower perm_to_exceed
+		
+		$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
 		$res->execute([$n, $w, $iter]);
-
-		// $res = $mysqli->query("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
+		// $res = $mysqli->query("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
 		// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// $res->data_seek(0);
 		// $row = $res->fetch_array();
 
-		// What happens if there is no row? Could that happen?
+		// What if no row?
 		$row = $res->fetch(PDO::FETCH_NUM);
-		$pro = intval($row[0]);
+		$pte = intval($row[0])-1;
 		// $res->close();
+		
+		$str = substr("123456789",0,$n);
+		$br = substr("000000000",0,$n);
+		$access = mt_rand($A_LO,$A_HI);
+		$iter1 = $iter+1;
 
-		//	Was any string found for this search?
-		$res = $pdo->prepare("SELECT perms, excl_perms FROM witness_strings WHERE n=? AND waste=? FOR UPDATE");
-		$res->execute([$n, $w]);
-		// $res = $mysqli->query("SELECT perms, excl_perms FROM witness_strings WHERE n=$n AND waste=$w FOR UPDATE");
-		// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+		$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+		$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
 
-		if ($res->rowCount() > 0) {
-			//	Yes.  Update the excl_perms and final fields.
-			
-			$row = $res->fetch(PDO::FETCH_NUM);
-			$p_str = $row[0];
-			$p = intval($p_str);
-			$pro0_str = $row[1];
-			$pro0 = intval($pro0_str);
-			
-			if ($pro < $pro0) {
-				$final = ($pro == $p+1) ? "Y" : "N";
-
-				$res = $pdo->prepare("UPDATE witness_strings SET excl_perms=?, final=? WHERE n=? AND waste=?");
-				$res->execute([$pro, $final, $n, $w]);
-				// if (!$mysqli->real_query("UPDATE witness_strings SET excl_perms=$pro, final='$final' WHERE n=$n AND waste=$w")) {
-				// 	return "Error: Unable to update database (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-				// }
-			}
-
-				
-			//	Maybe create a new task for a higher w value
-			$fn = factorial($n);
-			if ($p < $fn) {
-				$w1 = $w+1;
-				$str = substr("123456789",0,$n);
-				$br = substr("000000000",0,$n);
-				$pte = $p + 2*($n-4);
-				if ($pte >= $fn) $pte = $fn-1;
-				$pro2 = $p+$n+1;
-				$access = mt_rand($A_LO,$A_HI);
-
-				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-				$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
-				return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
-
-				// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w1, '$str', $pte, $pro2,'$br')"))
-				// 	return "OK\nTask id: $mysqli->insert_id\n";
-				// else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-				// }
-			}
-			else return "OK\n";
-		} else {
-			//	The search came up with nothing, so we need to backtrack and search for a lower perm_to_exceed
-			
-			$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
-			$res->execute([$n, $w, $iter]);
-			// $res = $mysqli->query("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
-			// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-			// $res->data_seek(0);
-			// $row = $res->fetch_array();
-
-			// What if no row?
-			$row = $res->fetch(PDO::FETCH_NUM);
-			$pte = intval($row[0])-1;
-			// $res->close();
-			
-			$str = substr("123456789",0,$n);
-			$br = substr("000000000",0,$n);
-			$access = mt_rand($A_LO,$A_HI);
-			$iter1 = $iter+1;
-
-			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
-
-			// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro,'$br')"))
-			
-			return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
-			
-			// else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-		}
+		// if ($mysqli->real_query("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES($access, $n, $w, '$str', $pte, $iter1, $pro,'$br')"))
+		
+		return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+		
+		// else return "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+	}
 	// } catch (Exception $e) {
 		// $pdo->rollback();
 		// handlePDOError($e);;
@@ -873,10 +889,6 @@ function finishTask($id, $access, $pro, $str) {
 						$ppro = intval($row['prev_perm_ruled_out']);
 
 						if ($ppro>0 && $pro >= $ppro && $pro != factorial($n)+1) {
-							echo "TRYING TO MARK AS REDUNDANT\n";
-							echo "UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'\n";
-							print_r($pro, $n, $w, $iter]);
-							mail("jay.pantone@gmail.com", "Trying to mark as redundant", print_r($row));
 							$res = $pdo->prepare("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=?, excl_witness='Redundant' WHERE n=? AND waste=? AND iteration=? AND status='U'");
 							$res->execute([$pro, $n, $w, $iter]);
 
