@@ -925,7 +925,7 @@ if (splitMode)
 	nodesLeft = nodesToProbe;
 	if (fillStrNL(pos,pfound,partNum))
 		{
-		if ((subTreesCompleted++)%10==0)
+		if ((subTreesCompleted++)%10==9)
 			{
 			printf("Completed %"PRId64" sub-trees locally so far ...\n",subTreesCompleted);
 			};
@@ -933,7 +933,7 @@ if (splitMode)
 	else
 		{
 		splitTask(pos);
-		if ((subTreesSplit++)%10==0)
+		if ((subTreesSplit++)%10==9)
 			{
 			printf("Delegated %"PRId64" sub-trees so far ...\n",subTreesSplit);
 			};
