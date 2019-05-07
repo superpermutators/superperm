@@ -45,6 +45,7 @@ another instance of the program.
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #ifdef _WIN32
 
@@ -298,8 +299,14 @@ static char STOP_FILE_NAME[FILE_NAME_SIZE];
 //	default behaviour is to keep running indefinitely
 
 #define DEFAULT_TIME_LIMIT 60
-
 int timeQuotaMins=0;
+
+//  Default team name
+#define DEFAULT_TEAM_NAME "anonymous"
+#define MAX_TEAM_NAME_LENGTH 32
+const char *teamName;
+
+
 
 //	Known values from previous calculations
 
@@ -349,6 +356,7 @@ static char buffer[BUFFER_SIZE];
 FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
+teamName = DEFAULT_TEAM_NAME;
 
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
@@ -411,6 +419,28 @@ for (int i=1;i<argc;i++)
 		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
 		logString(buffer);
 		}
+	else if (strcmp(argv[i],"team")==0)
+		{
+		if (i+1<argc) {
+			if (strlen(argv[i+1]) <= MAX_TEAM_NAME_LENGTH) {
+				teamName = argv[i+1];
+				for (int pos=0; teamName[pos]!= '\0'; pos++) {
+					if (!isalpha(teamName[pos]) && !isdigit(teamName[pos]) && !isspace(teamName[pos]) && !isascii(teamName[pos])) {
+						printf("Team names must contain only alphanumeric ascii characters and spaces.\n");
+						exit(EXIT_FAILURE);
+					}
+				}
+			} else {
+				printf("Team names are limited to %d characters.\n", MAX_TEAM_NAME_LENGTH);
+				exit(EXIT_FAILURE);
+			}
+			i++;
+		}
+		else teamName = DEFAULT_TEAM_NAME;
+		
+		sprintf(buffer,"Team name set to %s.\n",teamName);
+		logString(buffer);
+		}
 	else
 		{
 		printf("Unknown option %s\n",argv[i]);
@@ -420,6 +450,8 @@ for (int i=1;i<argc;i++)
 
 //	First, just check we can establish contact with the server
 
+sprintf(buffer,"Team name: %s",teamName);
+logString(buffer);
 sendServerCommandAndLog("action=hello","Hello world.");
 
 if (justTest) exit(0);
