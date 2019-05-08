@@ -4,8 +4,8 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 8.1
-Last Updated: 4 May 2019
+Version: 8.2
+Last Updated: 7 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -228,6 +228,10 @@ char *curstr=NULL;			//	Current string as integer digits
 char *curi=NULL;
 char *bestSeen=NULL;		//	Longest string seen in search, as integer digits
 int bestSeenLen, bestSeenP;
+int *successor1;			//	For each permutation, its weight-1 successor
+int *successor2;			//	For each permutation, its weight-2 successor
+int *klbLen;				//	For each number of wasted characters, the lengths of the strings that visit known-lower-bound permutations
+char **klbStrings;			//	For each number of wasted characters, a list of all strings that visit known-lower-bound permutations
 char *asciiString=NULL;		//	String as ASCII digits
 char *asciiString2=NULL;		//	String as ASCII digits
 int max_perm;				//	Maximum number of permutations visited by any string seen so far
@@ -332,6 +336,10 @@ int fillStrNL(int pos, int pfound, int partNum);
 int fac(int k);
 void makePerms(int n, int **permTab);
 void witnessCurrentString(int size);
+void witnessLowerBound(char *s, int size, int w, int p);
+void maybeUpdateLowerBound(int tperm, int size, int w, int p);
+void maybeUpdateLowerBoundSplice(int size, int w, int p);
+void maybeUpdateLowerBoundAppend(int tperm, int size, int w, int p);
 int compareDS(const void *ii0, const void *jj0);
 void rClassMin(int *p, int n);
 int pruneOnPerms(int w, int d0);
@@ -560,6 +568,18 @@ maxW = fn;
 
 MFREE(mperm_res)
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
+MFREE(klbLen)
+CHECK_MEM( klbLen = (int *)malloc(maxW*sizeof(int)) )
+MFREE(klbStrings)
+CHECK_MEM( klbStrings = (char **)malloc(maxW*sizeof(char *)) )
+
+//	Storage for known-lower-bound strings
+
+for (int i=0;i<maxW;i++)
+	{
+	CHECK_MEM( klbStrings[i] = (char *)malloc(2*fn*sizeof(char)))
+	klbLen[i] = 0;
+	};
 
 if (n==3) {knownN = &known3[0][0]; numKnownW=sizeof(known3)/(sizeof(int))/2;}
 else if (n==4) {knownN = &known4[0][0]; numKnownW=sizeof(known4)/(sizeof(int))/2;}
@@ -567,6 +587,7 @@ else if (n==5) {knownN = &known5[0][0]; numKnownW=sizeof(known5)/(sizeof(int))/2
 else if (n==6) {knownN = &known6[0][0]; numKnownW=sizeof(known6)/(sizeof(int))/2;}
 else knownN = NULL;
 
+for (int i=0;i<maxW;i++) mperm_res[i]=n;
 if (knownN)
 	{
 	for (int i=0; i<numKnownW; i++) mperm_res[i] = knownN[2*i+1];
@@ -615,16 +636,36 @@ MFREE(valid)
 CHECK_MEM( valid = (char *)malloc(maxInt*sizeof(char)) )
 MFREE(unvisited)
 CHECK_MEM( unvisited = (char *)malloc(maxInt*sizeof(char)) )
+MFREE(successor1)
+CHECK_MEM( successor1 = (int *)malloc(maxInt*sizeof(int)) )
+MFREE(successor2)
+CHECK_MEM( successor2 = (int *)malloc(maxInt*sizeof(int)) )
+
 
 for (int i=0;i<maxInt;i++) valid[i]=FALSE;
 for (int i=0;i<fn;i++)
 	{
-	int tperm=0;
+	int tperm=0, tperm1=0, tperm2=0;
 	for (int j0=0;j0<n;j0++)
 		{
 		tperm+=(p0[n*i+j0]<<(j0*DBITS));
+		
+		//	Left shift digits by one to get weight-1 successor
+		
+		tperm1+=(p0[n*i+(j0+1)%n]<<(j0*DBITS));
+		
+		//	Left shift digits by 2 and swap last pair
+		
+		int k0;
+		if (j0==n-1) k0=0;
+		else if (j0==n-2) k0=1;
+		else k0=(j0+2)%n;
+		
+		tperm2+=(p0[n*i+k0]<<(j0*DBITS));
 		};
 	valid[tperm]=TRUE;
+	successor1[tperm]=tperm1;
+	successor2[tperm]=tperm2;
 	};
 	
 for (int i=0;i<n;i++) free(permTab[i]);
@@ -871,7 +912,6 @@ free(currentTask.branchOrder);
 #endif
 }
 
-
 // this function recursively fills the string
 
 void fillStr(int pos, int pfound, int partNum)
@@ -1037,6 +1077,7 @@ for	(int y=0; y<nm; y++)
 			max_perm = pfound+1;
 			isSuper = (max_perm==fn);
 			witnessCurrentString(pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 
 			if (pfound+1 > bestSeenP)
 				{
@@ -1054,6 +1095,7 @@ for	(int y=0; y<nm; y++)
 		else if (isSuper && pfound+1 == max_perm)
 			{
 			witnessCurrentString(pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 			};
 
 		unvisited[tperm]=FALSE;
@@ -1205,6 +1247,7 @@ for	(int y=0; y<nm; y++)
 			max_perm = pfound+1;
 			isSuper = (max_perm==fn);
 			witnessCurrentString(pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 
 			if (pfound+1 > bestSeenP)
 				{
@@ -1222,6 +1265,7 @@ for	(int y=0; y<nm; y++)
 		else if (isSuper && pfound+1 == max_perm)
 			{
 			witnessCurrentString(pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 			};
 
 		unvisited[tperm]=FALSE;
@@ -1354,6 +1398,29 @@ logString(buffer);
 //	Log it with the server
 
 sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,tot_bl,asciiString);
+sendServerCommandAndLog(buffer,NULL);
+#endif
+}
+
+void witnessLowerBound(char *s, int size, int w, int p)
+{
+static char buffer[BUFFER_SIZE];
+
+//	Convert digit string to null-terminated ASCII string
+
+for (int k=0;k<size;k++) asciiString[k] = '0'+s[k];
+asciiString[size] = '\0';
+
+//	Log the string locally
+
+sprintf(buffer, "Found new lower bound string for w=%d with %d permutations in string %s", w, p, asciiString);
+logString(buffer);
+
+#if !NO_SERVER
+
+//	Log it with the server
+
+sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,w,asciiString);
 sendServerCommandAndLog(buffer,NULL);
 #endif
 }
@@ -2100,3 +2167,125 @@ void releaseServerLock()
 }
 
 #endif
+
+//	Try to get a new lower bound for weight w+1 by appending digits.
+//
+//	See how many permutations we get by following a single weight-2 edge, and then as many weight-1 edges
+//	as possible before we hit a permutation already visited.
+
+void maybeUpdateLowerBoundAppend(int tperm, int size, int w, int p)
+{
+int unv[MAX_N+1];
+
+unvisited[tperm]=FALSE;
+
+//	Follow weight-2 edge
+
+int t=successor2[tperm];
+
+//	Follow successive weight-1 edges
+
+int nu=0, okT=0;
+while (unvisited[t])
+	{
+	unv[nu++]=t;		//	Record, so we can unroll
+	unvisited[t]=FALSE;	//	Mark as visited
+	okT = t;			//	Record the last unvisited permutation integer
+	t=successor1[t];
+	};
+	
+int m = p + nu;
+if (nu > 0 && m > mperm_res[w+1])
+	{
+	mperm_res[w+1] = m;
+	
+	curstr[size] = curstr[size-(n-1)];
+	curstr[size+1] = curstr[size-n];
+	for (int j=0;j<nu-1;j++) curstr[size+2+j] = curstr[size-(n-2)+j];
+
+	for (int k=0;k<size+nu+1;k++) klbStrings[w+1][k]=curstr[k];
+	klbLen[w+1] = size+nu+1;
+	witnessLowerBound(klbStrings[w+1], klbLen[w+1], w+1, m);
+	
+	maybeUpdateLowerBoundAppend(okT, klbLen[w+1], w+1, m);
+	};
+
+for (int i=0;i<nu;i++) unvisited[unv[i]]=TRUE;
+unvisited[tperm]=TRUE;
+}
+
+//	Try to get a new lower bound for weight w+1 by splicing in digits.
+//
+//	This particular startegy will only work for n=6 and strings that contain a weight-3 edge.
+//
+//	We follow a weight-2 edge instead of the weight-3 edge, then follow four weight-1 edges, then
+//	a weight-3 edge will again take us back to the permutation we would have reached without the detour.
+//	If all five permutations in question were unvisited, we will have added them at the cost of an increase in
+//	weight of 1. 
+
+void maybeUpdateLowerBoundSplice(int size, int w, int p)
+{
+if (n!=6 || mperm_res[w+1] >= p+5) return;	//	Nothing to gain
+
+char *wasted;
+int *perms;
+CHECK_MEM( wasted = (char *)malloc(size*sizeof(char)) )
+CHECK_MEM( perms = (int *)malloc(size*sizeof(int)) )
+
+//	Identify wasted characters in the current string
+
+int tperm0=0;
+for (int j0=0;j0<size;j0++)
+	{
+	int d = curstr[j0];
+	tperm0 = (tperm0>>DBITS) | (d << nmbits);
+	perms[j0]=tperm0;
+	wasted[j0] = !valid[tperm0];
+	};
+	
+//	Look for weight-3 edges.  Skip the initial n-1 characters, which will always be marked as wasted.
+
+for (int j0=n;j0+3<size;j0++)
+	{
+	if (!wasted[j0] && wasted[j0+1] && wasted[j0+2] && !wasted[j0+3])
+		{
+		//	We are at a weight-3 edge
+		
+		int t0 = perms[j0];
+		int t = successor2[t0];
+		int nu=0, okT=0;
+		while (unvisited[t] && nu<5)
+			{
+			nu++;
+			okT = t;			//	Record the last unvisited permutation integer
+			t=successor1[t];
+			};
+		if (nu==5)
+			{
+			//	We found 5 unvisited permutations we can visit this way
+			
+			mperm_res[w+1]=p+5;
+			int sz=j0+1;
+			char *ks=klbStrings[w+1];
+			for (int k=0;k<sz;k++) ks[k]=curstr[k];
+			ks[sz] = ks[sz-(n-1)];
+			ks[sz+1] = ks[sz-n];
+			for (int j=0;j<nu-1;j++) ks[sz+2+j] = ks[sz-(n-2)+j];
+			int q=sz+nu+1;
+			for (int k=j0+1;k<size;k++) ks[q++] = curstr[k];
+			klbLen[w+1] = q;
+			witnessLowerBound(klbStrings[w+1], klbLen[w+1], w+1, p+5);
+			break;
+			};
+		};
+	};
+	
+free(wasted);
+free(perms);
+}
+
+void maybeUpdateLowerBound(int tperm, int size, int w, int p)
+{
+maybeUpdateLowerBoundSplice(size,w,p);
+maybeUpdateLowerBoundAppend(tperm,size,w,p);
+}
