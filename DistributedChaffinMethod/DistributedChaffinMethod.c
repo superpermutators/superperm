@@ -903,8 +903,8 @@ for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
 asciiString[bestSeenLen] = '\0';
 
 #if !NO_SERVER
-sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u",
-	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1);
+sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s",
+	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 free(currentTask.prefix);
@@ -1394,7 +1394,7 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,tot_bl,asciiString);
+sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,tot_bl,asciiString,teamName);
 sendServerCommandAndLog(buffer,NULL);
 #endif
 }
@@ -1788,7 +1788,7 @@ return tsk->n_value;
 int getTask(struct task *tsk)
 {
 static char buffer[BUFFER_SIZE];
-sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u",clientID,ipAddress,programInstance);
+sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u&team=%s",clientID,ipAddress,programInstance,teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
@@ -1977,7 +1977,7 @@ void registerClient()
 {
 static char buffer[BUFFER_SIZE];
 
-sprintf(buffer,"action=register&programInstance=%u",programInstance);
+sprintf(buffer,"action=register&programInstance=%u&team=%s",programInstance,teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");

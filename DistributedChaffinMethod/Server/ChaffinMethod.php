@@ -155,7 +155,7 @@ return -1;
 //
 //	If $p = n!, a copy of the string is stored in the separate "superperms" database
 
-function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
+function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 	if ($pro > 0 && $pro <= $p) return "Error: Trying to set permutations ruled out to $pro while exhibiting a string with $p permutations\n";
 
 	$isSuper = ($p==factorial($n));
@@ -181,8 +181,8 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 		if ($isSuper) {
 			$ip = $_SERVER['REMOTE_ADDR'];
 
-			$res = $pdo->prepare("INSERT INTO superperms (n,waste,perms,str,IP) VALUES(?, ?, ?, ?, ?)");
-			$res->execute([$n, $w, $p, $str, $ip]);
+			$res = $pdo->prepare("INSERT INTO superperms (n,waste,perms,str,IP,team) VALUES(?, ?, ?, ?, ?, ?)");
+			$res->execute([$n, $w, $p, $str, $ip, $teamName]);
 
 			
 			// if (!$mysqli->real_query("INSERT INTO superperms (n,waste,perms,str,IP) VALUES($n, $w, $p, '$str', '$ip')"))
@@ -213,15 +213,15 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 					//if ($mysqli->real_query("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES($n, $w, $p, '$str', $pro, '$final')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES(?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $pro, $final]);
+					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
+					$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
 					$result = "($n, $w, $p)\n";
 				} else {
 					// if ($mysqli->real_query("INSERT INTO witness_strings (n,waste,perms,str) VALUES($n, $w, $p, '$str')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str) VALUES(?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str]);
+					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
+					$res->execute([$n, $w, $p, $str, $teamName]);
 					$result = "($n, $w, $p)\n";
 				}
 			} else {
@@ -244,15 +244,15 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro) {
 					// if ($mysqli->real_query("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES($n, $w, $p, '$str', $pro, '$final')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final) VALUES(?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $pro, $final]);
+					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
+					$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
 					$result = "($n, $w, $p)\n";
 				} else {
 					// if ($mysqli->real_query("REPLACE INTO witness_strings (n,waste,perms,str) VALUES($n, $w, $p, '$str')"))
 						// $result = "($n, $w, $p)\n";
 					// else $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str) VALUES(?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str]);
+					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
+					$res->execute([$n, $w, $p, $str, $teamName]);
 					$result = "($n, $w, $p)\n";
 				}
 			} else {
@@ -335,7 +335,7 @@ function makeTask($n, $w, $pte, $str) {
 //	or:			"No tasks"
 //	or:			"Error ... "
 
-function getTask($cid,$ip,$pi,$version) {
+function getTask($cid,$ip,$pi,$version,$teamName) {
 // global $host, $user_name, $pwd, $dbase;
 	global $pdo;
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -413,8 +413,8 @@ function getTask($cid,$ip,$pi,$version) {
 				}
 				
 				if (is_integer($id) && is_integer($access) && is_integer($n) && is_integer($w) && is_string($str) && is_integer($ppro) && is_string($br)) {
-					$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=? WHERE id=?");
-					$res->execute([$cid, $id]);
+					$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=?, team=? WHERE id=?");
+					$res->execute([$cid, $id, $teamName]);
 
 					$res = $pdo->prepare("UPDATE workers SET current_task=? WHERE id=?");
 					$res->execute([$id, $cid]);
@@ -834,7 +834,7 @@ function finishedAllTasks($n, $w, $iter) {
 //
 //	Returns: "OK ..." or "Error: ... "
 	
-function finishTask($id, $access, $pro, $str) {
+function finishTask($id, $access, $pro, $str, $teamName) {
 // global $host, $user_name, $pwd, $dbase;
 	global $pdo;
 // $mysqli = new mysqli($host, $user_name, $pwd, $dbase);
@@ -899,8 +899,8 @@ function finishTask($id, $access, $pro, $str) {
 							$update_res->execute([$res->rowCount()]);
 
 							while ($row2 = $res->fetch()) {
-								$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)");
-								$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id']]);
+								$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+								$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
 							}
 
 							$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
@@ -909,8 +909,8 @@ function finishTask($id, $access, $pro, $str) {
 							// $mysqli->real_query("UPDATE tasks SET status='F', ts_finished=NOW(), perm_ruled_out=$pro, excl_witness='Redundant' WHERE n=$n AND waste=$w AND iteration=$iter AND status='U'");
 						}
 
-						$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)");
-						$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], $row['status'], $row['branch_order'], $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str, $row['checkin_count'], $pro, $row['client_id']]);
+						$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+						$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], $row['status'], $row['branch_order'], $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str, $row['checkin_count'], $pro, $row['client_id'], $teamName]);
 						// echo "INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)";
 						// print_r([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], $row['status'], $row['branch_order'], $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $row['ts_finished'], $str, $row['checkin_count'], $pro, $row['client_id']]);
 
@@ -922,6 +922,16 @@ function finishTask($id, $access, $pro, $str) {
 						$res->execute([$id, $access]);
 
 						$res = $pdo->query("UPDATE num_finished_tasks SET num_finished = num_finished + 1");
+
+						// Try to increment team task count
+						$res = $pdo->prepare("UPDATE teams SET tasks_completed = tasks_completed + 1 WHERE team = ?");
+						$res->execute();
+
+						// If no rows were affected, we need to add the team to this table
+						if ($res->rowCount() == 0) {
+							$res = $pdo->prepare("INSERT INTO terms (team, tasks_completed) values (?, 1)");
+							$res->execute([$teamName]);
+						}
 
 						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
 						$res->execute([$n, $w, $iter]);
@@ -965,7 +975,7 @@ function finishTask($id, $access, $pro, $str) {
 				}
 			}
 		} else {
-			$result = "Error: No match to id=$id, access=$access for the task being finalised. (It may have already been unexpectedly finalized.)\n";
+			$result = "Error: No match to id=$id, access=$access for the task being finalised. (It may have already been unexpectedly finalised.)\n";
 		}
 		
 		// $pdo->exec("UNLOCK TABLES");
@@ -1122,7 +1132,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 
 //	Function to register a worker, using their supplied program instance number and their IP address
 
-function register($pi) {
+function register($pi, $teamName) {
 // global $host, $user_name, $pwd, $dbase, $maxClients;
 	global $maxClients, $pdo;
 
@@ -1161,8 +1171,8 @@ function register($pi) {
 		}
 		
 		if ($ok) {
-			$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered) VALUES(?, ?, NOW())");
-			$res->execute([$ra, $pi]);
+			$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered,team) VALUES(?, ?, NOW(), ?)");
+			$res->execute([$ra, $pi, $teamName]);
 
 			// if (!$mysqli->real_query("INSERT INTO workers (IP,instance_num,ts_registered) VALUES('$ra', $pi, NOW())"))
 				// $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -1293,10 +1303,11 @@ if (is_string($qs))
 					else
 						{
 								$pi = $q['programInstance'];
-								if (is_string($pi))
+								$teamName = $q['team'];
+								if (is_string($pi) && is_string($teamName))
 									{
 									$queryOK = TRUE;
-									echo register($pi);
+									echo register($pi, $teamName);
 									}
 						}
 					}
@@ -1305,7 +1316,8 @@ if (is_string($qs))
 					$pi = $q['programInstance'];
 					$cid = $q['clientID'];
 					$ip = $q['IP'];
-					if (is_string($pi) && is_string($cid) && is_string($ip))
+					$teamName = $q['team'];
+					if (is_string($pi) && is_string($cid) && is_string($ip) && is_string($teamName))
 						{
 						if ($version < $versionForNewTasks)
 							{
@@ -1315,7 +1327,7 @@ if (is_string($qs))
 						else
 							{
 							$queryOK = TRUE;
-							echo getTask($cid,$ip,$pi,$version);
+							echo getTask($cid,$ip,$pi,$version,$teamName);
 							}
 						}
 					}
@@ -1368,13 +1380,14 @@ if (is_string($qs))
 					$access = $q['access'];
 					$pro_str = $q['pro'];
 					$str = $q['str'];
-					if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str))
+					$teamName = $q['team'];
+					if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str) && is_string($teamName))
 						{
 						$pro = intval($pro_str);
 						if ($pro > 0)
 							{
 							$queryOK = TRUE;
-							echo finishTask($id, $access, $pro, $str);
+							echo finishTask($id, $access, $pro, $str, $teamName);
 							}
 						}
 					}
@@ -1434,7 +1447,7 @@ if (is_string($qs))
 												if (is_string($pro_str)) $pro = intval($pro_str);
 												else $pro = -1;
 												}
-											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro);
+											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $q['team']);
 											}
 										else if ($p<0) $err = 'Invalid string';
 										else $err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";

@@ -209,18 +209,16 @@ for ($n = $max_n; $n >= $min_n; $n--)
 			};
 
 		$res = $pdo->query("SELECT num_finished from num_finished_tasks");
-		if ($res->rowCount() != 0){
+		if ($row = $res->fetch()){
 			echo "<tr>\n";
-			$row = $res->fetch();
 			echo "<td class='center'>Finished</td>\n";
 			echo "<td class='right'>" . $row['num_finished'] . "</td>\n";
 			echo "</tr>\n";
 		}
 
 		$res = $pdo->query("SELECT num_redundant from num_redundant_tasks");
-		if ($res->rowCount() != 0){
+		if ($row = $res->fetch()){
 			echo "<tr>\n";
-			$row = $res->fetch();
 			echo "<td class='center'>Redundant</td>\n";
 			echo "<td class='right'>" . $row['num_redundant'] . "</td>\n";
 			echo "</tr>\n";
