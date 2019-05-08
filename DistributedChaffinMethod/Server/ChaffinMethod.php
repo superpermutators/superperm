@@ -929,7 +929,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 
 						// If no rows were affected, we need to add the team to this table
 						if ($res->rowCount() == 0) {
-							$res = $pdo->prepare("INSERT INTO terms (team, tasks_completed) values (?, 1)");
+							$res = $pdo->prepare("INSERT INTO teams (team, tasks_completed) values (?, 1)");
 							$res->execute([$teamName]);
 						}
 
