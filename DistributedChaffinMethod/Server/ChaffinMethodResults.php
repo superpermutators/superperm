@@ -4,9 +4,11 @@
 
 	if (file_exists($statusCache) && (time() - filemtime($statusCache)) < 30) {
 		include("statusCache.html");
-	} else {
-		ob_start();
+		exit;
 	}
+
+	ob_start();
+	ob_implicit_flush(0);
 ?>
 
 <!DOCTYPE html>
@@ -362,5 +364,7 @@ if ($noResults) echo "<p>The database contains no results.</p>\n";
 	$fp=fopen($statusCache,"w");
 	fwrite($fp,$pageContents);
 	fclose($fp);
+
+	include($statusCache);
 
 ?>
