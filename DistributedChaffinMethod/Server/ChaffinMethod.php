@@ -17,7 +17,7 @@ $versionForNewTasks = 8;
 
 //	Maximum number of clients to register
 
-$maxClients = 80;
+$maxClients = 100;
 
 //	Valid range for $n
 
@@ -1178,7 +1178,7 @@ function register($pi, $teamName) {
 				// $result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 			// else
 				// {
-			$result = "Registered\nClient id: " . $pdo->lastInsertId() . "\nIP: $ra\nprogramInstance: $pi\n";
+			$result = "Registered\nClient id: " . $pdo->lastInsertId() . "\nIP: $ra\nprogramInstance: $pi\nteam name: $teamName\n";
 				// };
 		}
 		

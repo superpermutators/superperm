@@ -130,7 +130,7 @@ else
 	{
 */
 echo "<h1>ADA &mdash; Chaffin Method Results</h1>\n";
-echo "<i>The data on this page refreshes at most once per {$cacheTime} seconds.<br />\n";
+echo "<div style=\"margin-top:-8px\"><i>The data on this page refreshes at most once per {$cacheTime} seconds.</i></div><br />\n";
 
 
 // $res = $mysqli->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
