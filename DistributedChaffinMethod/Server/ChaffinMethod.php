@@ -798,7 +798,7 @@ function finishedAllTasks($n, $w, $iter) {
 	} else {
 		//	We need to backtrack and search for a lower perm_to_exceed
 		
-		$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+		$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
 		$res->execute([$n, $w, $iter]);
 		// $res = $mysqli->query("SELECT MIN(perm_to_exceed) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
 		// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
@@ -1452,7 +1452,7 @@ if (is_string($qs))
 												else $pro = -1;
 												}
 											$teamName = $q['team'];
-											if ($teamName = "") $teamName = "anonymous";
+											if ($teamName == "") $teamName = "anonymous";
 											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName);
 											}
 										else if ($p<0) $err = 'Invalid string';
