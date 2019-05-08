@@ -146,8 +146,6 @@ if ($res->rowCount() != 0)
 		};
 
 	$res = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
-
-
 	$distinctIP = $res->rowCount();
 
 	$maxTPI = 0;
@@ -164,6 +162,34 @@ if ($res->rowCount() != 0)
 	echo "</table>\n";
 	};
 // $res->close();
+
+
+
+
+$res = $pdo->query("SELECT * FROM teams ORDER BY tasks_completed DESC");
+if ($res->rowCount() != 0){
+	echo "<table class='strings'><caption>Top Teams</caption>\n";
+	$allRows = $res->fetchAll();
+	echo "<tr>\n";
+	foreach($allRows as $ind => $row) {
+		echo "<td class='center'>" . $row['team'] . "</th>\n";
+	}
+	echo "</tr><tr>\n";
+	foreach($allRows as $ind => $row) {
+		echo "<td class='center'>" . $row['tasks_completed'] . "</th>\n";
+	}
+	echo "</tr>";
+	// for ($row_no = 0; $row_no < $res->num_rows; $row_no++)
+	echo "</table>\n";
+}
+
+
+
+
+
+
+
+
 
 $res = $pdo->query("SHOW TABLE STATUS FROM $db LIKE 'superperms'");
 // $res->data_seek(0);

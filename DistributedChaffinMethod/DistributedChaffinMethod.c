@@ -425,7 +425,7 @@ for (int i=1;i<argc;i++)
 			if (strlen(argv[i+1]) <= MAX_TEAM_NAME_LENGTH) {
 				teamName = argv[i+1];
 				for (int pos=0; teamName[pos]!= '\0'; pos++) {
-					if (!isalpha(teamName[pos]) && !isdigit(teamName[pos]) && !isspace(teamName[pos]) && !isascii(teamName[pos])) {
+					if (!isalpha(teamName[pos]) || !isdigit(teamName[pos]) || !isspace(teamName[pos]) || !isascii(teamName[pos])) {
 						printf("Team names must contain only alphanumeric ascii characters and spaces.\n");
 						exit(EXIT_FAILURE);
 					}
