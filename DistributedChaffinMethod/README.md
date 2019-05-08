@@ -1,4 +1,4 @@
-# Readme.txt
+# Readme
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
