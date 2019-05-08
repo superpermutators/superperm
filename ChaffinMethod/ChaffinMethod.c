@@ -24,8 +24,8 @@ This version aspires to give a result for n=6 before the death of the sun,
 but whether it can or not is yet to be confirmed.
 
 Author: Greg Egan
-Version: 2.11
-Last Updated: 15 April 2019
+Version: 2.13
+Last Updated: 6 May 2019
 
 Usage:
 
@@ -122,12 +122,17 @@ int maxInt;			//	Highest integer representation of an n-digit sequence we can en
 int maxIntM;		//	Highest integer representation of an (n-1)-digit sequence we can encounter, plus 1
 int maxW;			//	Largest number of wasted characters we allow for
 char *curstr;		//	Current string
+int *dvals;			//	Value of discriminant at each level
 int max_perm;		//	Maximum number of permutations visited by any string seen so far
 int *mperm_res;		//	For each number of wasted characters, the maximum number of permutations that can be visited
 int *mperm_ruledOut;		//	For each number of wasted characters, the smallest number of permutations currently ruled out
+int *successor1;	//	For each permutation, its weight-1 successor
+int *successor2;	//	For each permutation, its weight-2 successor
 int *nBest;			//	For each number of wasted characters, the number of strings that achieve mperm_res permutations
-int *bestLen;		//	For each number of wasted characters, the lengths of the strings that visit mperm_res permutations
-int **bestStrings;	//	For each number of wasted characters, a list of all strings that visit mperm_res permutations
+int *bestLen;		//	For each number of wasted characters, the lengths of the strings that visit final mperm_res permutations
+char **bestStrings;	//	For each number of wasted characters, a list of all strings that visit final mperm_res permutations
+int *klbLen;		//	For each number of wasted characters, the lengths of the strings that visit known-lower-bound permutations
+char **klbStrings;	//	For each number of wasted characters, a list of all strings that visit known-lower-bound permutations
 int tot_bl;			//	The total number of wasted characters we are allowing in strings, in current search
 char *unvisited;	//	Flags set FALSE when we visit a permutation, indexed by integer rep of permutation
 char *valid;		//	Flags saying whether integer rep of digit sequence corresponds to a valid permutation
@@ -144,8 +149,9 @@ int oneExample=FALSE;	//	Option that when TRUE limits search to a single example
 int allExamples=TRUE;
 int noRepeats=FALSE;
 int allowRepeats=TRUE;
-int done=FALSE;			//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
-char outputFileName[256];
+int fallBackTo;			//	Level we fall back to when we are deeper in the tree than we need to be
+unsigned long int nodeCount=0;
+char outputFileName[256], summaryFileName[256];
 
 //	Monitoring 1-cycle tracking
 
@@ -163,21 +169,25 @@ int ocpThreshold[]={1000,1000,1000,1000, 6, 24, 120, 720};
 //	--------------------
 
 void fillStr(int pos, int pfound, int partNum, int leftPerm);
-void fillStr2(int pos, int pfound, int partNum, char *remapDigits, int *bestStr, int len);
+void fillStr2(int pos, int pfound, int partNum, char *remapDigits, char *bestStr, int len);
 int fac(int k);
 void makePerms(int n, int **permTab);
 void writeCurrentString(int newFile, int size);
+void maybeUpdateLowerBound(int tperm, int size, int w, int p);
 void clearFlags(int tperm0);
 void readBackFile(FILE *fp, int w);
 int compareDS(const void *ii0, const void *jj0);
 void rClassMin(int *p, int n);
 int pruneOnPerms(int w, int d0);
+void printDigits(int t);
 
 //	Main program
 //	------------
 
 int main(int argc, const char * argv[])
 {
+FILE *fp;
+
 if (argc>=2 && argv[1][0]>='0'+MIN_N && argv[1][0]<='0'+MAX_N)
 	{
 	n = argv[1][0]-'0';
@@ -200,12 +210,18 @@ else
 	
 allExamples = !oneExample;
 allowRepeats = !noRepeats;
+
+sprintf(summaryFileName,"ChaffinMethodMaxPerms_%d.txt",n);
 	
 fn=fac(n);
 
 //	Storage for current string
 
 CHECK_MEM( curstr = (char *)malloc(2*fn*sizeof(char)) )
+
+//	Values of discriminant (sign says whether to go deeper)
+
+CHECK_MEM( dvals = (int *)malloc(2*fn*sizeof(int)) )
 
 //	Storage for things associated with different numbers of wasted characters
 
@@ -215,12 +231,27 @@ CHECK_MEM( nBest = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( mperm_ruledOut = (int *)malloc(maxW*sizeof(int)) )
 CHECK_MEM( bestLen = (int *)malloc(maxW*sizeof(int)) )
-CHECK_MEM( bestStrings = (int **)malloc(maxW*sizeof(int *)) )
+CHECK_MEM( bestStrings = (char **)malloc(maxW*sizeof(char *)) )
+CHECK_MEM( klbLen = (int *)malloc(maxW*sizeof(int)) )
+CHECK_MEM( klbStrings = (char **)malloc(maxW*sizeof(char *)) )
+
+//	The value of mperm_res[w] is the highest permutation count that we are current certain can be achieved
+//	with w wasted characters.
+
+for (int i=0;i<maxW;i++) mperm_res[i]=n;
 
 //	The value of mperm_ruledOut[w] is the lowest permutation count that we are currently certain cannot be achieved
 //	with w wasted characters.
 
 for (int i=0;i<maxW;i++) mperm_ruledOut[i]=fn+1;
+
+//	Storage for known-lower-bound strings
+
+for (int i=0;i<maxW;i++)
+	{
+	CHECK_MEM( klbStrings[i] = (char *)malloc(2*fn*sizeof(char)))
+	klbLen[i] = 0;
+	};
 
 //	Compute number of bits we will shift final digit
 
@@ -246,19 +277,44 @@ int *p0 = permTab[n-1];
 
 //	Set up flags that say whether each number is a valid permutation or not,
 //	and whether we have visited a given permutation.
+//
+//	Also, find the weight-1 and weight-2 successors of each permutation
 
 CHECK_MEM( valid = (char *)malloc(maxInt*sizeof(char)) )
 CHECK_MEM( unvisited = (char *)malloc(maxInt*sizeof(char)) )
+CHECK_MEM( successor1 = (int *)malloc(maxInt*sizeof(int)) )
+CHECK_MEM( successor2 = (int *)malloc(maxInt*sizeof(int)) )
 
 for (int i=0;i<maxInt;i++) valid[i]=FALSE;
 for (int i=0;i<fn;i++)
 	{
-	int tperm=0;
+	int tperm=0, tperm1=0, tperm2=0;
 	for (int j0=0;j0<n;j0++)
 		{
 		tperm+=(p0[n*i+j0]<<(j0*DBITS));
+		
+		//	Left shift digits by one to get weight-1 successor
+		
+		tperm1+=(p0[n*i+(j0+1)%n]<<(j0*DBITS));
+		
+		//	Left shift digits by 2 and swap last pair
+		
+		int k0;
+		if (j0==n-1) k0=0;
+		else if (j0==n-2) k0=1;
+		else k0=(j0+2)%n;
+		
+		tperm2+=(p0[n*i+k0]<<(j0*DBITS));
 		};
 	valid[tperm]=TRUE;
+	successor1[tperm]=tperm1;
+	successor2[tperm]=tperm2;
+/*
+		printDigits(tperm);
+		printDigits(tperm1);
+		printDigits(tperm2);
+		printf("----\n");
+*/
 	};
 	
 //	For each number d_1 d_2 d_3 ... d_n as a digit sequence, what is
@@ -410,7 +466,7 @@ max_perm = n;			//	Any new maximum (for however many wasted characters) must exc
 
 bestLen[0] = 2*n-1;
 nBest[0] = 1;
-CHECK_MEM( bestStrings[0] = (int *)malloc(bestLen[0]*nBest[0]*sizeof(int)) )
+CHECK_MEM( bestStrings[0] = (char *)malloc(bestLen[0]*nBest[0]*sizeof(char)) )
 for (int i=0;i<n;i++) bestStrings[0][i]=i+1;
 for (int i=n;i<2*n-1;i++) bestStrings[0][i]=i-n+1;
 						
@@ -433,11 +489,11 @@ int didResume = FALSE;
 for (tot_bl=1; tot_bl<maxW; tot_bl++)
 	{
 	sprintf(outputFileName,"Chaffin_%d_W_%d%s.txt",n,tot_bl,oneExample?"_OE":"");
-	FILE *fp = fopen(outputFileName,"ra");
+	fp = fopen(outputFileName,"rt");
 	if (fp==NULL)
 		{
 		sprintf(outputFileName,"Chaffin_%d_W_%d.txt",n,tot_bl);
-		fp = fopen(outputFileName,"ra");
+		fp = fopen(outputFileName,"rt");
 		if (fp==NULL) break;
 		};
 	
@@ -452,7 +508,7 @@ for (tot_bl=1; tot_bl<maxW; tot_bl++)
 		if (nBest[tot_bl]==0) bestLen[tot_bl]++;
 		};
 	fclose(fp);
-	fp = fopen(outputFileName,"ra");
+	fp = fopen(outputFileName,"rt");
 	readBackFile(fp, tot_bl);
 	fclose(fp);
 	
@@ -484,6 +540,10 @@ oneCycleBins[n-1]=1;
 
 for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	{
+	//	Rule out increasing by more than n when we add one more wasted character
+	
+	mperm_ruledOut[tot_bl] = mperm_res[tot_bl-1] + n + 1;
+
 	sprintf(outputFileName,"Chaffin_%d_W_%d%s.txt",n,tot_bl,oneExample?"_OE":"");
 	
 	#if GET_OCP_DATA
@@ -498,57 +558,87 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 	
 	int old_max = mperm_res[tot_bl-1];
 	max_perm = old_max + expectedInc;
-
-	if (allExamples)
+	
+	printf("[Starting search for w=%d, with initial max_perm of %d, mperm_ruledOut=%d]\n",tot_bl,max_perm,mperm_ruledOut[tot_bl]);
+	
+	//	Look at lower bound we might have obtained from previous calculation
+	
+	nBest[tot_bl]=0;
+	if (klbLen[tot_bl] > 0 && mperm_res[tot_bl] >= max_perm)
 		{
-		if (max_perm > fn) max_perm = fn;
+		for (int k=0;k<klbLen[tot_bl];k++) curstr[k]=klbStrings[tot_bl][k];
+		writeCurrentString(TRUE,klbLen[tot_bl]);
+		max_perm = mperm_res[tot_bl];
+		nBest[tot_bl]=1;
+		bestLen[tot_bl]=klbLen[tot_bl];
+		printf("[Using max_perm of %d from previous calculations]\n",max_perm);
+		};
+		
+	if (oneExample && klbLen[tot_bl]>0 && mperm_res[tot_bl]+1 >= mperm_ruledOut[tot_bl])
+		{
+		printf("[Extending strings from previous calculations already gave us an answer:]\n");
 		}
 	else
 		{
-		if (max_perm >= fn) max_perm = fn-1;
-		};
-	
-	if (didResume && tot_bl==resumeFrom)
-		{
-		max_perm = mperm_res[resumeFrom];
-		if (allExamples) nBest[tot_bl]=0;
-		}
-	else nBest[tot_bl]=0;
-	
-	//	Recursively fill in the string
+		if (allExamples)
+			{
+			nBest[tot_bl]=0;
+			if (max_perm > fn) max_perm = fn;
+			}
+		else
+			{
+			if (max_perm >= fn) max_perm = fn-1;
+			};
+		
+		if (didResume && tot_bl==resumeFrom)
+			{
+			max_perm = mperm_res[resumeFrom];
+			};
+		
+		//	Recursively fill in the string
 
-	while (max_perm>0)
-		{
-		clearFlags(tperm0);
-		bestLen[tot_bl]=max_perm+tot_bl+n-1;
-		done=FALSE;
-		fillStr(n,1,partNum0,TRUE);
-		if (nBest[tot_bl] > 0) break;
-		
-		//	We searched either for matches to max_perm (allExamples) or strings that did better than max_perm (oneExample), and came up empty
-		
-		printf("Backtracking, reducing max_perm from %d to %d\n",max_perm,max_perm-1);
-		if (allExamples) mperm_ruledOut[tot_bl] = max_perm;
-		else mperm_ruledOut[tot_bl] = max_perm+1;
-		max_perm--;
-		};
-		
-	if (max_perm - old_max < expectedInc)
-		{
-		printf("Reduced default increment in max_perm from %d to ",expectedInc);
-		expectedInc = max_perm - old_max;
-		if (expectedInc <= 0) expectedInc = 1;
-		printf("%d\n",expectedInc);
-		};
+		while (max_perm>0)
+			{
+			clearFlags(tperm0);
+			bestLen[tot_bl]=max_perm+tot_bl+n-1;
+			fallBackTo=2*fn;
+			fillStr(n,1,partNum0,TRUE);
+			if (nBest[tot_bl] > 0) break;
+			
+			//	We searched either for matches to max_perm (allExamples) or strings that did better than max_perm (oneExample), and came up empty
+			
+			if (allExamples) mperm_ruledOut[tot_bl] = max_perm;
+			else mperm_ruledOut[tot_bl] = max_perm+1;
+			max_perm--;
+			
+			printf("Backtracking, reducing max_perm from %d to %d, mperm_ruledOut=%d (%lu calls)\n",
+				max_perm+1,max_perm,mperm_ruledOut[tot_bl],nodeCount);
+			};
 
+		if (max_perm - old_max < expectedInc)
+			{
+			printf("Reduced default increment in max_perm from %d to ",expectedInc);
+			expectedInc = max_perm - old_max;
+			if (expectedInc <= 0) expectedInc = 1;
+			printf("%d\n",expectedInc);
+			};
+
+		};
 	
 	//	Record maximum number of permutations visited with this many wasted characters
 
 	mperm_res[tot_bl] = max_perm;
 
-	printf("%d wasted characters: at most %d permutations, in %d characters, %d examples\n",
-		tot_bl,max_perm,bestLen[tot_bl],nBest[tot_bl]);
-
+	printf("%d wasted characters: at most %d permutations, in %d characters, %d examples (%lu calls)\n\n",
+		tot_bl,max_perm,bestLen[tot_bl],nBest[tot_bl],nodeCount);
+		
+	fp=fopen(summaryFileName,"at");
+	if (fp!=NULL)
+		{
+		fprintf(fp,"%d\t%d\n",tot_bl,max_perm);
+		fclose(fp);
+		};
+		
 	if (max_perm >= fn)
 		{
 		printf("\n-----\nDONE!\n-----\nMinimal superpermutations on %d symbols have %d wasted characters and a length of %d.\n\n",
@@ -558,7 +648,7 @@ for (tot_bl=resumeFrom; tot_bl<maxW; tot_bl++)
 		
 	//	Read back list of best strings
 	
-	FILE *fp = fopen(outputFileName,"ra");
+	fp = fopen(outputFileName,"rt");
 	if (fp==NULL)
 		{
 		printf("Unable to open file %s to read\n",outputFileName);
@@ -581,7 +671,8 @@ return 0;
 
 void fillStr(int pos, int pfound, int partNum, int leftPerm)
 {
-if (done) return;
+if (pos > fallBackTo) return; else fallBackTo = 2*fn;
+nodeCount++;
 
 int tperm, ld;
 int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
@@ -595,7 +686,7 @@ if	(allExamples && leftPerm && spareW < tot_bl && mperm_res[spareW] + pfound - 1
 	for (int i=0;i<nBest[spareW];i++)
 		{
 		int len = bestLen[spareW];
-		int *bestStr = bestStrings[spareW] + i*len;
+		char *bestStr = bestStrings[spareW] + i*len;
 		char *remapDigits = curstr + pos - n - 1;
 		fillStr2(pos,pfound,partNum,remapDigits,bestStr+n,len-n);
 		};
@@ -631,6 +722,7 @@ int swap01 = (nd->score==1 && (!unvisited[nd->nextPerm]) && unvisited[nd[1].next
 int swap12 = FALSE;					//	This is set later if the conditions are met
 
 int deferredRepeat=FALSE;			//	If we find a repeated permutation, we follow that branch last
+int deltaMaxPerm=0;					//	Amount max_perm is increased by a new string
 
 for	(int y=0; y<nm; y++)
 	{
@@ -670,16 +762,21 @@ for	(int y=0; y<nm; y++)
 			writeCurrentString(TRUE,pos+1);
 			nBest[tot_bl]=1;
 			bestLen[tot_bl]=pos+1;
+			deltaMaxPerm = pfound+1-max_perm;
 			max_perm = pfound+1;
+			printf("[Found a string that increased max_perm to %d]\n",max_perm);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 			if (oneExample && max_perm+1 >= mperm_ruledOut[tot_bl])
 				{
-				done=TRUE;
+				printf("[Search is done]\n");
+				fallBackTo=-1;
 				return;
 				};
 			}
 		else if (pfound+1==max_perm)
 			{
 			writeCurrentString(nBest[tot_bl]==0,pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 			nBest[tot_bl]++;
 			};
 
@@ -692,6 +789,7 @@ for	(int y=0; y<nm; y++)
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
 		
+			dvals[pos+1]=10000;
 			fillStr(pos+1, pfound+1, ndz->nextPart, TRUE);
 		
 			oneCycleBins[prevC-1]--;
@@ -700,6 +798,7 @@ for	(int y=0; y<nm; y++)
 			}
 		else
 			{
+			dvals[pos+1]=10000;
 			fillStr(pos+1, pfound+1, ndz->nextPart, TRUE);
 			};
 		unvisited[tperm]=TRUE;
@@ -718,6 +817,7 @@ for	(int y=0; y<nm; y++)
 				(oneExample && d > 0) || (allExamples && d >= 0)
 				)
 				{
+				dvals[pos+1]=d;
 				fillStr(pos+1, pfound, ndz->nextPart, FALSE);
 				}
 			else break;
@@ -736,7 +836,23 @@ if (deferredRepeat)
 		)
 		{
 		curstr[pos] = nd->digit;
+		dvals[pos+1]=d;
 		fillStr(pos+1, pfound, nd->nextPart, TRUE);
+		};
+	};
+
+if (deltaMaxPerm && fallBackTo > 0)
+	{
+	printf("[level=%d, deltaMaxPerm=%d]\n",pos,deltaMaxPerm);
+	for (int i=n+1;i<=pos;i++) dvals[i]-=deltaMaxPerm;
+	for (int i=n+1;i<pos;i++)
+		{
+		if ((oneExample && dvals[i]<=0) || (allExamples && dvals[i] <0))
+			{
+			fallBackTo = i-1;
+			printf("[Fall back from level %d to level %d]\n",pos,fallBackTo);
+			break;
+			};
 		};
 	};
 }
@@ -744,7 +860,7 @@ if (deferredRepeat)
 //	Version that fills in the string when we are following a previously computed best string
 //	rather than trying all digits.
 
-void fillStr2(int pos, int pfound, int partNum, char *remapDigits, int *bestStr, int len)
+void fillStr2(int pos, int pfound, int partNum, char *remapDigits, char *bestStr, int len)
 {
 if (len<=0) return;		//	No more digits left in the template we are following
 
@@ -777,6 +893,7 @@ if	(j1 != curstr[pos-1])
 		else if (pfound+1==max_perm)
 			{
 			writeCurrentString(nBest[tot_bl]==0,pos+1);
+			maybeUpdateLowerBound(tperm,pos+1,tot_bl,max_perm);
 			nBest[tot_bl]++;
 			};
 			
@@ -861,7 +978,7 @@ else
 void writeCurrentString(int newFile, int size)
 {
 FILE *fp;
-fp = fopen(outputFileName,newFile?"wa":"aa");
+fp = fopen(outputFileName,newFile?"wt":"at");
 if (fp==NULL)
 	{
 	printf("Unable to open file %s to %s\n",outputFileName,newFile?"write":"append");
@@ -880,7 +997,7 @@ unvisited[tperm0]=FALSE;
 
 void readBackFile(FILE *fp, int w)
 {
-CHECK_MEM( bestStrings[w] = (int *)malloc(bestLen[w]*nBest[w]*sizeof(int)) )
+CHECK_MEM( bestStrings[w] = (char *)malloc(bestLen[w]*nBest[w]*sizeof(char)) )
 
 int ptr=0;
 for (int i=0;i<nBest[w];i++)
@@ -967,4 +1084,60 @@ for (int b=n;b>0;b--)
 	};
 MONITOR_OCP
 return res0;
+}
+
+void printDigits(int t)
+{
+printf("t=%d\n",t);
+for (int k=0;k<n;k++)
+	{
+	printf("%c",'0'+(t&7));
+	t=t>>DBITS;
+	};
+printf("\n");
+}
+
+//	Given the state of the unvisited[] flags (plus we have arrived at tperm, not yet flagged)
+//	how many permutations can we get by following a single weight-2 edge, and then as many weight-1 edges
+//	as possible before we hit a permutation already visited.
+
+void maybeUpdateLowerBound(int tperm, int size, int w, int p)
+{
+int unv[MAX_N+1];
+
+unvisited[tperm]=FALSE;
+
+//	Follow weight-2 edge
+
+int t=successor2[tperm];
+
+//	Follow successive weight-1 edges
+
+int nu=0, okT=0;
+while (unvisited[t])
+	{
+	unv[nu++]=t;		//	Record, so we can unroll
+	unvisited[t]=FALSE;	//	Mark as visited
+	okT = t;			//	Record the last unvisited permutation integer
+	t=successor1[t];
+	};
+	
+int m = p + nu;
+if (nu > 0 && m > mperm_res[w+1])
+	{
+	printf("[Updated lower bound for w=%d to %d]\n",w+1,m);
+	mperm_res[w+1] = m;
+	
+	curstr[size] = curstr[size-(n-1)];
+	curstr[size+1] = curstr[size-n];
+	for (int j=0;j<nu-1;j++) curstr[size+2+j] = curstr[size-(n-2)+j];
+
+	for (int k=0;k<size+nu+1;k++) klbStrings[w+1][k]=curstr[k];
+	klbLen[w+1] = size+nu+1;
+	
+	maybeUpdateLowerBound(okT, klbLen[w+1], w+1, m);
+	};
+
+for (int i=0;i<nu;i++) unvisited[unv[i]]=TRUE;
+unvisited[tperm]=TRUE;
 }
