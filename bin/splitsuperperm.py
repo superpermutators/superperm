@@ -1,10 +1,6 @@
 #!/usr/bin/python
 # -*- encoding: utf-8 -*-
-from __future__ import division
-
-import argparse
 import math
-import sys
 
 SYMBOLS = "123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
@@ -26,7 +22,6 @@ def permutations(n, superperm):
         if duplicates == 0: yield superperm[i : i + n]
         else: yield '...'
 
-
 def infer_n(superperm):
     """ The first n elements should be a permutation, so we can infer n """
     seen = set()
@@ -35,8 +30,8 @@ def infer_n(superperm):
             return i
         else:
             seen.add(c)
-    return i
-
+    """ Every value seen is unique => i + 1 MUST be returned """
+    return i + 1
 
 def split_superperm(superperm, opts):
     n = infer_n(superperm)
@@ -44,10 +39,10 @@ def split_superperm(superperm, opts):
         perms = set(p for p in permutations(n, superperm) if p != '...')
         perm_count = len(perms)
         expected = math.factorial(n)
-        print '{}{}'.format(perm_count, '*' if perm_count == expected else '')
+        print('{}{}'.format(perm_count, '*' if perm_count == expected else ''))
     else:
         for p in permutations(n, superperm):
-            print p
+            print(p)
 
 
 def split_file(file, opts):
@@ -60,18 +55,24 @@ def split_file(file, opts):
             continue
         split_superperm(line, opts)
 
-parser = argparse.ArgumentParser(description='Find permutations in a string')
-parser.add_argument('-c', '--count', action='store_true')
-parser.add_argument('-s', '--string')
-parser.add_argument('file', nargs='*')
-opts = parser.parse_args()
+def main():
+    parser = argparse.ArgumentParser(description='Find permutations in a string')
+    parser.add_argument('-c', '--count', action='store_true')
+    parser.add_argument('-s', '--string')
+    parser.add_argument('file', nargs='*')
+    opts = parser.parse_args()
 
-if opts.string:
-    split_superperm(opts.string, opts)
-elif len(opts.file) > 0:
-    for f in opts.file:
-        with open(f) as file:
-            split_file(file, opts)
-else:
-    split_file(sys.stdin, opts)
+    if opts.string:
+        split_superperm(opts.string, opts)
+    elif len(opts.file) > 0:
+        for f in opts.file:
+            with open(f) as file:
+                split_file(file, opts)
+    else:
+        split_file(sys.stdin, opts)
 
+if __name__ == "__main__":
+    # execute only if run as a script
+    import argparse
+    import sys
+    main()
