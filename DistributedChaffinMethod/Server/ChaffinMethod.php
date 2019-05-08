@@ -414,7 +414,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 				
 				if (is_integer($id) && is_integer($access) && is_integer($n) && is_integer($w) && is_string($str) && is_integer($ppro) && is_string($br)) {
 					$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=?, team=? WHERE id=?");
-					$res->execute([$cid, $id, $teamName]);
+					$res->execute([$cid, $teamName, $id]);
 
 					$res = $pdo->prepare("UPDATE workers SET current_task=? WHERE id=?");
 					$res->execute([$id, $cid]);
@@ -1266,7 +1266,7 @@ if (is_string($qs))
 		$k = key($q);
 		$v = current($q);
 		next($q);
-		if ($k != 'action' && $k != 'pwd' && k != 'team' && !checkString($v))
+		if ($k != 'action' && $k != 'pwd' && $k != 'team' && !checkString($v))
 			{
 			$ok=FALSE;
 			break;
