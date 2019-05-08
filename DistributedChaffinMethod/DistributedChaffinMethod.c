@@ -4,8 +4,11 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 8.1
-Last Updated: 4 May 2019
+Version: up to 8.1
+
+Secondary Author: Jay Pantone
+Version: 9 and beyond
+Last Updated: 8 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -87,7 +90,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=8&"
+#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 

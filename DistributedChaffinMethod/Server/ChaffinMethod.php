@@ -7,17 +7,17 @@ include '../config.php';
 //	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
 //	with a call to cancelStalledClients.
 
-$versionAbsolutelyRequired = 8;
+$versionAbsolutelyRequired = 9;
 
 //	Version of the client required for new registrations and new tasks to be allocated.
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 8;
+$versionForNewTasks = 9;
 
 //	Maximum number of clients to register
 
-$maxClients = 100;
+$maxClients = 1000;
 
 //	Valid range for $n
 
