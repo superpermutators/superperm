@@ -369,6 +369,4 @@ if ($noResults) echo "<p>The database contains no results.</p>\n";
 	fwrite($fp,$pageContents);
 	fclose($fp);
 
-	include($statusCache);
-
 ?>
