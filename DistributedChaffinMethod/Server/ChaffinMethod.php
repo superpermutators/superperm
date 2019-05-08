@@ -721,7 +721,7 @@ function finishedAllTasks($n, $w, $iter) {
 	// try {
 	// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
 
-	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM finishedtasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
 	$res->execute([$n, $w, $iter]);
 
 	// $res = $mysqli->query("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
@@ -1319,7 +1319,7 @@ if (is_string($qs))
 					$cid = $q['clientID'];
 					$ip = $q['IP'];
 					$teamName = $q['team'];
-					if ($teamName = "") $teamName = "anonymous";
+					if ($teamName == "") $teamName = "anonymous";
 					if (is_string($pi) && is_string($cid) && is_string($ip) && is_string($teamName))
 						{
 						if ($version < $versionForNewTasks)
@@ -1384,7 +1384,7 @@ if (is_string($qs))
 					$pro_str = $q['pro'];
 					$str = $q['str'];
 					$teamName = $q['team'];
-					if ($teamName = "") $teamName = "anonymous";
+					if ($teamName == "") $teamName = "anonymous";
 					if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str) && is_string($teamName))
 						{
 						$pro = intval($pro_str);
