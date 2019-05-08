@@ -721,7 +721,7 @@ function finishedAllTasks($n, $w, $iter) {
 	// try {
 	// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
 
-	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
 	$res->execute([$n, $w, $iter]);
 
 	// $res = $mysqli->query("SELECT MAX(perm_ruled_out) FROM tasks WHERE n=$n AND waste=$w AND iteration=$iter AND status='F'");
