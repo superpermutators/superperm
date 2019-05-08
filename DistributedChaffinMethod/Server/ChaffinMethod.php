@@ -1266,7 +1266,7 @@ if (is_string($qs))
 		$k = key($q);
 		$v = current($q);
 		next($q);
-		if ($k!='action' && $k!='pwd' && !checkString($v))
+		if ($k != 'action' && $k != 'pwd' && k != 'team' && !checkString($v))
 			{
 			$ok=FALSE;
 			break;
