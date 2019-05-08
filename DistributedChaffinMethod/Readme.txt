@@ -1,15 +1,14 @@
-Readme.txt
-==========
+# Readme.txt
 
 Author:			Greg Egan
+  (minor updates by Jay Pantone)
 Date:			3 May 2019
 
 NB:  These notes include some features that are only present from version 7 onwards. Please always install the latest
 version of the program.
 
 
-Building and testing
---------------------
+## Building and testing
 
 DistributedChaffinMethod.c is a single, standalone file for a command-line C program. It is intended to compile and run
 under MacOS, Linux and some versions of Windows.
@@ -24,8 +23,10 @@ in the C standard library. These are standard in MacOS/Linux, but for Windows wi
 If the program compiles correctly, running it with the option "test" will simply test whether or not it can connect to
 the server and read back the expected response:
 
+```sh
 $ DistributedChaffinMethod test
 Wed Apr 24 17:26:16 2019 Server: Hello world.
+```
 
 If you wish to commit to running the program to assist in the distributed search, simply run it with no arguments and it will
 loop indefinitely, waiting for available tasks to execute.
@@ -35,8 +36,7 @@ if it can't make a connection, it will loop, sleeping for a few minutes then try
 computations.
 
 
-Shutting down the program
--------------------------
+## Shutting down the program
 
 It is best if the program can be left running continuously, but if you do kill the program or shut down the computer it is
 running on, then (eventually) the task it was assigned will be reassigned to another instance of the program.
@@ -58,8 +58,7 @@ Any text editor can be used to create a file with the required name, and it does
 file contains. Just remember to delete the STOP file if you want to start running the program again (e.g. after an upgrade).
 
 
-Team name
----------
+## Team name
 
 You can specify a team name when launching the program. This team name will show up on the results page next to any 
 witness strings or superpermutations found by the client. The results page also keeps a log of how many tasks each
@@ -69,35 +68,40 @@ The default team name is "anonymous" if none is specific.
 
 Examples:
 
+```sh
 DistributedChaffinMethod team permutators
+```
 
+```sh
 DistributedChaffinMethod team "spaces work"
+```
 
 
-Time-limited run
-----------------
+## Time-limited run
 
 You can tell the program to run for a specified number of minutes, then wait to finish the current task before quitting.
 
 The time limit is specified on the command line:
 
+```sh
 DistributedChaffinMethod timeLimit 120
+```
 
 would tell the program to run for 120 minutes before quitting (after it has finished its current task).
 
 
-Multiple arguments
-------------------
+## Multiple arguments
 
 The "timeLimit" and "team" arguments can be used at the same time, in either order.
 
 Example:
 
+```sh
 DistributedChaffinMethod timeLimit 120 team "golden eagles"
+```
 
 
-Files written
--------------
+## Files written
 
 The program writes files:
 
