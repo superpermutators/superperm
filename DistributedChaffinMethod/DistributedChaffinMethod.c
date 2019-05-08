@@ -304,7 +304,7 @@ int timeQuotaMins=0;
 //  Default team name
 #define DEFAULT_TEAM_NAME "anonymous"
 #define MAX_TEAM_NAME_LENGTH 32
-const char *teamName;
+char *teamName;
 
 
 
@@ -423,13 +423,38 @@ for (int i=1;i<argc;i++)
 		{
 		if (i+1<argc) {
 			if (strlen(argv[i+1]) <= MAX_TEAM_NAME_LENGTH) {
-				teamName = argv[i+1];
+				teamName = (char *) argv[i+1];
 				for (int pos=0; teamName[pos]!= '\0'; pos++) {
-					if (!isalpha(teamName[pos]) || !isdigit(teamName[pos]) || !isspace(teamName[pos]) || !isascii(teamName[pos])) {
+					if (!isalpha(teamName[pos]) && !isdigit(teamName[pos]) && (teamName[pos] != ' ')) {
 						printf("Team names must contain only alphanumeric ascii characters and spaces.\n");
 						exit(EXIT_FAILURE);
 					}
 				}
+				// We have to encode spaces in the team name as "%20" to pass them via curl
+				// From https://stackoverflow.com/questions/3424474/replacing-spaces-with-20-in-c
+
+				int new_string_length = 0;
+				for (char *c = teamName; *c != '\0'; c++) {
+					if (*c == ' ') new_string_length += 2;
+					new_string_length++;
+				}
+
+				char *qstr = malloc((new_string_length + 1) * sizeof qstr[0]);
+				char *c1, *c2;
+				for (c1 = teamName, c2 = qstr; *c1 != '\0'; c1++) {
+					if (*c1 == ' ') {
+						c2[0] = '%';
+						c2[1] = '2';
+						c2[2] = '0';
+						c2 += 3;
+					}else{
+						*c2 = *c1;
+						c2++;
+					}
+				}
+				*c2 = '\0';
+				teamName = qstr;
+
 			} else {
 				printf("Team names are limited to %d characters.\n", MAX_TEAM_NAME_LENGTH);
 				exit(EXIT_FAILURE);

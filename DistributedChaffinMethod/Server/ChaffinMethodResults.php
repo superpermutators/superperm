@@ -92,9 +92,9 @@ $fieldAlign0 = array('center','right');
 $nFields0 = count($fieldNamesDisplay0);
 $statusAssoc0 = array("Inactive","Active on a task");
 
-$fieldNames = array('ts','n','waste','perms','str','excl_perms','final');
-$fieldNamesDisplay = array('time stamp','n','waste','maximum<br />perms seen','string showing<br />current maximum','minimum<br />perms excluded','finalised?');
-$fieldAlign = array('center','right','right','right','str','right','center');
+$fieldNames = array('ts','n','waste','perms','str','excl_perms','final','team');
+$fieldNamesDisplay = array('time stamp','n','waste','maximum<br />perms seen','string showing<br />current maximum','minimum<br />perms excluded','finalised?','team');
+$fieldAlign = array('center','right','right','right','str','right','center','team');
 $nFields = count($fieldNames);
 
 $fieldNamesDisplay2 = array('status','Number of tasks');
@@ -102,9 +102,9 @@ $fieldAlign2 = array('center','right');
 $nFields2 = count($fieldNamesDisplay2);
 $statusAssoc2 = array("F"=>"Finished","U"=>"Unassigned","A"=>"Assigned");
 
-$fieldNames3 = array('ts','str');
-$fieldNamesDisplay3 = array('time stamp','superpermutation');
-$fieldAlign3 = array('center','str');
+$fieldNames3 = array('ts','str','team');
+$fieldNamesDisplay3 = array('time stamp','superpermutation','team');
+$fieldAlign3 = array('center','str','center');
 $nFields3 = count($fieldNames3);
 
 /*

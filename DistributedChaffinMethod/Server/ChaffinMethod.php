@@ -1304,6 +1304,7 @@ if (is_string($qs))
 						{
 								$pi = $q['programInstance'];
 								$teamName = $q['team'];
+								if ($teamName = "") $teamName = "anonymous";
 								if (is_string($pi) && is_string($teamName))
 									{
 									$queryOK = TRUE;
@@ -1317,6 +1318,7 @@ if (is_string($qs))
 					$cid = $q['clientID'];
 					$ip = $q['IP'];
 					$teamName = $q['team'];
+					if ($teamName = "") $teamName = "anonymous";
 					if (is_string($pi) && is_string($cid) && is_string($ip) && is_string($teamName))
 						{
 						if ($version < $versionForNewTasks)
@@ -1381,6 +1383,7 @@ if (is_string($qs))
 					$pro_str = $q['pro'];
 					$str = $q['str'];
 					$teamName = $q['team'];
+					if ($teamName = "") $teamName = "anonymous";
 					if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str) && is_string($teamName))
 						{
 						$pro = intval($pro_str);
@@ -1447,7 +1450,9 @@ if (is_string($qs))
 												if (is_string($pro_str)) $pro = intval($pro_str);
 												else $pro = -1;
 												}
-											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $q['team']);
+											$teamName = $q['team'];
+											if ($teamName = "") $teamName = "anonymous";
+											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName);
 											}
 										else if ($p<0) $err = 'Invalid string';
 										else $err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";
