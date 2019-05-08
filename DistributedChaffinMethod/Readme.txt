@@ -7,6 +7,7 @@ Date:			3 May 2019
 NB:  These notes include some features that are only present from version 7 onwards. Please always install the latest
 version of the program.
 
+
 Building and testing
 --------------------
 
@@ -33,6 +34,7 @@ To make an effective contribution, the program needs to have (more or less) unin
 if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
 computations.
 
+
 Shutting down the program
 -------------------------
 
@@ -55,6 +57,23 @@ Under Windows, CTRL-C will kill the program immediately, so we would prefer that
 Any text editor can be used to create a file with the required name, and it doesn't matter what text the
 file contains. Just remember to delete the STOP file if you want to start running the program again (e.g. after an upgrade).
 
+
+Team name
+---------
+
+You can specify a team name when launching the program. This team name will show up on the results page next to any 
+witness strings or superpermutations found by the client. The results page also keeps a log of how many tasks each
+team has completed. To specify a team name, use the "team" argument, followed by an alphanumeric string with at most 32 characters. Spaces are allowed if placed in quotes.
+
+The default team name is "anonymous" if none is specific.
+
+Examples:
+
+DistributedChaffinMethod team permutators
+
+DistributedChaffinMethod team "spaces work"
+
+
 Time-limited run
 ----------------
 
@@ -65,6 +84,16 @@ The time limit is specified on the command line:
 DistributedChaffinMethod timeLimit 120
 
 would tell the program to run for 120 minutes before quitting (after it has finished its current task).
+
+
+Multiple arguments
+------------------
+
+The "timeLimit" and "team" arguments can be used at the same time, in either order.
+
+Example:
+
+DistributedChaffinMethod timeLimit 120 team "golden eagles"
 
 
 Files written
