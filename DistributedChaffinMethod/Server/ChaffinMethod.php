@@ -1309,6 +1309,7 @@ if (is_string($qs))
 								if (is_string($pi) && is_string($teamName))
 									{
 									$queryOK = TRUE;
+									echo register($pi, $teamName);
 									}
 						}
 					}
