@@ -130,6 +130,8 @@ else
 	{
 */
 echo "<h1>ADA &mdash; Chaffin Method Results</h1>\n";
+echo "<i>The data on this page refreshes at most once per {$cacheTime} seconds.<br />\n";
+
 
 // $res = $mysqli->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
 $res = $pdo->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
@@ -354,6 +356,8 @@ for ($n = $max_n; $n >= $min_n; $n--)
 if ($noResults) echo "<p>The database contains no results.</p>\n";
 	// };
 ?>
+
+<?php echo rand(); ?>
 </body>
 </html>
 
