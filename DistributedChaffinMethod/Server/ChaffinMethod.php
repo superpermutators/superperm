@@ -1260,6 +1260,7 @@ if (is_string($qs))
 	//	Validate query string arguments
 	
 	reset($q);
+
 	$ok = TRUE;
 	for ($i=0; $i<count($q); $i++)
 		{
@@ -1304,11 +1305,10 @@ if (is_string($qs))
 						{
 								$pi = $q['programInstance'];
 								$teamName = $q['team'];
-								if ($teamName = "") $teamName = "anonymous";
+								if ($teamName == "") $teamName = "anonymous";
 								if (is_string($pi) && is_string($teamName))
 									{
 									$queryOK = TRUE;
-									echo register($pi, $teamName);
 									}
 						}
 					}
