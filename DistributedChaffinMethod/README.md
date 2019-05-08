@@ -1,7 +1,7 @@
 # Readme.txt
 
-Author:			Greg Egan
-  (minor updates by Jay Pantone)
+Author:			Greg Egan  
+  (minor updates by Jay Pantone)  
 Date:			3 May 2019
 
 NB:  These notes include some features that are only present from version 7 onwards. Please always install the latest
@@ -15,9 +15,9 @@ under MacOS, Linux and some versions of Windows.
 
 In order to run correctly, the program needs:
 
-(1) Write access to the current directory.
-(2) Permission to make outgoing connections to the internet.
-(3) The presence of the "curl" command line tool, and the ability for the program to run it via the system() call
+1. Write access to the current directory.
+2. Permission to make outgoing connections to the internet.
+3. The presence of the "curl" command line tool, and the ability for the program to run it via the system() call
 in the C standard library. These are standard in MacOS/Linux, but for Windows will depend on your precise environment.
 
 If the program compiles correctly, running it with the option "test" will simply test whether or not it can connect to
@@ -105,8 +105,8 @@ DistributedChaffinMethod timeLimit 120 team "golden eagles"
 
 The program writes files:
 
-(1) A cumulative log file, "DCMLog_NNNNNNNNNN.txt"
-(2) A temporary file, "DCMServerResponse_NNNNNNNNNN.txt"
+1. A cumulative log file, "DCMLog_NNNNNNNNNN.txt"
+2. A temporary file, "DCMServerResponse_NNNNNNNNNN.txt"
 
 where NNNNNNNNNN is a random integer chosen by each instance of the program.
 
