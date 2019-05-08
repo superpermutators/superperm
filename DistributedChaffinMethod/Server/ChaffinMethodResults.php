@@ -1,8 +1,8 @@
 <?php
 	$statusCache = "statusCache.html";
-	$cacheTime = 30;
+	$cacheTime = 5;
 
-	if (file_exists($statusCache) && (time() - filemtime($statusCache)) < 30) {
+	if (file_exists($statusCache) && (time() - filemtime($statusCache)) < $statusCache) {
 		include("statusCache.html");
 		exit;
 	}
@@ -86,7 +86,7 @@ function decorateString($str, $n) {
 	return "";
 }
 
-include '../config.php';
+include '../../config.php';
 
 //	Used if we want to keep server from running too many processes.
 //	if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
