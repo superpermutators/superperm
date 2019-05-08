@@ -72,7 +72,6 @@ return $ii;
 function handlePDOError($e) {
 	print("Error: " . $e->getMessage());
 	mail("jay.pantone@gmail.com", "PDO ERROR :(", $e->getMessage());
-	mail("jay.pantone@marquette.edu", "PDO ERROR :(", $e->getMessage());
 }
 
 function factorial($n)
@@ -201,7 +200,8 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 		// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// else
 			// {
-		if ($res->rowCount() == 0) {
+		// if ($res->rowCount() == 0) {
+		if (!($row = $res->fetch(PDO__FETCH_NUM))) {
 			//	No data at all for this (n,w) pair
 			
 			if ($p >= 0) {
@@ -359,7 +359,8 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// else
 			// {
-		if ($res->rowCount() == 0) {
+		// if ($res->rowCount() == 0) {
+		if (!($row = $res->fetch())) {
 			$result = "Error: No client found with those details\n";
 		} else {
 
@@ -375,12 +376,13 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 			// if ($mysqli->errno) $result = "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 			// else
 				// {
-			if ($res->rowCount() == 0) {
+			// if ($res->rowCount() == 0) {
+			if (!($row = $res->fetch())) {
 				$result = "No tasks\n";
 			} else {
 				// $res->data_seek(0);
 				// $row = $res->fetch_assoc();
-				$row = $res->fetch();
+				// $row = $res->fetch();
 				$id = $row['id'];
 				$access = $row['access'];
 				$n = $row['n'];
@@ -581,47 +583,51 @@ function cancelStalledTasks($maxMin) {
 		// if ($mysqli->errno)	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// else
 			// {
-			if ($res->rowCount() > 0) {
-				$result = "";
-				$nass = $res->rowCount();
-				$cancelled = 0;
-				$maxStall = 0;
-				while($row = $res->fetch(PDO::FETCH_NUM)) {
-				// for ($i=0;$i<$nass;$i++)
-					// {
-					// $res->data_seek($i);
-					// $row = $res->fetch_array();
-					$stall = intval($row[1]);
-					$maxStall = max($stall, $maxStall);
-					// if ($stall > $maxStall) {
-						// $maxStall = $stall;
-					// }
-					
-					if ($stall > $maxMin) {
-						$id = $row[0];
-						$cid = $row[2];
-						$access = mt_rand($A_LO,$A_HI);
+			// if ($res->rowCount() > 0) {
+		$result = "";
+		$nass = 0;
+		$cancelled = 0;
+		$maxStall = 0;
+		while($row = $res->fetch(PDO::FETCH_NUM)) {
 
-						$res = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
-						$res->execute([$access, $id]);
+		// for ($i=0;$i<$nass;$i++)
+			// {
+			// $res->data_seek($i);
+			// $row = $res->fetch_array();
+			$nass += 1;
+			$stall = intval($row[1]);
+			$maxStall = max($stall, $maxStall);
+			// if ($stall > $maxStall) {
+				// $maxStall = $stall;
+			// }
+			
+			if ($stall > $maxMin) {
+				$id = $row[0];
+				$cid = $row[2];
+				$access = mt_rand($A_LO,$A_HI);
 
-						$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
-						$res->execute([$cid]);
+				$res = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
+				$res->execute([$access, $id]);
 
-						// if (!($mysqli->real_query("UPDATE tasks SET status='U', access=$access WHERE id=$id") &&
-						// 	$mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$cid")))
-						// 	{
-						// 	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-						// 	break;
-						// 	};
-						
-						$cancelled++;
-					}
-				}
-				$result = $result . "$nass assigned tasks, maximum stalled time = $maxStall minutes, cancelled $cancelled tasks\n";
-			} else {
-				$result = "0 assigned tasks\n";
+				$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
+				$res->execute([$cid]);
+
+				// if (!($mysqli->real_query("UPDATE tasks SET status='U', access=$access WHERE id=$id") &&
+				// 	$mysqli->real_query("UPDATE workers SET current_task=0 WHERE id=$cid")))
+				// 	{
+				// 	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+				// 	break;
+				// 	};
+				
+				$cancelled++;
 			}
+		}
+
+		if ($nass > 0) {
+			$result = $result . "$nass assigned tasks, maximum stalled time = $maxStall minutes, cancelled $cancelled tasks\n";
+		} else {
+			$result = "0 assigned tasks\n";
+		}
 		
 		$pdo->commit();
 		// $mysqli->real_query("UNLOCK TABLES");
@@ -662,38 +668,40 @@ function cancelStalledClients($maxMin)
 		// if ($mysqli->errno)	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 		// else
 			// {
-		if ($res->rowCount() > 0) {
+		// if ($res->rowCount() > 0) {
 
-			$result = "";
-			$nreg = $res->rowCount();
-			$cancelled = 0;
-			$maxStall = 0;
+		$result = "";
+		// $nreg = $res->rowCount();
+		$nreg = 0;
+		$cancelled = 0;
+		$maxStall = 0;
 
-			while($row = $res->fetch(PDO::FETCH_NUM)) {
-				// $res->data_seek($i);
-				// $row = $res->fetch_array();
-				$stall = intval($row[1]);
-				$maxStall = max($maxStall, $stall);
-				// if ($stall > $maxStall) $maxStall = $stall;
-				
-				if ($stall > $maxMin) {
-					$id = $row[0];
+		while($row = $res->fetch(PDO::FETCH_NUM)) {
+			// $res->data_seek($i);
+			// $row = $res->fetch_array();
+			$nreg += 1;
+			$stall = intval($row[1]);
+			$maxStall = max($maxStall, $stall);
+			// if ($stall > $maxStall) $maxStall = $stall;
+			
+			if ($stall > $maxMin) {
+				$id = $row[0];
 
-					$pdo->prepare("DELETE FROM workers WHERE id=$id");
-					$res->execute([$id]);
+				$pdo->prepare("DELETE FROM workers WHERE id=$id");
+				$res->execute([$id]);
 
-					// if (!$mysqli->real_query("DELETE FROM workers WHERE id=$id"))
-					// 	{
-					// 	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
-					// 	break;
-					// 	};
-					$cancelled++;
-					// };
-				}
+				// if (!$mysqli->real_query("DELETE FROM workers WHERE id=$id"))
+				// 	{
+				// 	$result = "Error: Unable to update database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
+				// 	break;
+				// 	};
+				$cancelled++;
+				// };
 			}
+		}
 
+		if ($nreg > 0) {
 			$result = $result . "$nreg registered clients, maximum stalled time = $maxStall minutes, cancelled $cancelled clients\n";
-
 		} else {
 			$result = "0 registered clients\n";
 		}
@@ -740,10 +748,11 @@ function finishedAllTasks($n, $w, $iter) {
 	// $res = $mysqli->query("SELECT perms, excl_perms FROM witness_strings WHERE n=$n AND waste=$w FOR UPDATE");
 	// if ($mysqli->errno) return "Error: Unable to read database: (" . $mysqli->errno . ") " . $mysqli->error . "\n";
 
-	if ($res->rowCount() > 0) {
+	// if ($res->rowCount() > 0) {
+	if ($row = $res->fetch(PDO::FETCH_NUM)) {
 		//	Yes.  Update the excl_perms and final fields.
 		
-		$row = $res->fetch(PDO::FETCH_NUM);
+		// $row = $res->fetch(PDO::FETCH_NUM);
 		$p_str = $row[0];
 		$p = intval($p_str);
 		$pro0_str = $row[1];
@@ -895,13 +904,17 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 							$res = $pdo->prepare("SELECT * FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U' FOR UPDATE");
 							$res->execute([$n, $w, $iter]);
 
-							$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
-							$update_res->execute([$res->rowCount()]);
+							$numNew = 0;
 
+							// Note: you can prepare a statement just once and execute it multiple times!
+							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
 							while ($row2 = $res->fetch()) {
-								$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+								$numNew += 1;
 								$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
 							}
+
+							$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
+							$update_res->execute([$numNew]);
 
 							$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
 							$res->execute([$n, $w, $iter]);
@@ -936,7 +949,8 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
 						$res->execute([$n, $w, $iter]);
 
-						if ($res->rowCount() == 0) {
+						// if ($res->rowCount() == 0) {
+						if (!($rowTry = $res->fetch())) {
 							$result = finishedAllTasks($n, $w, $iter);
 						} else {
 							$result = "OK\n";
