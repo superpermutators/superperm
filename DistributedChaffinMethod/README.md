@@ -10,7 +10,7 @@ version of the program.
 
 ## Building and testing
 
-DistributedChaffinMethod.c is a single, standalone file for a command-line C program. It is intended to compile and run
+**DistributedChaffinMethod.c** is a single, standalone file for a command-line C program. It is intended to compile and run
 under MacOS, Linux and some versions of Windows.
 
 In order to run correctly, the program needs:
@@ -34,6 +34,26 @@ loop indefinitely, waiting for available tasks to execute.
 To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
 if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
 computations.
+
+## Building under Windows
+
+There are a wide variety of C compilers, IDEs and runtime environments for Windows, and it is impossible for us to test them all in
+advance, but we encourage Windows users to first try to compile and run **WindowsBugTest.c**, which can be found
+in the Debugging folder of the main repository.
+
+If this program successfully compiles (which might need some switches set to ensure compatibility with modern versions of C)
+then running it will attempt to perform a very short computation, without making any contact with the server.  If the output you
+see ends like this (apart from the specific dates, of course):
+
+```sh
+Thu May  9 13:07:33 2019 Assigned new task (id=0, access=0, n=6, w=105, prefix=1234561234516234512634512364512346512436512463512465312465132465134265134625134652134562135, perm_to_exceed=567, prev_perm_ruled_out=569)
+Thu May  9 13:07:33 2019 Finished current search, bestSeenP=490, nodes visited=13910255
+```
+
+then the computation was completed successfully, and you can go ahead and build the full program.
+
+However, if the calculation is *not* completed, and **WindowsBugTest** crashes before printing the final line shown above, you will need to
+find an alternative set of C tools in order to proceed.
 
 
 ## Shutting down the program
@@ -64,7 +84,7 @@ You can specify a team name when launching the program. This team name will show
 witness strings or superpermutations found by the client. The results page also keeps a log of how many tasks each
 team has completed. To specify a team name, use the "team" argument, followed by an alphanumeric string with at most 32 characters. Spaces are allowed if placed in quotes.
 
-The default team name is "anonymous" if none is specific.
+The default team name is "anonymous" if none is specified.
 
 Examples:
 
@@ -109,6 +129,5 @@ The program writes files:
 2. A temporary file, "DCMServerResponse_NNNNNNNNNN.txt"
 
 where NNNNNNNNNN is a random integer chosen by each instance of the program.
-
 
 
