@@ -4,8 +4,11 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: 8.2
-Last Updated: 7 May 2019
+Version: up to 8.2
+
+Secondary Author: Jay Pantone
+Version: 9 and beyond
+Last Updated: 8 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -45,6 +48,7 @@ another instance of the program.
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <ctype.h>
 
 #ifdef _WIN32
 
@@ -86,13 +90,13 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=8&"
+#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 
 //	URL for InstanceCount file
 
-	#define IC_URL "http://www.gregegan.net/SCIENCE/Superpermutations/InstanceCount.txt"
+	#define IC_URL "http://ada.mscsnet.mu.edu/InstanceCount.txt"
 	
 #endif
 
@@ -302,8 +306,14 @@ static char STOP_FILE_NAME[FILE_NAME_SIZE];
 //	default behaviour is to keep running indefinitely
 
 #define DEFAULT_TIME_LIMIT 60
-
 int timeQuotaMins=0;
+
+//  Default team name
+#define DEFAULT_TEAM_NAME "anonymous"
+#define MAX_TEAM_NAME_LENGTH 32
+char *teamName;
+
+
 
 //	Known values from previous calculations
 
@@ -357,12 +367,22 @@ static char buffer[BUFFER_SIZE];
 FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
+teamName = DEFAULT_TEAM_NAME;
 
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
 
+
 time(&startedRunning);
-int rseed=(int)( (startedRunning + clock()) % (1<<31) );
+
+#ifdef _WIN32
+	int rseed=(int)( (startedRunning + clock() + _getpid()) % (1<<31) );
+#else
+	int rseed=(int)( (startedRunning + clock()  + (int) getpid()) % (1<<31) );
+#endif
+
+
+printf("Random seed is: %d\n", rseed);
 srand(rseed);
 
 while(TRUE)
@@ -410,6 +430,53 @@ for (int i=1;i<argc;i++)
 		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
 		logString(buffer);
 		}
+	else if (strcmp(argv[i],"team")==0)
+		{
+		if (i+1<argc) {
+			if (strlen(argv[i+1]) <= MAX_TEAM_NAME_LENGTH) {
+				teamName = (char *) argv[i+1];
+				for (int pos=0; teamName[pos]!= '\0'; pos++) {
+					if (!isalpha(teamName[pos]) && !isdigit(teamName[pos]) && (teamName[pos] != ' ')) {
+						printf("Team names must contain only alphanumeric ascii characters and spaces.\n");
+						exit(EXIT_FAILURE);
+					}
+				}
+				// We have to encode spaces in the team name as "%20" to pass them via curl
+				// From https://stackoverflow.com/questions/3424474/replacing-spaces-with-20-in-c
+
+				int new_string_length = 0;
+				for (char *c = teamName; *c != '\0'; c++) {
+					if (*c == ' ') new_string_length += 2;
+					new_string_length++;
+				}
+
+				char *qstr = malloc((new_string_length + 1) * sizeof qstr[0]);
+				char *c1, *c2;
+				for (c1 = teamName, c2 = qstr; *c1 != '\0'; c1++) {
+					if (*c1 == ' ') {
+						c2[0] = '%';
+						c2[1] = '2';
+						c2[2] = '0';
+						c2 += 3;
+					}else{
+						*c2 = *c1;
+						c2++;
+					}
+				}
+				*c2 = '\0';
+				teamName = qstr;
+
+			} else {
+				printf("Team names are limited to %d characters.\n", MAX_TEAM_NAME_LENGTH);
+				exit(EXIT_FAILURE);
+			}
+			i++;
+		}
+		else teamName = DEFAULT_TEAM_NAME;
+		
+		sprintf(buffer,"Team name set to %s.\n",teamName);
+		logString(buffer);
+		}
 	else
 		{
 		printf("Unknown option %s\n",argv[i]);
@@ -419,6 +486,8 @@ for (int i=1;i<argc;i++)
 
 //	First, just check we can establish contact with the server
 
+sprintf(buffer,"Team name: %s",teamName);
+logString(buffer);
 sendServerCommandAndLog("action=hello","Hello world.");
 
 if (justTest) exit(0);
@@ -903,8 +972,8 @@ for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
 asciiString[bestSeenLen] = '\0';
 
 #if !NO_SERVER
-sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u",
-	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1);
+sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s",
+	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 free(currentTask.prefix);
@@ -924,7 +993,7 @@ if (splitMode)
 	nodesLeft = nodesToProbe;
 	if (fillStrNL(pos,pfound,partNum))
 		{
-		if ((subTreesCompleted++)%10==0)
+		if ((subTreesCompleted++)%10==9)
 			{
 			printf("Completed %"PRId64" sub-trees locally so far ...\n",subTreesCompleted);
 			};
@@ -932,7 +1001,7 @@ if (splitMode)
 	else
 		{
 		splitTask(pos);
-		if ((subTreesSplit++)%10==0)
+		if ((subTreesSplit++)%10==9)
 			{
 			printf("Delegated %"PRId64" sub-trees so far ...\n",subTreesSplit);
 			};
@@ -1397,7 +1466,7 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,tot_bl,asciiString);
+sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,tot_bl,asciiString,teamName);
 sendServerCommandAndLog(buffer,NULL);
 #endif
 }
@@ -1420,7 +1489,7 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,w,asciiString);
+sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,w,asciiString,teamName);
 sendServerCommandAndLog(buffer,NULL);
 #endif
 }
@@ -1814,7 +1883,7 @@ return tsk->n_value;
 int getTask(struct task *tsk)
 {
 static char buffer[BUFFER_SIZE];
-sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u",clientID,ipAddress,programInstance);
+sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u&team=%s",clientID,ipAddress,programInstance,teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
@@ -2003,7 +2072,7 @@ void registerClient()
 {
 static char buffer[BUFFER_SIZE];
 
-sprintf(buffer,"action=register&programInstance=%u",programInstance);
+sprintf(buffer,"action=register&programInstance=%u&team=%s",programInstance,teamName);
 sendServerCommandAndLog(buffer,NULL);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
