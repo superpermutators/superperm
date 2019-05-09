@@ -1489,7 +1489,7 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s",n,w,asciiString);
+sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,w,asciiString,teamName);
 sendServerCommandAndLog(buffer,NULL);
 #endif
 }

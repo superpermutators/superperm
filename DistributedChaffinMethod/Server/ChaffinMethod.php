@@ -158,7 +158,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 		$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
 		$res->execute([$n, $w]);
 
-		if (!($row = $res->fetch(PDO__FETCH_NUM))) {
+		if (!($row = $res->fetch(PDO::FETCH_NUM))) {
 			//	No data at all for this (n,w) pair
 			
 			if ($p >= 0) {
