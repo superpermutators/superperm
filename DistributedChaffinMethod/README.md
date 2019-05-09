@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			3 May 2019
+Date:			10 May 2019
 
-NB:  These notes include some features that are only present from version 7 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 9 onwards. Please always install the latest
 version of the program.
 
 
@@ -25,11 +25,19 @@ the server and read back the expected response:
 
 ```sh
 $ DistributedChaffinMethod test
-Wed Apr 24 17:26:16 2019 Server: Hello world.
+Random seed is: 1557505343
+Fri May 10 07:39:29 2019 Program instance number: 1314126518
+Fri May 10 07:39:29 2019 Team name: anonymous
+Fri May 10 07:39:29 2019 To server: action=hello
+Fri May 10 07:39:29 2019 Server: Hello world.
 ```
 
 If you wish to commit to running the program to assist in the distributed search, simply run it with no arguments and it will
 loop indefinitely, waiting for available tasks to execute.
+
+You can monitor the ongoing results of the search at:
+
+<http://ada.mscsnet.mu.edu/ChaffinMethodResults/>
 
 To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
 if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
