@@ -76,10 +76,6 @@ another instance of the program.
 //	Constants
 //	---------
 
-//	Choose whether to use an "InstanceCount" file on the server to avoid running more than one PHP process at once
-
-#define USE_SERVER_INSTANCE_COUNTS FALSE
-
 //	Choose whether to use a "server lock" file on the client computer to coordinate server access between multiple client instances
 
 #define USE_SERVER_LOCK_FILE FALSE
@@ -92,14 +88,6 @@ another instance of the program.
 //	Server URL
 
 #define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
-
-#if USE_SERVER_INSTANCE_COUNTS
-
-//	URL for InstanceCount file
-
-	#define IC_URL "http://ada.mscsnet.mu.edu/InstanceCount.txt"
-	
-#endif
 
 #if USE_SERVER_LOCK_FILE
 
@@ -1608,54 +1596,6 @@ fprintf(fp,"%s %s\n",tsb, s);
 fclose(fp);
 }
 
-//	Get the Instance Count of the server process
-
-#if NO_SERVER || (!USE_SERVER_INSTANCE_COUNTS)
-
-int getServerInstanceCount()
-{
-return 0;
-}
-
-#else
-
-int getServerInstanceCount()
-{
-//	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
-//	current command fails.
-
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
-if (fp==NULL)
-	{
-	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
-	exit(EXIT_FAILURE);
-	};
-fclose(fp);
-
-size_t ulen = strlen(URL_UTILITY);
-size_t slen = strlen(IC_URL);
-size_t flen = strlen(SERVER_RESPONSE_FILE_NAME);
-size_t len = ulen+slen+flen+10;
-char *cmd;
-CHECK_MEM( cmd = malloc(len*sizeof(char)) )
-sprintf(cmd,"%s \"%s\" > %s",URL_UTILITY,IC_URL,SERVER_RESPONSE_FILE_NAME);
-int res = system(cmd);
-free(cmd);
-if (res!=0) return 1;
-
-fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
-if (fp==NULL)
-	{
-	printf("Error: Unable to read server response file %s\n",SERVER_RESPONSE_FILE_NAME);
-	exit(EXIT_FAILURE);
-	};
-if (fscanf(fp,"%d",&res)!=1) res=1;
-fclose(fp);
-return res;
-}
-
-#endif
-
 //	Process response from server
 
 static size_t write_curl_data(void *ptr, size_t size, size_t nmemb, void *stream)
@@ -1683,16 +1623,6 @@ int sendServerCommand(const char *command)
 
 sleepUntilSiblingsFreeServer();
 
-//	Maybe wait for server instance count to drop to zero
-
-while (TRUE)
-	{
-	int ic = getServerInstanceCount();
-	if (ic==0) break;
-	logString("Waiting for server to be free");
-	sleepForSecs(ic + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS);
-	};
-	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
 //	current command fails.
 
