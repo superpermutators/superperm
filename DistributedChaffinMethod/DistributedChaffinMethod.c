@@ -76,6 +76,10 @@ another instance of the program.
 //	Constants
 //	---------
 
+//	Choose whether to use an "InstanceCount" file on the server to avoid running more than one PHP process at once
+
+#define USE_SERVER_INSTANCE_COUNTS FALSE
+
 //	Choose whether to use a "server lock" file on the client computer to coordinate server access between multiple client instances
 
 #define USE_SERVER_LOCK_FILE FALSE
@@ -88,6 +92,14 @@ another instance of the program.
 //	Server URL
 
 #define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
+
+#if USE_SERVER_INSTANCE_COUNTS
+
+//	URL for InstanceCount file
+
+	#define IC_URL "http://ada.mscsnet.mu.edu/InstanceCount.txt"
+	
+#endif
 
 #if USE_SERVER_LOCK_FILE
 
@@ -1596,6 +1608,70 @@ fprintf(fp,"%s %s\n",tsb, s);
 fclose(fp);
 }
 
+//	Get the Instance Count of the server process
+
+#if NO_SERVER || (!USE_SERVER_INSTANCE_COUNTS)
+
+int getServerInstanceCount()
+{
+return 0;
+}
+
+#else
+
+int read_instance_count_data(void *ptr, size_t size, size_t nmemb, void *pInstanceCount)
+{
+	char buffer[12];
+	size_t slen = 11;
+	if (size * nmemb < 11) slen = size * nmemb;
+	memcpy(buffer, ptr, slen);
+	buffer[slen] = 0;
+	int* pIntInstanceCount = (int*)pInstanceCount;
+	if (sscanf(buffer, "%d", pIntInstanceCount) != 1)
+	{
+		*pIntInstanceCount = 1;
+	}
+}
+
+int getServerInstanceCount()
+{
+int instanceCount = 1;
+
+CURL *curl;
+CURLcode res;
+
+curl_global_init(CURL_GLOBAL_ALL);
+
+/* init the curl session */
+curl = curl_easy_init();
+
+curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/7.60.0");
+
+/* set URL to get here */
+curl_easy_setopt(curl, CURLOPT_URL, IC_URL);
+
+/* disable progress meter, set to 0L to enable and disable debug output */
+curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+
+/* send all data to this function  */
+curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, read_instance_count_data);
+
+/* save the instance count */
+curl_easy_setopt(curl, CURLOPT_WRITEDATA, &instanceCount);
+
+/* get it! */
+res = curl_easy_perform(curl);
+
+/* cleanup curl stuff */
+curl_easy_cleanup(curl);
+
+curl_global_cleanup();
+
+return instanceCount;
+}
+
+#endif
+
 //	Process response from server
 
 static size_t write_curl_data(void *ptr, size_t size, size_t nmemb, void *stream)
@@ -1623,6 +1699,16 @@ int sendServerCommand(const char *command)
 
 sleepUntilSiblingsFreeServer();
 
+//	Maybe wait for server instance count to drop to zero
+
+while (TRUE)
+	{
+	int ic = getServerInstanceCount();
+	if (ic==0) break;
+	logString("Waiting for server to be free");
+	sleepForSecs(ic + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS);
+	};
+	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
 //	current command fails.
 
