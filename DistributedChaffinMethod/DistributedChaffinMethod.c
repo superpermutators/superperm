@@ -43,6 +43,7 @@ another instance of the program.
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <curl/curl.h>
 #include <stdint.h>
 #include <inttypes.h>
 #include <fcntl.h>
@@ -125,11 +126,6 @@ another instance of the program.
 //	Number of bits allowed for each digit in integer representation of permutations
 
 #define DBITS 3
-
-//	Command-line utility that gets response from a supplied URL
-//	Current choice is curl (with options to suppress progress meter but display any errors)
-
-#define URL_UTILITY "curl --silent --show-error "
 
 //	Name of temporary file in which response from server is placed
 
@@ -1623,44 +1619,68 @@ return 0;
 
 #else
 
+int read_instance_count_data(void *ptr, size_t size, size_t nmemb, void *pInstanceCount)
+{
+	char buffer[12];
+	size_t slen = 11;
+	if (size * nmemb < 11) slen = size * nmemb;
+	memcpy(buffer, ptr, slen);
+	buffer[slen] = 0;
+	int* pIntInstanceCount = (int*)pInstanceCount;
+	if (sscanf(buffer, "%d", pIntInstanceCount) != 1)
+	{
+		*pIntInstanceCount = 1;
+	}
+}
+
 int getServerInstanceCount()
 {
-//	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
-//	current command fails.
+int instanceCount = 1;
 
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
-if (fp==NULL)
-	{
-	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
-	exit(EXIT_FAILURE);
-	};
-fclose(fp);
+CURL *curl;
+CURLcode res;
 
-size_t ulen = strlen(URL_UTILITY);
-size_t slen = strlen(IC_URL);
-size_t flen = strlen(SERVER_RESPONSE_FILE_NAME);
-size_t len = ulen+slen+flen+10;
-char *cmd;
-CHECK_MEM( cmd = malloc(len*sizeof(char)) )
-sprintf(cmd,"%s \"%s\" > %s",URL_UTILITY,IC_URL,SERVER_RESPONSE_FILE_NAME);
-int res = system(cmd);
-free(cmd);
-if (res!=0) return 1;
+curl_global_init(CURL_GLOBAL_ALL);
 
-fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
-if (fp==NULL)
-	{
-	printf("Error: Unable to read server response file %s\n",SERVER_RESPONSE_FILE_NAME);
-	exit(EXIT_FAILURE);
-	};
-if (fscanf(fp,"%d",&res)!=1) res=1;
-fclose(fp);
-return res;
+/* init the curl session */
+curl = curl_easy_init();
+
+curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/7.60.0");
+
+/* set URL to get here */
+curl_easy_setopt(curl, CURLOPT_URL, IC_URL);
+
+/* disable progress meter, set to 0L to enable and disable debug output */
+curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+
+/* send all data to this function  */
+curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, read_instance_count_data);
+
+/* save the instance count */
+curl_easy_setopt(curl, CURLOPT_WRITEDATA, &instanceCount);
+
+/* get it! */
+res = curl_easy_perform(curl);
+
+/* cleanup curl stuff */
+curl_easy_cleanup(curl);
+
+curl_global_cleanup();
+
+return instanceCount;
 }
 
 #endif
 
-//	Send a command string via URL_UTILITY to the server at SERVER_URL, putting the response in the file SERVER_RESPONSE_FILE_NAME
+//	Process response from server
+
+static size_t write_curl_data(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+size_t written = fwrite(ptr, size, nmemb, (FILE *)stream);
+return written;
+}
+
+//	Send a command string via libcurl to the server at SERVER_URL, putting the response in the file SERVER_RESPONSE_FILE_NAME
 //
 //	Returns non-zero if an error was encountered 
 
@@ -1700,22 +1720,58 @@ if (fp==NULL)
 	};
 fclose(fp);
 
-size_t ulen = strlen(URL_UTILITY);
 size_t slen = strlen(SERVER_URL);
 size_t clen = strlen(command);
-size_t flen = strlen(SERVER_RESPONSE_FILE_NAME);
-size_t len = ulen+slen+clen+flen+10;
-char *cmd;
-CHECK_MEM( cmd = malloc(len*sizeof(char)) )
-sprintf(cmd,"%s \"%s%s\" > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FILE_NAME);
-int res = system(cmd);
-free(cmd);
+size_t len = slen+clen;
+char *url;
+CHECK_MEM( url = malloc(len*sizeof(char)) )
+sprintf(url, "%s%s", SERVER_URL, command);
 
-//	Release local lock on server access
+CURL *curl;
+CURLcode res;
 
-releaseServerLock();
+curl_global_init(CURL_GLOBAL_ALL);
 
-return res;
+/* init the curl session */
+curl = curl_easy_init();
+
+curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl/7.60.0");
+
+/* set URL to get here */
+curl_easy_setopt(curl, CURLOPT_URL, url);
+
+/* disable progress meter, set to 0L to enable and disable debug output */
+curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
+
+/* send all data to this function  */
+curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_curl_data);
+
+/* open the file */
+fp = fopen(SERVER_RESPONSE_FILE_NAME, "wt");
+if (fp)
+	{
+	/* write the page body to this file handle */
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, fp);
+
+	/* get it! */
+	res = curl_easy_perform(curl);
+
+	/* close the header file */
+	fclose(fp);
+	}
+else
+	{
+	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	exit(EXIT_FAILURE);
+	}
+/* cleanup curl stuff */
+curl_easy_cleanup(curl);
+
+curl_global_cleanup();
+
+free(url);
+
+return (res != CURLE_OK) ? 1 : 0;
 }
 
 #endif
