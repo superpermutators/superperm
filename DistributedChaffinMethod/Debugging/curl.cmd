@@ -2,4 +2,4 @@
 :: Note that it is fragile - it assumes the URL is in the third
 :: parameter and ignores the rest. This works with how URL_UTILITY
 :: is currently defined.
-@powershell -Command "(new-object net.webclient).DownloadString(\"%3\"")"
+@powershell -Command "(new-object net.webclient).DownloadString(\"%3\"")
