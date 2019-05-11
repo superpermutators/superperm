@@ -19,6 +19,10 @@ $versionForNewTasks = 9;
 
 $maxClients = 1000;
 
+//	Maximum number of times to retry a transaction
+
+$maxRetries = 5;
+
 //	Valid range for $n
 
 $min_n = 3;
@@ -140,76 +144,92 @@ function analyseString($str, $n) {
 //	If $p = n!, a copy of the string is stored in the separate "superperms" database
 
 function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
+	global $pdo;
+
 	if ($pro > 0 && $pro <= $p) return "Error: Trying to set permutations ruled out to $pro while exhibiting a string with $p permutations\n";
 
 	$isSuper = ($p==factorial($n));
-
-	global $pdo;
 	
-	try {			
-		if ($isSuper) {
-			$ip = $_SERVER['REMOTE_ADDR'];
-
-			$res = $pdo->prepare("INSERT INTO superperms (n,waste,perms,str,IP,team) VALUES(?, ?, ?, ?, ?, ?)");
-			$res->execute([$n, $w, $p, $str, $ip, $teamName]);
-		}
-
-		$pdo->beginTransaction();
-		$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
-		$res->execute([$n, $w]);
-
-		if (!($row = $res->fetch(PDO::FETCH_NUM))) {
-			//	No data at all for this (n,w) pair
-			
-			if ($p >= 0) {
-				
-				//	Try to update the database
-				
-				if ($pro > 0) {
-					$final = ($pro == $p+1) ? "Y" : "N";
-
-					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
-					$result = "($n, $w, $p)\n";
-				} else {
-					$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $teamName]);
-					$result = "($n, $w, $p)\n";
-				}
-			} else {
-				//	If we are just querying, return -1 in lieu of maximum
-				$result = "($n, $w, -1)\n";
-			}
-		} else {
-			//	There is existing data for this (n,w) pair, so check to see if we have a greater permutation count
-			
-			$row = $res->fetch(PDO::FETCH_NUM);
-			$p0 = intval($row[0]);
-			
-			if ($p > $p0) {
-				//	Our new data has a greater permutation count, so update the entry
-			
-				if ($pro > 0) {
-					$final = ($pro == $p+1) ? "Y" : "N";
-					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
-					$result = "($n, $w, $p)\n";
-				} else {
-					$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
-					$res->execute([$n, $w, $p, $str, $teamName]);
-					$result = "($n, $w, $p)\n";
-				}
-			} else {
-				//	Our new data does not have a greater permutation count (or might just be a query with $p=-1), so return existing maximum
-				
-				$result = "($n, $w, $p0)\n";
+	//	Transaction #1: Table 'superperms'
+	
+	if ($isSuper) {
+		$ip = $_SERVER['REMOTE_ADDR'];
+		
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {			
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("INSERT INTO superperms (n,waste,perms,str,IP,team) VALUES(?, ?, ?, ?, ?, ?)");
+				$res->execute([$n, $w, $p, $str, $ip, $teamName]);
+				$pdo->commit();
+				break;
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
 			}
 		}
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+	};
+	
+	//	Transaction #2: Table 'witness_strings' 
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {			
+			$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
+			$res->execute([$n, $w]);
+
+			if (!($row = $res->fetch(PDO::FETCH_NUM))) {
+				//	No data at all for this (n,w) pair
+				
+				if ($p >= 0) {
+					
+					//	Try to update the database
+					
+					if ($pro > 0) {
+						$final = ($pro == $p+1) ? "Y" : "N";
+
+						$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
+						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
+						$result = "($n, $w, $p)\n";
+					} else {
+						$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
+						$res->execute([$n, $w, $p, $str, $teamName]);
+						$result = "($n, $w, $p)\n";
+					}
+				} else {
+					//	If we are just querying, return -1 in lieu of maximum
+					$result = "($n, $w, -1)\n";
+				}
+			} else {
+				//	There is existing data for this (n,w) pair, so check to see if we have a greater permutation count
+				
+				$row = $res->fetch(PDO::FETCH_NUM);
+				$p0 = intval($row[0]);
+				
+				if ($p > $p0) {
+					//	Our new data has a greater permutation count, so update the entry
+				
+					if ($pro > 0) {
+						$final = ($pro == $p+1) ? "Y" : "N";
+						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
+						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
+						$result = "($n, $w, $p)\n";
+					} else {
+						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
+						$res->execute([$n, $w, $p, $str, $teamName]);
+						$result = "($n, $w, $p)\n";
+					}
+				} else {
+					//	Our new data does not have a greater permutation count (or might just be a query with $p=-1), so return existing maximum
+					
+					$result = "($n, $w, $p0)\n";
+				}
+			}
+			$pdo->commit();
+			return $result;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
 	}
 }
 
@@ -219,31 +239,35 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 
 function makeTask($n, $w, $pte, $str) {
 	global $A_LO, $A_HI, $pdo;
+	
+	//	Transaction #1: Table 'tasks'
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
 
-	try {
-		$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND prefix=? AND perm_to_exceed=?");
+			$res->execute([$n, $w, $str, $pte]);
+				
+			if ($row = $res->fetch(PDO::FETCH_NUM)) {
+				$id = $row[0];
+				$result = "Task id: $id already existed with those properties\n";
+			} else {
+				$access = mt_rand($A_LO,$A_HI);
+				$br = substr("000000000",0,$n);
 
-		$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND prefix=? AND perm_to_exceed=?");
-		$res->execute([$n, $w, $str, $pte]);
+				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES(?, ?, ?, ?, ?, ?)");
+				$res->execute([$access, $n, $w, $str, $pte, $br]);
+
+				$result = "Task id: " . $pdo->lastInsertId() . "\n";
+			}
 			
-		if ($row = $res->fetch(PDO::FETCH_NUM)) {
-			$id = $row[0];
-			$result = "Task id: $id already existed with those properties\n";
-		} else {
-			$access = mt_rand($A_LO,$A_HI);
-			$br = substr("000000000",0,$n);
-
-			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES(?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w, $str, $pte, $br]);
-
-			$result = "Task id: " . $pdo->lastInsertId() . "\n";
+			$pdo->commit();
+			return $result;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
 		}
-		
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
 	}
 }
 
@@ -256,282 +280,345 @@ function makeTask($n, $w, $pte, $str) {
 
 function getTask($cid,$ip,$pi,$version,$teamName) {
 	global $pdo;
-
-	try {
-		$pdo->beginTransaction();
-
-		$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP=? FOR UPDATE");
-		$res->execute([$cid, $pi, $ip]);
-
-		if (!($row = $res->fetch())) {
-			$result = "Error: No client found with those details\n";
-		} else {
-
-			$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
-			$res->execute([$cid]);
-
+	
+	//	Transaction #1: Table 'tasks'
+	//	Get an unassigned task, gather some data about it, and mark it as assigned to this client
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
 			$res = $pdo->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 1 FOR UPDATE");
-
 			if (!($row = $res->fetch())) {
-				$result = "No tasks\n";
+				$pdo->commit();
+				return "No tasks\n";
 			} else {
 				$id = $row['id'];
 				$access = $row['access'];
-				$n = $row['n'];
+				$n = intval($row['n']);
 				$w = $row['waste'];
 				$str = $row['prefix'];
 				$pte = intval($row['perm_to_exceed']);
 				$ppro = $row['prev_perm_ruled_out'];
 				$br = $row['branch_order'];
-
-
-				$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
-				$res->execute([$n, $w]);
-
-				if ($row = $res->fetch(PDO::FETCH_NUM)) {
-					$p0 = intval($row[0]);
-				} else {
-					$p0 = -1;
-				}
-
-				if ($p0 > $pte) {
-					$pte = $p0;
-				}
 				
-				if (is_integer($id) && is_integer($access) && is_integer($n) && is_integer($w) && is_string($str) && is_integer($ppro) && is_string($br)) {
-					$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=?, team=? WHERE id=?");
-					$res->execute([$cid, $teamName, $id]);
-
-					$res = $pdo->prepare("UPDATE workers SET current_task=? WHERE id=?");
-					$res->execute([$id, $cid]);
-
-					$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
-					
-					//	Output finalised (w,p) pairs
-					//	Clients from v8 make use of known values for n=6, w<=115
-					
-					$w0 = 0;
-					if ($version >= 8 && $n == 6) {
-						$w0 = 115;
-					}
-					
-					$res = $pdo->prepare("SELECT waste, perms FROM witness_strings WHERE n=? AND waste > ? AND final='Y' ORDER BY waste ASC");
-					$res->execute([$n, $w0]);
-
-					while ($row = $res->fetch(PDO::FETCH_NUM)) {
-						$result = $result . "(" . $row[0] . "," . $row[1] . ")\n";
-					}
-				}
-				else $result = "Error: Unable to find expected fields in database\n";
+				$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=?, team=? WHERE id=?");
+				$res->execute([$cid, $teamName, $id]);
+				$pdo->commit();
+				break;
 			}
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);;
 		}
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
 	}
-}
+	
+	//	Transaction #2: Table 'witness_strings'
+	//	Ensure that pte that goes to client is at least as high as any perm in witness_strings;
+	//	also get any (waste,perm) pairs needed for the client
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
+			$res->execute([$n, $w]);
 
-//	Function to increment the checkin_count of a specified task and return the current maximum permutation for (n,w)
-
-function checkMax($id, $access, $cid, $ip, $pi, $n, $w) {
-	global $pdo;
-
-	try {
-		$pdo->beginTransaction();
-
-		$res = $pdo->prepare("SELECT status FROM tasks WHERE id=? AND access=? FOR UPDATE");
-		$res->execute([$id, $access]);
-
-		if ($row = $res->fetch(PDO::FETCH_NUM)) {
-			$status = $row[0];
-
-			if ($status == 'A') {
-				$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
-				$res->execute([$id, $access]);
-
-				$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=? AND instance_num=? AND IP=?");
-				$res->execute([$cid, $pi, $ip]);
-
-				$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
-				$res->execute([$n, $w]);
-
-				if ($row = $res->fetch(PDO::FETCH_NUM)) {
-					$p0 = intval($row[0]);
-					$result = "($n, $w, $p0)\n";
-				} else {
-					$result = "($n, $w, -1)\n";
-				}
-
-			} else if ($status == 'F') {
-				$result = "Error: The task checking in was marked finalised, which was unexpected\n";
+			if ($row = $res->fetch(PDO::FETCH_NUM)) {
+				$p0 = intval($row[0]);
 			} else {
-				$result = "Error: The task checking in was found to have status " . $status . ", which was unexpected\n";
+				$p0 = -1;
 			}
-		} else {
-			$result = "Error: No match to id=$id, access=$access for the task checking in\n";
-		}
 
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+			if ($p0 > $pte) {
+				$pte = $p0;
+			}
+
+			$w0 = 0;
+			if ($version >= 8 && $n == 6) {
+				$w0 = 115;
+			}
+			
+			$res = $pdo->prepare("SELECT waste, perms FROM witness_strings WHERE n=? AND waste > ? AND final='Y' ORDER BY waste ASC");
+			$res->execute([$n, $w0]);
+
+			$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
+			while ($row = $res->fetch(PDO::FETCH_NUM)) {
+				$result = $result . "(" . $row[0] . "," . $row[1] . ")\n";
+			}
+			
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
+	}
+	
+	//	Transaction #3: Table 'workers'
+	//	Bump the checkin_count for this worker, as proof they're still alive, and link the task to the worker
+
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP=? FOR UPDATE");
+			$res->execute([$cid, $pi, $ip]);
+
+			if (!($row = $res->fetch())) {
+				$pdo->commit();
+				return "Error: No client found with those details\n";
+			} else {
+				$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1, current_task=? WHERE id=?");
+				$res->execute([$id,$cid]);
+				$pdo->commit();
+				break;
+			};
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
 	}
 }
 
 //	Function to cancel stalled tasks
-//
-//	Returns some stats about assigned task times since checkin, or "Error: ..."
 
 function cancelStalledTasks($maxMin) {
 
 	global $A_LO, $A_HI, $pdo;
+	
+	//	Transaction #1: 'tasks'
+	//	Any task marked active that has remained inactive for too long is marked unassigned;
+	//	we gather up the relevant client IDs to modify the worker table accordingly
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
 
-	try {
-		$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()), client_id FROM tasks WHERE status='A' AND TIMESTAMPDIFF(MINUTE,ts,NOW())>? FOR UPDATE");
+			$res->execute([$maxMin]);
 
-		$res = $pdo->query("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()), client_id FROM tasks WHERE status='A' FOR UPDATE");
+			$cancelled = 0;
+			$clientsWithStalledTasks = array();
 
-		$result = "";
-		$nass = 0;
-		$cancelled = 0;
-		$maxStall = 0;
+			while($row = $res->fetch(PDO::FETCH_NUM)) {
 
-		while($row = $res->fetch(PDO::FETCH_NUM)) {
+				$stall = intval($row[1]);
+				if ($stall > $maxMin) {
+					$id = $row[0];
+					$cid = $row[2];
+					$access = mt_rand($A_LO,$A_HI);
 
-			$nass += 1;
-			$stall = intval($row[1]);
-			$maxStall = max($stall, $maxStall);
+					$res = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
+					$res->execute([$access, $id]);
+
+					$clientsWithStalledTasks[] = $cid;
+					$cancelled++;
+				}
+			}
 			
-			if ($stall > $maxMin) {
-				$id = $row[0];
-				$cid = $row[2];
-				$access = mt_rand($A_LO,$A_HI);
+			$result = "Cancelled $cancelled tasks\n";			
+			$pdo->commit();
+			break;
+			
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);;
+		}
+	}
+	
+	//	Transaction #2: 'workers'
+	//	Zero the current task in the workers whose stalled tasks were cancelled
 
-				$res = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
-				$res->execute([$access, $id]);
 
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+
+			for ($i=0;$i<$cancelled;$i++) {
+				$cid = $clientsWithStalledTasks[$i];
 				$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
 				$res->execute([$cid]);
-				
-				$cancelled++;
-			}
+				}
+			
+			$pdo->commit();
+			return $result;
+			
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
 		}
-
-		if ($nass > 0) {
-			$result = $result . "$nass assigned tasks, maximum stalled time = $maxStall minutes, cancelled $cancelled tasks\n";
-		} else {
-			$result = "0 assigned tasks\n";
-		}
-		
-		$pdo->commit();
-		return $result;
-		
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
 	}
 }
 
 //	Function to cancel stalled clients
-//
-//	Returns some stats about assigned times since checkin, or "Error: ..."
 
 function cancelStalledClients($maxMin)
 {
 	global $pdo;
+	
+	//	Transaction #1: 'workers'
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$res = $pdo->prepare("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()) FROM workers WHERE TIMESTAMPDIFF(MINUTE,ts,NOW())>? FOR UPDATE");
+			$res->execute([$maxMin]);
 
-	try {
+			$cancelled = 0;
 
-		$pdo->beginTransaction();
-		$res = $pdo->query("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()) FROM workers FOR UPDATE");
+			while($row = $res->fetch(PDO::FETCH_NUM)) {
+				$nreg += 1;
+				$stall = intval($row[1]);
+				
+				if ($stall > $maxMin) {
+					$id = $row[0];
 
-		$result = "";
-		$nreg = 0;
-		$cancelled = 0;
-		$maxStall = 0;
+					$pdo->prepare("DELETE FROM workers WHERE id=?");
+					$res->execute([$id]);
 
-		while($row = $res->fetch(PDO::FETCH_NUM)) {
-			$nreg += 1;
-			$stall = intval($row[1]);
-			$maxStall = max($maxStall, $stall);
-			
-			if ($stall > $maxMin) {
-				$id = $row[0];
-
-				$pdo->prepare("DELETE FROM workers WHERE id=$id");
-				$res->execute([$id]);
-
-				$cancelled++;
+					$cancelled++;
+				}
 			}
-		}
 
-		if ($nreg > 0) {
-			$result = $result . "$nreg registered clients, maximum stalled time = $maxStall minutes, cancelled $cancelled clients\n";
-		} else {
-			$result = "0 registered clients\n";
-		}
+			$result = "Cancelled $cancelled clients\n";
 
-		$pdo->commit();		
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+			$pdo->commit();		
+			return $result;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
 	}
 }
 
 //	Function to do further processing if we have finished all tasks for the current (n,w,iter) search
+//	This is called by the administrator
 
-function finishedAllTasks($n, $w, $iter) {
+function maybeFinishedAllTasks() {
 	global $A_LO, $A_HI, $pdo;
+	
+	//	Transaction #1: 'tasks'
+	//	The 'tasks' table should be completely empty if we have finished all tasks, with all tasks moved
+	//	to 'finished_tasks'
+
+	$fin = FALSE;
+	$ntasks = 0;
+
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->query("SET autocommit=0");
+			$pdo->query("LOCK TABLES tasks WRITE");
+			$res = $pdo->query("SELECT COUNT(id) FROM tasks");
+			
+			if ($row = $res->fetch(PDO::FETCH_NUM)) {
+				if (is_string($row[0])) {
+					$ntasks = intval($row[0]);
+					if ($ntasks == 0) {
+						$fin=TRUE;
+					}
+				}
+			}		
+			$pdo->query("COMMIT");
+			$pdo->query("UNLOCK TABLES");
+			break;
+			
+		} catch (Exception $e) {
+			if ($r==$maxRetries) {handlePDOError($e); return;}
+		}
+	}
+	
+	if (!$fin) return "There are still $ntasks tasks\n";
+
+	//	Transaction #2: 'finished_tasks'
+
+	//	Find the highest value of perm_ruled_out from all tasks for the highest (n,w,iter);
+	//	no strings were found with this number of perms or higher, across the whole search.
+
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			
+			$res = $pdo->query("SELECT MAX(n) FROM finished_tasks");
+			$row = $res->fetch(PDO::FETCH_NUM);
+			if (!$row)
+				{
+				$pdo->commit();
+				return "Error: finished_tasks table is empty\n";
+				};
+			$n = intval($row[0]);
+
+			$res = $pdo->prepare("SELECT MAX(waste) FROM finished_tasks WHERE n=?");
+			$res->execute([$n]);
+			$row = $res->fetch(PDO::FETCH_NUM);
+			$w = intval($row[0]);
+
+			$res = $pdo->prepare("SELECT MAX(iteration) FROM finished_tasks WHERE n=? AND waste=?");
+			$res->execute([$n,$w]);
+			$row = $res->fetch(PDO::FETCH_NUM);
+			$iter = intval($row[0]);
+
+			$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+			$res->execute([$n, $w, $iter]);
+			$row = $res->fetch(PDO::FETCH_NUM);
+			$pro = intval($row[0]);		
+				
+			$pdo->commit();
+			break;
+	
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) {handlePDOError($e); return;}
+		}
+	}
+	
+	//	Transaction #3: 'witness_strings'
+	
+	//	Was any string found for this search (or maybe for the same (n,w), but by other means)?
 
 	$needTighterBound = TRUE;
 
-	//	Find the highest value of perm_ruled_out from all tasks for this (n,w,iter); no strings were found with this number of perms or
-	//	higher, across the whole search.
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			
+			$res = $pdo->prepare("SELECT perms, excl_perms FROM witness_strings WHERE n=? AND waste=? FOR UPDATE");
+			$res->execute([$n, $w]);
 
-	// Note: we don't beginTransaction or commit because this is called from inside another function who does that on our behalf
+			if ($row = $res->fetch(PDO::FETCH_NUM)) {
+				//	Yes.  Update the excl_perms and final fields.
+				
+				$p_str = $row[0];
+				$p = intval($p_str);
+				$pro0_str = $row[1];
+				$pro0 = intval($pro0_str);
+				
+				if ($pro0 > 0 && $pro0 < $pro) {
+					$pro = $pro0;
+				}
 
-	$res = $pdo->prepare("SELECT MAX(perm_ruled_out) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
-	$res->execute([$n, $w, $iter]);
+				if ($pro == $p + 1) {
+					$final = 'Y';
+					$needTighterBound = FALSE;
+				} else {
+					$final = 'N';
+					$needTighterBound = TRUE;
+				}
 
-	// What happens if there is no row? Could that happen?
-	$row = $res->fetch(PDO::FETCH_NUM);
-	$pro = intval($row[0]);
+				$res = $pdo->prepare("UPDATE witness_strings SET excl_perms=?, final=? WHERE n=? AND waste=?");
+				$res->execute([$pro, $final, $n, $w]);
+			}
 
-	//	Was any string found for this search (or maybe for the same (n,w), but by other means)?
-	$res = $pdo->prepare("SELECT perms, excl_perms FROM witness_strings WHERE n=? AND waste=? FOR UPDATE");
-	$res->execute([$n, $w]);
-
-	if ($row = $res->fetch(PDO::FETCH_NUM)) {
-		//	Yes.  Update the excl_perms and final fields.
-		
-		$p_str = $row[0];
-		$p = intval($p_str);
-		$pro0_str = $row[1];
-		$pro0 = intval($pro0_str);
-		
-		if ($pro0 > 0 && $pro0 < $pro) {
-			$pro = $pro0;
+			$pdo->commit();
+			break;
+	
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) {handlePDOError($e); return;}
 		}
-
-		if ($pro == $p + 1) {
-			$final = 'Y';
-			$needTighterBound = FALSE;
-		} else {
-			$final = 'N';
-			$needTighterBound = TRUE;
-		}
-
-		$res = $pdo->prepare("UPDATE witness_strings SET excl_perms=?, final=? WHERE n=? AND waste=?");
-		$res->execute([$pro, $final, $n, $w]);
 	}
 
 	if (!$needTighterBound) {	
 			
 		//	Maybe create a new task for a higher w value
+		
 		$fn = factorial($n);
 		if ($p < $fn) {
 			$w1 = $w+1;
@@ -541,162 +628,216 @@ function finishedAllTasks($n, $w, $iter) {
 			if ($pte >= $fn) $pte = $fn-1;
 			$pro2 = $p+$n+1;
 			$access = mt_rand($A_LO,$A_HI);
-
-			$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-			$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
-			return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
-
-		}
-		else {
+			
+			//	Transaction #4: 'tasks'
+			
+			for ($r=1;$r<=maxRetries;$r++) {
+				try {
+					$pdo->beginTransaction();
+					$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
+					$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
+					$pdo->commit();
+					return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+				} catch (Exception $e) {
+					$pdo->rollback();
+					if ($r==$maxRetries) {handlePDOError($e); return;}
+				}
+			}
+			
+		} else {
 			return "OK\n";
 		}
 	} else {
 		//	We need to backtrack and search for a lower perm_to_exceed
 		
-		$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
-		$res->execute([$n, $w, $iter]);
-
-		// What if no row?
-		$row = $res->fetch(PDO::FETCH_NUM);
-		$pte = intval($row[0])-1;
+		//	Transaction #5: 'finished_tasks'
 		
+		for ($r=1;$r<=maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
+				$res->execute([$n, $w, $iter]);
+				$row = $res->fetch(PDO::FETCH_NUM);
+				$pte = intval($row[0])-1;
+				$pdo->commit();
+				break;
+				return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) {handlePDOError($e); return;}
+			}
+		}
+	
 		$str = substr("123456789",0,$n);
 		$br = substr("000000000",0,$n);
 		$access = mt_rand($A_LO,$A_HI);
 		$iter1 = $iter+1;
 
-		$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
-		$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
+		//	Transaction #6: 'tasks'
 		
-		return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+		for ($r=1;$r<=maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
+				$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
+				$pdo->commit();
+				return "OK\nTask id: " . $pdo->lastInsertId() . "\n";
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) {handlePDOError($e); return;}
+			}
+		}
 	}
 }
 
-//	Function to mark a task as finished, and if all tasks are finished do some further processing
+//	Function to mark a task as finished
 //
 //	Returns: "OK ..." or "Error: ... "
 	
 function finishTask($id, $access, $pro, $str, $teamName) {
 	global $pdo;
+	
+	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks' / 'num_finished_tasks'
 
-	try {
-		$pdo->beginTransaction();
+	$ok=FALSE;
+	$cid=0;
+	
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
 
+			$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? AND status='A' FOR UPDATE");
+			$res->execute([$id, $access]);
 
-		// I think we have to lock the whole table to prevent deadlocks where we mark reundant things here
-		//   but someone else is trying to get a task in getTask
-		// $pdo->exec("LOCK TABLES tasks WRITE, witness_strings WRITE, workers WRITE");		
-		// End attempt
+			if ($row = $res->fetch()) {
 
-		// Update: I *originally* thought I had to lock the whole table. Instead, I've added an index
-		//   for the tasks table with key (n, waste, iteration). I have had no deadlocks since then, but
-		//   I'm not confident that the prolem is solve.
-
-		$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? AND status='A' FOR UPDATE");
-		$res->execute([$id, $access]);
-
-		if ($row = $res->fetch()) {
-
-			//	Check that task is still active
-			if ($row['status']=='A') {
-				//	Check that the exclusion string starts with the expected prefix.
+				//	Check that task is still active
 				
-				$pref = $row['prefix'];
-				$pref_len = strlen($pref);
-				if (substr($str,0,$pref_len)==$pref) {
-					$n_str = $row['n'];
-					$n = intval($n_str);
-					$w_str = $row['waste'];
-					$w = intval($w_str);
-					$iter_str = $row['iteration'];
-					$iter = intval($iter_str);
-						
-					//	Check that the exclusion string is valid
+				if ($row['status']=='A') {
+				
+					//	Check that the exclusion string starts with the expected prefix.
 					
-					if (analyseString($str,$n) > 0) {
-						//	See if we have found a string that makes other searches redundant
-											
-						$ppro = intval($row['prev_perm_ruled_out']);
+					$pref = $row['prefix'];
+					$pref_len = strlen($pref);
+					if (substr($str,0,$pref_len)==$pref) {
+						$n_str = $row['n'];
+						$n = intval($n_str);
+						$w_str = $row['waste'];
+						$w = intval($w_str);
+						$iter_str = $row['iteration'];
+						$iter = intval($iter_str);
+						$cid = intval($row['client_id']);
+							
+						//	Check that the exclusion string is valid
+						
+						if (analyseString($str,$n) > 0) {
+						
+							//	See if we have found a string that makes other searches redundant
+												
+							$ppro = intval($row['prev_perm_ruled_out']);
 
-						if ($ppro > 0 && $pro >= $ppro && $pro != factorial($n)+1) {
+							if ($ppro > 0 && $pro >= $ppro && $pro != factorial($n)+1) {
 
-							$res = $pdo->prepare("SELECT * FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U' FOR UPDATE");
-							$res->execute([$n, $w, $iter]);
+								$res = $pdo->prepare("SELECT * FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U' FOR UPDATE");
+								$res->execute([$n, $w, $iter]);
 
-							$numNew = 0;
+								$numNew = 0;
 
-							// Note: you can prepare a statement just once and execute it multiple times!
-							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
-							while ($row2 = $res->fetch()) {
-								$numNew += 1;
-								$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
+								// Note: you can prepare a statement just once and execute it multiple times!
+								
+								$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+								while ($row2 = $res->fetch()) {
+									$numNew += 1;
+									$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
+								}
+
+								$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
+								$update_res->execute([$numNew]);
+
+								$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
+								$res->execute([$n, $w, $iter]);
+
 							}
 
-							$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
-							$update_res->execute([$numNew]);
+							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['branch_order'], $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str, $row['checkin_count'], $pro, $row['client_id'], $teamName]);
 
-							$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
-							$res->execute([$n, $w, $iter]);
+							$res = $pdo->prepare("DELETE FROM tasks WHERE id=? AND access=?");
+							$res->execute([$id, $access]);
 
-						}
+							$res = $pdo->query("UPDATE num_finished_tasks SET num_finished = num_finished + 1");
+							$ok=TRUE;
 
-						$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
-						$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['branch_order'], $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str, $row['checkin_count'], $pro, $row['client_id'], $teamName]);
-
-						$res = $pdo->prepare("DELETE FROM tasks WHERE id=? AND access=?");
-						$res->execute([$id, $access]);
-
-						$res = $pdo->query("UPDATE num_finished_tasks SET num_finished = num_finished + 1");
-
-						// Try to increment team task count
-						$res = $pdo->prepare("UPDATE teams SET tasks_completed = tasks_completed + 1 WHERE team = ?");
-						$res->execute([$teamName]);
-
-						// If no rows were affected, we need to add the team to this table
-						if ($res->rowCount() == 0) {
-							$res = $pdo->prepare("INSERT INTO teams (team, tasks_completed) values (?, 1)");
-							$res->execute([$teamName]);
-						}
-
-						$res = $pdo->prepare("SELECT id FROM tasks WHERE n=? AND waste=? AND iteration=? AND (status='A' OR status='U') LIMIT 1");
-						$res->execute([$n, $w, $iter]);
-
-						if (!($rowTry = $res->fetch())) {
-							$result = finishedAllTasks($n, $w, $iter);
 						} else {
-							$result = "OK\n";
+							$result = "Error: Invalid string\n";
 						}
-
-						$cid = $row['client_id'];
-						if (intval($cid) > 0) {
-							$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
-							$res->execute([$cid]);
-						}
-
 					} else {
-						$result = "Error: Invalid string\n";
+						$result = "Error: String does not start with expected prefix\n";
 					}
 				} else {
-					$result = "Error: String does not start with expected prefix\n";
+					if ($row['status']=='F') {
+						$result = "The task being finalised was already marked finalised, which was unexpected\n";
+					} else {
+						$result = "The task being finalised was found to have status ".$row['status']. ", which was unexpected\n";
+					}
 				}
 			} else {
-				if ($row['status']=='F') {
-					$result = "The task being finalised was already marked finalised, which was unexpected\n";
-				} else {
-					$result = "The task being finalised was found to have status ".$row['status']. ", which was unexpected\n";
-				}
+				$result = "Error: No match to id=$id, access=$access for the task being finalised. (It may have already been unexpectedly finalised.)\n";
 			}
-		} else {
-			$result = "Error: No match to id=$id, access=$access for the task being finalised. (It may have already been unexpectedly finalised.)\n";
+			
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
 		}
-		
-		// $pdo->exec("UNLOCK TABLES");
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);
 	}
+	
+	if (!$ok) return $result;
+	
+	//	Transaction #2: 'teams'
+
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+
+			// Try to increment team task count
+			$res = $pdo->prepare("UPDATE teams SET tasks_completed = tasks_completed + 1 WHERE team = ?");
+			$res->execute([$teamName]);
+
+			// If no rows were affected, we need to add the team to this table
+			if ($res->rowCount() == 0) {
+				$res = $pdo->prepare("INSERT INTO teams (team, tasks_completed) values (?, 1)");
+				$res->execute([$teamName]);
+			}
+			
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
+	}
+	
+	//	Transaction #3: 'workers'
+
+	if ($cid>0) {
+		for ($r=1;$r<=maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
+				$res->execute([$cid]);
+				
+				$pdo->commit();
+				break;
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+			}
+		}
+	}
+
+	return "OK\n";
 }
 
 //	Function to create a task split from an existing one, with a specified prefix and branch
@@ -706,106 +847,120 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 
 function splitTask($id, $access, $new_pref, $branchOrder) {
 	global $A_LO, $A_HI, $pdo;
+	
+	$ok = FALSE;
+	$cid=0;
+	
+	//	Transaction #1: 'tasks'
 
-	try {
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
 
-		$pdo->beginTransaction();
+			$pdo->beginTransaction();
 
-		$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
-		$res->execute([$id, $access]);
-		
-		if ($row = $res->fetch()) {
+			$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
+			$res->execute([$id, $access]);
+			
+			if ($row = $res->fetch()) {
 
-			//	Check that task is still active
-			if ($row['status'] == 'A') {
-				$pref = $row['prefix'];
-				$pref_len = strlen($pref);
-				$n_str = $row['n'];
-				$n = intval($n_str);
-				$cid = intval($row['client_id']);
-					
-				//	Check that the new prefix extends the old one
-
-				if (substr($new_pref,0,$pref_len) == $pref) {
-					
-					//	See if we have a higher permutation in the witness_strings database, to supersede the original task's perm_to_exceed
-					
-					$w = $row['waste'];
-					$pte_str = $row['perm_to_exceed'];
-					$pte = intval($pte_str);
-
-					$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
-					$res->execute([$n, $w]);
-
-					if ($rowW = $res->fetch()) {
-						$pw_str = $rowW[0];
-						$pw = intval($pw_str);
-						if ($pw > $pte) $pte = $pw;
-					}
-					
-					//	Base the new task on the old one
-					
-					$new_access = mt_rand($A_LO,$A_HI);
-					$fieldList = "";
-					$valuesList = array();
-					$c = 0;
-					
-					reset($row);
-					
-					for ($j=0; $j < count($row); $j++) {
-						$field = key($row);
-						$value = current($row);
-						if ($field=='access') $value = $new_access;
-						else if ($field=='prefix') $value = $new_pref; 
-						else if ($field=='perm_to_exceed') $value = $pte; 
-						else if ($field=='ts_allocated') $value = 'NOW()';
-						else if ($field=='status') $value = 'U';
-						else if ($field=='branch_order') $value = $branchOrder;
-						else $value = $value;
+				//	Check that task is still active
+				if ($row['status'] == 'A') {
+					$pref = $row['prefix'];
+					$pref_len = strlen($pref);
+					$n_str = $row['n'];
+					$n = intval($n_str);
+					$cid = intval($row['client_id']);
 						
-						if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && $field != 'ts_allocated' && $field != 'checkin_count' && $field != 'client_id') {
-							$pre = ($c==0) ? "": ", ";
-							$fieldList = $fieldList . $pre . $field;
-							array_push($valuesList, $value);
-							$c++;
+					//	Check that the new prefix extends the old one
+
+					if (substr($new_pref,0,$pref_len) == $pref) {
+						
+						$w = $row['waste'];
+						$pte_str = $row['perm_to_exceed'];
+						$pte = intval($pte_str);
+						
+						//	Base the new task on the old one
+						
+						$new_access = mt_rand($A_LO,$A_HI);
+						$fieldList = "";
+						$valuesList = array();
+						$c = 0;
+						
+						reset($row);
+						
+						for ($j=0; $j < count($row); $j++) {
+							$field = key($row);
+							$value = current($row);
+							if ($field=='access') $value = $new_access;
+							else if ($field=='prefix') $value = $new_pref; 
+							else if ($field=='perm_to_exceed') $value = $pte; 
+							else if ($field=='ts_allocated') $value = 'NOW()';
+							else if ($field=='status') $value = 'U';
+							else if ($field=='branch_order') $value = $branchOrder;
+							else $value = $value;
+							
+							if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && $field != 'ts_allocated' && $field != 'checkin_count' && $field != 'client_id') {
+								$pre = ($c==0) ? "": ", ";
+								$fieldList = $fieldList . $pre . $field;
+								array_push($valuesList, $value);
+								$c++;
+							}
+
+							next($row);
 						}
+							
+						$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList), "?")) .")");
+						$res->execute($valuesList);
 
-						next($row);
+						$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
+						$res->execute([$id, $access]);
+
+						$ok = TRUE;
+					} else {
+						$result = "Error: Invalid new prefix string $new_pref\n";
 					}
-						
-					$res = $pdo->prepare("INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList), "?")) .")");
-					$res->execute($valuesList);
-
-					$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
-					$res->execute([$id, $access]);
-
-					if ($cid != 0) {
-						$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
-						$res->execute([$cid]);
-					}
-
-					$result = "OK\n";
 				} else {
-					$result = "Error: Invalid new prefix string $new_pref\n";
+					if ($row['status']=='F') {
+						$result = "Error: The task being split was marked finalised, which was unexpected\n";
+					} else {
+						$result = "Error: The task being split was found to have status ".$row['status']. ", which was unexpected\n";
+					}
 				}
 			} else {
-				if ($row['status']=='F') {
-					$result = "Error: The task being split was marked finalised, which was unexpected\n";
-				} else {
-					$result = "Error: The task being split was found to have status ".$row['status']. ", which was unexpected\n";
-				}
+				$result = "Error: No match to id=$id, access=$access for the task being split\n";
 			}
-		} else {
-			$result = "Error: No match to id=$id, access=$access for the task being split\n";
-		}
-			
-		$pdo->commit();
-		return $result;
+				
+			$pdo->commit();
+			break;
 
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);;
+		}
 	}
+	
+	if (!$ok) return $result;
+
+	//	Transaction #2: 'workers'
+
+	if ($cid>0) {
+		for ($r=1;$r<=maxRetries;$r++) {
+			try {
+
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
+				$res->execute([$cid]);
+				$pdo->commit();
+				break;
+
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);;
+			}
+		}
+	}
+	
+	return "OK\n";
 }
 
 
@@ -816,55 +971,62 @@ function register($pi, $teamName) {
 
 	$ra = $_SERVER['REMOTE_ADDR'];
 	if (!is_string($ra)) return "Error: Unable to determine connection's IP address\n";
+	
+	//	Task #1: 'workers'
 
-	try {
-		$pdo->beginTransaction();
-		$res = $pdo->query("SELECT COUNT(id) FROM workers");
-		
-		$ok = TRUE;
-		if ($row = $res->fetch(PDO::FETCH_NUM)) {
-			$nw = intval($row[0]);
-			if ($nw >= $maxClients) {
-				$result = "Error: Thanks for offering to join the project, but unfortunately the server is at capacity right now ($nw out of $maxClients), and cannot accept any more clients. We will continue to increase capacity, so please check back soon!\n";
-				$ok = FALSE;
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$res = $pdo->query("SELECT COUNT(id) FROM workers");
+			
+			$ok = TRUE;
+			if ($row = $res->fetch(PDO::FETCH_NUM)) {
+				$nw = intval($row[0]);
+				if ($nw >= $maxClients) {
+					$result = "Error: Thanks for offering to join the project, but unfortunately the server is at capacity right now ($nw out of $maxClients), and cannot accept any more clients. We will continue to increase capacity, so please check back soon!\n";
+					$ok = FALSE;
+				}
 			}
-		}
-		
-		if ($ok) {
-			$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered,team) VALUES(?, ?, NOW(), ?)");
-			$res->execute([$ra, $pi, $teamName]);
+			
+			if ($ok) {
+				$res = $pdo->prepare("INSERT INTO workers (IP,instance_num,ts_registered,team) VALUES(?, ?, NOW(), ?)");
+				$res->execute([$ra, $pi, $teamName]);
 
-			$result = "Registered\nClient id: " . $pdo->lastInsertId() . "\nIP: $ra\nprogramInstance: $pi\nteam name: $teamName\n";
-		}
-		
-		$pdo->commit();
-		return $result;
+				$result = "Registered\nClient id: " . $pdo->lastInsertId() . "\nIP: $ra\nprogramInstance: $pi\nteam name: $teamName\n";
+			}
+			
+			$pdo->commit();
+			return $result;
 
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+		}
 	}
 }
 
 
 //	Function to unregister a worker, using their supplied program instance number, client ID and IP address
 
-function unregister($cid,$ip,$pi)
-{
+function unregister($cid,$ip,$pi) {
 	global $pdo;
 		
-	try {
-		$pdo->beginTransaction();
-		$res = $pdo->prepare("DELETE FROM workers WHERE id=? AND instance_num=? AND IP=?");
-		$res->execute([$cid, $pi, $ip]);
+	//	Task #1: 'workers'
 
-		$result = "OK, client record deleted\n";
-	
-		$pdo->commit();
-		return $result;
-	} catch (Exception $e) {
-		$pdo->rollback();
-		handlePDOError($e);;
+	for ($r=1;$r<=maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$res = $pdo->prepare("DELETE FROM workers WHERE id=? AND instance_num=? AND IP=?");
+			$res->execute([$cid, $pi, $ip]);
+
+			$result = "OK, client record deleted\n";
+		
+			$pdo->commit();
+			return $result;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);;
+		}
 	}
 }
 
@@ -980,6 +1142,11 @@ if (is_string($qs)) {
 							$queryOK = TRUE;
 							echo cancelStalledClients($maxMins);
 						}
+					} else if ($action == "maybeFinishedAllTasks") {
+						if ($pwd==$q['pwd']) {
+							$queryOK = TRUE;
+							echo maybeFinishedAllTasks();
+						}
 					} else if ($action == "finishTask") {
 						$id = $q['id'];
 						$access = $q['access'];
@@ -1003,76 +1170,61 @@ if (is_string($qs)) {
 							$n = intval($n_str);
 							$w = intval($w_str);
 							if ($n >= $min_n && $n <= $max_n && $w >= 0) {
-								//	"checkMax" action checks in and queries current maximum permutation count.
-								//
-								//	Returns:  (n, w, p) for current maximum p, or "Error: ... "
-							
-								if ($action == "checkMax") {
-									$id = $q['id'];
-									$access = $q['access'];
-									$cid = $q['clientID'];
-									$ip = $q['IP'];
-									$pi = $q['programInstance'];
-									if (is_string($id) && is_string($access) && is_string($pi) && is_string($cid) && is_string($ip)) {
-										$queryOK = TRUE;
-										echo checkMax($id, $access, $cid, $ip, $pi, $n, $w);
-									}
-								} else {
-									$str = $q['str'];
-									if (is_string($str)) {
-										//	"witnessString" action verifies and possibly records a witness to a certain number of distinct permutations being
-										//	visited by a string with a certain number of wasted characters.
-										//
-										//	Query arguments: n, w, str.
-										//
-										//	Returns:  "Valid string ... " / (n, w, p) for current maximum p, or "Error: ... "
-									
-										if ($action == "witnessString") {
-											$p = analyseString($str,$n);
-											$slen = strlen($str);
-											$p0 = $slen - $w - $n + 1;
-											if ($p == $p0) {
-												$queryOK = TRUE;
-												// echo "Valid string $str with $p permutations\n";
-												$pp = strpos($qs,'pro');
-												if ($pp===FALSE) {
-													$pro = -1;
-												} else {
-													$pro_str = $q['pro'];
-													if (is_string($pro_str)) {
-														$pro = intval($pro_str);
-													} else {
-														$pro = -1;
-													}
-												}
-												$teamName = $q['team'];
-												if ($teamName == "") {
-													$teamName = "anonymous";
-												}
-												echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName);
-											} else if ($p<0) {
-												$err = 'Invalid string';
+								$str = $q['str'];
+								if (is_string($str)) {
+								
+									//	"witnessString" action verifies and possibly records a witness to a certain number of distinct permutations being
+									//	visited by a string with a certain number of wasted characters.
+									//
+									//	Query arguments: n, w, str.
+									//
+									//	Returns:  "Valid string ... " / (n, w, p) for current maximum p, or "Error: ... "
+								
+									if ($action == "witnessString") {
+										$p = analyseString($str,$n);
+										$slen = strlen($str);
+										$p0 = $slen - $w - $n + 1;
+										if ($p == $p0) {
+											$queryOK = TRUE;
+											// echo "Valid string $str with $p permutations\n";
+											$pp = strpos($qs,'pro');
+											if ($pp===FALSE) {
+												$pro = -1;
 											} else {
-												$err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";
-											}
-										}
-										
-										//	"createTask" action puts a new task into the tasks database.
-										//
-										//	Query arguments: n, w, str, pte, pwd.
-										//
-										//	where "pte" is the number of permutations to exceed in any strings the task finds.
-										//
-										//	Returns: "Task id: ... " or "Error: ... "
-									
-										else if ($action == "createTask") {
-											$p_str = $q['pte'];
-											if (is_string($p_str) && $pwd==$q['pwd']) {
-												$p = intval($p_str);
-												if ($p > 0 && analyseString($str,$n) > 0) {
-													$queryOK = TRUE;
-													echo makeTask($n, $w, $p, $str);
+												$pro_str = $q['pro'];
+												if (is_string($pro_str)) {
+													$pro = intval($pro_str);
+												} else {
+													$pro = -1;
 												}
+											}
+											$teamName = $q['team'];
+											if ($teamName == "") {
+												$teamName = "anonymous";
+											}
+											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName);
+										} else if ($p<0) {
+											$err = 'Invalid string';
+										} else {
+											$err = "Unexpected permutation count [$p permutations, expected $p0 for w=$w, length=$slen]";
+										}
+									}
+									
+									//	"createTask" action puts a new task into the tasks database.
+									//
+									//	Query arguments: n, w, str, pte, pwd.
+									//
+									//	where "pte" is the number of permutations to exceed in any strings the task finds.
+									//
+									//	Returns: "Task id: ... " or "Error: ... "
+								
+									else if ($action == "createTask") {
+										$p_str = $q['pte'];
+										if (is_string($p_str) && $pwd==$q['pwd']) {
+											$p = intval($p_str);
+											if ($p > 0 && analyseString($str,$n) > 0) {
+												$queryOK = TRUE;
+												echo makeTask($n, $w, $p, $str);
 											}
 										}
 									}
