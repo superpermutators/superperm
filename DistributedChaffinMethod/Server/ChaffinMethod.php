@@ -144,7 +144,7 @@ function analyseString($str, $n) {
 //	If $p = n!, a copy of the string is stored in the separate "superperms" database
 
 function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
-	global $pdo;
+	global $pdo, $maxRetries;
 
 	if ($pro > 0 && $pro <= $p) return "Error: Trying to set permutations ruled out to $pro while exhibiting a string with $p permutations\n";
 
@@ -171,7 +171,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 	
 	//	Transaction #2: Table 'witness_strings' 
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {			
 			$pdo->beginTransaction();
 			$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
@@ -238,11 +238,11 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 //	Returns "Task id: ... " or "Error: ... "
 
 function makeTask($n, $w, $pte, $str) {
-	global $A_LO, $A_HI, $pdo;
+	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	//	Transaction #1: Table 'tasks'
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
@@ -279,12 +279,12 @@ function makeTask($n, $w, $pte, $str) {
 //	or:			"Error ... "
 
 function getTask($cid,$ip,$pi,$version,$teamName) {
-	global $pdo;
+	global $pdo, $maxRetries;
 	
 	//	Transaction #1: Table 'tasks'
 	//	Get an unassigned task, gather some data about it, and mark it as assigned to this client
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 1 FOR UPDATE");
@@ -316,7 +316,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 	//	Ensure that pte that goes to client is at least as high as any perm in witness_strings;
 	//	also get any (waste,perm) pairs needed for the client
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?");
@@ -356,7 +356,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 	//	Transaction #3: Table 'workers'
 	//	Bump the checkin_count for this worker, as proof they're still alive, and link the task to the worker
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->prepare("SELECT * FROM workers WHERE id=? AND instance_num=? AND IP=? FOR UPDATE");
@@ -382,13 +382,13 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 
 function cancelStalledTasks($maxMin) {
 
-	global $A_LO, $A_HI, $pdo;
+	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	//	Transaction #1: 'tasks'
 	//	Any task marked active that has remained inactive for too long is marked unassigned;
 	//	we gather up the relevant client IDs to modify the worker table accordingly
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
@@ -428,7 +428,7 @@ function cancelStalledTasks($maxMin) {
 	//	Zero the current task in the workers whose stalled tasks were cancelled
 
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
@@ -452,11 +452,11 @@ function cancelStalledTasks($maxMin) {
 
 function cancelStalledClients($maxMin)
 {
-	global $pdo;
+	global $pdo, $maxRetries;
 	
 	//	Transaction #1: 'workers'
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->prepare("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()) FROM workers WHERE TIMESTAMPDIFF(MINUTE,ts,NOW())>? FOR UPDATE");
@@ -493,7 +493,7 @@ function cancelStalledClients($maxMin)
 //	This is called by the administrator
 
 function maybeFinishedAllTasks() {
-	global $A_LO, $A_HI, $pdo;
+	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	//	Transaction #1: 'tasks'
 	//	The 'tasks' table should be completely empty if we have finished all tasks, with all tasks moved
@@ -502,7 +502,7 @@ function maybeFinishedAllTasks() {
 	$fin = FALSE;
 	$ntasks = 0;
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->query("SET autocommit=0");
 			$pdo->query("LOCK TABLES tasks WRITE");
@@ -532,7 +532,7 @@ function maybeFinishedAllTasks() {
 	//	Find the highest value of perm_ruled_out from all tasks for the highest (n,w,iter);
 	//	no strings were found with this number of perms or higher, across the whole search.
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			
@@ -575,7 +575,7 @@ function maybeFinishedAllTasks() {
 
 	$needTighterBound = TRUE;
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			
@@ -631,7 +631,7 @@ function maybeFinishedAllTasks() {
 			
 			//	Transaction #4: 'tasks'
 			
-			for ($r=1;$r<=maxRetries;$r++) {
+			for ($r=1;$r<=$maxRetries;$r++) {
 				try {
 					$pdo->beginTransaction();
 					$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
@@ -652,7 +652,7 @@ function maybeFinishedAllTasks() {
 		
 		//	Transaction #5: 'finished_tasks'
 		
-		for ($r=1;$r<=maxRetries;$r++) {
+		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
 				$res = $pdo->prepare("SELECT MIN(perm_to_exceed) FROM finished_tasks WHERE n=? AND waste=? AND iteration=? AND status='F'");
@@ -675,7 +675,7 @@ function maybeFinishedAllTasks() {
 
 		//	Transaction #6: 'tasks'
 		
-		for ($r=1;$r<=maxRetries;$r++) {
+		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
 				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
@@ -695,14 +695,14 @@ function maybeFinishedAllTasks() {
 //	Returns: "OK ..." or "Error: ... "
 	
 function finishTask($id, $access, $pro, $str, $teamName) {
-	global $pdo;
+	global $pdo, $maxRetries;
 	
 	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks' / 'num_finished_tasks'
 
 	$ok=FALSE;
 	$cid=0;
 	
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
@@ -797,7 +797,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 	
 	//	Transaction #2: 'teams'
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
@@ -822,7 +822,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 	//	Transaction #3: 'workers'
 
 	if ($cid>0) {
-		for ($r=1;$r<=maxRetries;$r++) {
+		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
 				$res = $pdo->prepare("UPDATE workers SET current_task=0 WHERE id=?");
@@ -846,14 +846,14 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 //	or "Error: ... "
 
 function splitTask($id, $access, $new_pref, $branchOrder) {
-	global $A_LO, $A_HI, $pdo;
+	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	$ok = FALSE;
 	$cid=0;
 	
 	//	Transaction #1: 'tasks'
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 
 			$pdo->beginTransaction();
@@ -944,7 +944,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 	//	Transaction #2: 'workers'
 
 	if ($cid>0) {
-		for ($r=1;$r<=maxRetries;$r++) {
+		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 
 				$pdo->beginTransaction();
@@ -967,14 +967,14 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 //	Function to register a worker, using their supplied program instance number and their IP address
 
 function register($pi, $teamName) {
-	global $maxClients, $pdo;
+	global $maxClients, $pdo, $maxRetries;
 
 	$ra = $_SERVER['REMOTE_ADDR'];
 	if (!is_string($ra)) return "Error: Unable to determine connection's IP address\n";
 	
 	//	Task #1: 'workers'
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->query("SELECT COUNT(id) FROM workers");
@@ -1009,11 +1009,11 @@ function register($pi, $teamName) {
 //	Function to unregister a worker, using their supplied program instance number, client ID and IP address
 
 function unregister($cid,$ip,$pi) {
-	global $pdo;
+	global $pdo, $maxRetries;
 		
 	//	Task #1: 'workers'
 
-	for ($r=1;$r<=maxRetries;$r++) {
+	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 			$res = $pdo->prepare("DELETE FROM workers WHERE id=? AND instance_num=? AND IP=?");
