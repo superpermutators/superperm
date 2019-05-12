@@ -90,7 +90,8 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
+//#define SERVER_URL "http://ada.mscsnet.mu.edu/ChaffinMethod.php?version=9&"
+#define SERVER_URL "http://www.gregegan.net/SCIENCE/Superpermutations/ChaffinMethod.php?version=9&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 
