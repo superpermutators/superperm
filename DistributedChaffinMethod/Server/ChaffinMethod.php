@@ -295,9 +295,9 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 				
 				$res = $pdo->prepare("UPDATE tasks SET status='A', ts_allocated=NOW(), client_id=?, team=? WHERE id=?");
 				$res->execute([$cid, $teamName, $id]);
-				$pdo->commit();
-				break;
 			}
+		$pdo->commit();
+		break;
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
