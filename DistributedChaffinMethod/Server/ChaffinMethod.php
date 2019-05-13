@@ -394,7 +394,7 @@ function cancelStalledTasks($maxMin) {
 
 			$cancelled = 0;
 			$clientsWithStalledTasks = array();
-
+			
 			while ($row = $res->fetch(PDO::FETCH_NUM)) {
 
 				$stall = intval($row[1]);
@@ -403,8 +403,8 @@ function cancelStalledTasks($maxMin) {
 					$cid = $row[2];
 					$access = mt_rand($A_LO,$A_HI);
 
-					$res = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
-					$res->execute([$access, $id]);
+					$res2 = $pdo->prepare("UPDATE tasks SET status='U', access=? WHERE id=?");
+					$res2->execute([$access, $id]);
 
 					$clientsWithStalledTasks[] = $cid;
 					$cancelled++;
@@ -470,8 +470,8 @@ function cancelStalledClients($maxMin)
 				if ($stall > $maxMin) {
 					$id = $row[0];
 					
-					$res = $pdo->prepare("DELETE FROM workers WHERE id=?");
-					$res->execute([$id]);
+					$res2 = $pdo->prepare("DELETE FROM workers WHERE id=?");
+					$res2->execute([$id]);
 
 					$cancelled++;
 				}
@@ -747,10 +747,10 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 
 								// Note: you can prepare a statement just once and execute it multiple times!
 								
-								$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
+								$res2 = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,branch_order,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?)");
 								while ($row2 = $res->fetch(PDO::FETCH_ASSOC)) {
 									$numNew += 1;
-									$res->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
+									$res2->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['branch_order'], $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName]);
 								}
 
 								$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
