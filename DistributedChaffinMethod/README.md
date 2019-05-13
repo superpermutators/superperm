@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			10 May 2019
+Date:			13 May 2019
 
-NB:  These notes include some features that are only present from version 9 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 10 onwards. Please always install the latest
 version of the program.
 
 
@@ -37,7 +37,7 @@ loop indefinitely, waiting for available tasks to execute.
 
 You can monitor the ongoing results of the search at:
 
-<http://ada.mscsnet.mu.edu/ChaffinMethodResults/>
+<http://www.supermutations.net/ChaffinMethodResults/>
 
 To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
 if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
