@@ -37,7 +37,7 @@ loop indefinitely, waiting for available tasks to execute.
 
 You can monitor the ongoing results of the search at:
 
-<http://www.supermutations.net/ChaffinMethodResults/>
+<http://www.supermutations.net/ChaffinMethodResults.php>
 
 To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
 if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
