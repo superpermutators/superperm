@@ -1,14 +1,5 @@
 <?php
-	$statusCache = "statusCache.html";
-	$cacheTime = 5;
-
-	if (file_exists($statusCache) && (time() - filemtime($statusCache)) < $statusCache) {
-		include("statusCache.html");
-		exit;
-	}
-
-	ob_start();
-	ob_implicit_flush(0);
+include '../inc/dbinfo.inc';
 ?>
 
 <!DOCTYPE html>
@@ -36,57 +27,63 @@ span.waste {color: #cc3333; font-weight: bold;}
 <body>
 
 <?php
-
-function decorateString($str, $n) {
-	if (is_string($str)) {
-		$slen = strlen($str);
-		if ($slen > 0) {
-			$stri = array_map('intval',str_split($str));
-			$strmin = min($stri);
-			$strmax = max($stri);
-			if ($strmin == 1 && $strmax == $n) {
-				$perms = array();
+function decorateString($str, $n)
+{
+if (is_string($str))
+	{
+	$slen = strlen($str);
+	if ($slen > 0)
+		{
+		$stri = array_map('intval',str_split($str));
+		$strmin = min($stri);
+		$strmax = max($stri);
+		if ($strmin == 1 && $strmax == $n)
+			{
+			$perms = array();
 			
-				//	Loop over all length-n substrings
+			//	Loop over all length-n substrings
 			
-				$res=substr($str,0,$n-1);
-				$prevWaste=0;
-				for ($i=0; $i <= $slen - $n; $i++) {
-					$c = substr($str,$n-1+$i,1);
-					$s = array_slice($stri,$i,$n);
-					$u = array_unique($s);
-					$waste=1;
-					if (count($u) == $n) {
-						$pval = 0;
-						$factor = 1;
-						for ($j=0; $j<$n; $j++) {
-							$pval += $factor * $s[$j];
-							$factor *= 10;
-						}
-
-						if (!in_array($pval, $perms)) {
-							$perms[] = $pval;
-							$waste=0;
-						}
-					}
-					if ($waste!=$prevWaste)  {
-						if ($waste) {
-							$res = $res . '<span class="waste">';
-						} else {
-							$res = $res . '</span>';
-						}
-						$prevWaste=$waste;
-					}
-					$res = $res . $c;
-				}
-				return $res;
-			}
-		}
-	}
-	return "";
+			$res=substr($str,0,$n-1);
+			$prevWaste=0;
+			for ($i=0; $i <= $slen - $n; $i++)
+				{
+				$c = substr($str,$n-1+$i,1);
+				$s = array_slice($stri,$i,$n);
+				$u = array_unique($s);
+				$waste=1;
+				if (count($u) == $n)
+					{
+					$pval = 0;
+					$factor = 1;
+					for ($j=0; $j<$n; $j++)
+						{
+						$pval += $factor * $s[$j];
+						$factor *= 10;
+						};
+					if (!in_array($pval, $perms))
+						{
+						$perms[] = $pval;
+						$waste=0;
+						};
+					};
+				if ($waste!=$prevWaste)
+					{
+					if ($waste) $res = $res . '<span class="waste">';
+					else $res = $res . '</span>';
+					$prevWaste=$waste;
+					};
+				$res = $res . $c;
+				};
+			return $res;
+			};
+		};
+	};
+return "";
 }
 
-include '../../config.php';
+//	Directory in which we create files that PHP/apache can read/write
+
+$phpFiles = "phpFiles/";
 
 //	Used if we want to keep server from running too many processes.
 //	if (file_get_contents("InstanceCount.txt")!="00") exit("Server is busy.");
@@ -100,9 +97,9 @@ $fieldAlign0 = array('center','right');
 $nFields0 = count($fieldNamesDisplay0);
 $statusAssoc0 = array("Inactive","Active on a task");
 
-$fieldNames = array('ts','n','waste','perms','str','excl_perms','final','team');
-$fieldNamesDisplay = array('time stamp','n','waste','maximum<br />perms seen','string showing<br />current maximum','minimum<br />perms excluded','finalised?','team');
-$fieldAlign = array('center','right','right','right','str','right','center','team');
+$fieldNames = array('ts','n','waste','perms','str','excl_perms','final');
+$fieldNamesDisplay = array('time stamp','n','waste','maximum<br />perms seen','string showing<br />current maximum','minimum<br />perms excluded','finalised?');
+$fieldAlign = array('center','right','right','right','str','right','center');
 $nFields = count($fieldNames);
 
 $fieldNamesDisplay2 = array('status','Number of tasks');
@@ -110,213 +107,183 @@ $fieldAlign2 = array('center','right');
 $nFields2 = count($fieldNamesDisplay2);
 $statusAssoc2 = array("F"=>"Finished","U"=>"Unassigned","A"=>"Assigned");
 
-$fieldNames3 = array('ts','str','team');
-$fieldNamesDisplay3 = array('time stamp','superpermutation','team');
-$fieldAlign3 = array('center','str','center');
+$fieldNames3 = array('ts','str');
+$fieldNamesDisplay3 = array('time stamp','superpermutation');
+$fieldAlign3 = array('center','str');
 $nFields3 = count($fieldNames3);
 
+try {
+$pdo = new PDO('mysql:host='.DB_SERVER.';dbname='.DB_DATABASE,DB_USERNAME, DB_PASSWORD);
 
-echo "<h1>ADA &mdash; Chaffin Method Results</h1>\n";
-echo "<div style=\"margin-top:-8px\"><i>The data on this page refreshes at most once per {$cacheTime} seconds.</i></div><br />\n";
+echo "<h1>Chaffin Method Results</h1>\n";
 
 $res = $pdo->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
-if ($res->rowCount() != 0) {
+if ($res && $res->rowCount() != 0)
+	{
 	$noResults = FALSE;
 	echo "<table class='strings'><caption>Registered clients</caption>\n";
 	echo "<tr>\n";
-	for ($i = 0; $i < $nFields0; $i++) {
+	for ($i = 0; $i < $nFields0; $i++)
+		{
 		echo "<th class='". $fieldAlign0[$i] ."'>" . $fieldNamesDisplay0[$i] . "</th>\n";
-	}
+		};
 	echo "</tr>\n";
-
-	while ($row = $res->fetch()) {
+	for ($row_no = 0; $row_no < $res->rowCount(); $row_no++)
+		{
 		echo "<tr>\n";
-		$rowNames = ['current_task!=0', 'COUNT(id)'];
-		for ($i = 0; $i < $nFields0; $i++) {
-			if ($i==0) {
-				echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$rowNames[$i]]] . "</td>\n";
-			} else {
-				echo "<td class='". $fieldAlign0[$i] ."'>" . $row[$rowNames[$i]] . "</td>\n";
-			}
-		}
+		$row = $res->fetch(PDO::FETCH_NUM);
+		for ($i = 0; $i < $nFields0; $i++)
+			{
+			if ($i==0) echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$i]] . "</td>\n";
+			else echo "<td class='". $fieldAlign0[$i] ."'>" . $row[$i] . "</td>\n";
+			};
 		echo "</tr>\n";
-	}
-
-	$res = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
-	$distinctIP = $res->rowCount();
-
+		};
+	$res2 = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
+	$distinctIP = $res2->rowCount();
 	$maxTPI = 0;
-	while ($row = $res->fetch()) {
-		$tpi = intval($row['COUNT(id)']);
-		if ($tpi > $maxTPI) {
-			$maxTPI=$tpi;
-		}
-	}
-
+	for ($i=0; $i < $distinctIP; $i++)
+		{
+		$row2 = $res2->fetch(PDO::FETCH_NUM);
+		$tpi = intval($row2[0]);
+		if ($tpi > $maxTPI) $maxTPI=$tpi;
+		};
 	echo "<tr><td class='left' colspan='$nFields0'>$distinctIP distinct IP address".($distinctIP>1?"es":"")."</td></tr>\n";
 	echo "<tr><td class='left' colspan='$nFields0'>Maximum # of clients with same IP: $maxTPI</td></tr>\n";
 	echo "</table>\n";
-}
+	};
 
+$updTS0=time();
+$res = $pdo->query("SHOW TABLE STATUS FROM ".DB_DATABASE." LIKE 'superperms'");
+if ($res)
+	{
+	$row = $res->fetch(PDO::FETCH_ASSOC);
+	$upd = $row['Update_time'];
+	if ($upd) $updTS0 = strtotime($upd);
+	};
 
-$res = $pdo->query("SELECT * FROM teams ORDER BY tasks_completed DESC");
-if ($res->rowCount() != 0) {
-	echo "<table class='strings'><caption>Top Teams</caption>\n";
-	$allRows = $res->fetchAll();
-	echo "<tr>\n";
-	foreach($allRows as $ind => $row) {
-		echo "<td class='center'>" . $row['team'] . "</th>\n";
-	}
-	echo "</tr><tr>\n";
-	foreach($allRows as $ind => $row) {
-		echo "<td class='center'>" . $row['tasks_completed'] . "</th>\n";
-	}
-	echo "</tr>";
-	echo "</table>\n";
-}
+$updTS=time();
+$res = $pdo->query("SHOW TABLE STATUS FROM ".DB_DATABASE." LIKE 'witness_strings'");
+if ($res)
+	{
+	$row = $res->fetch(PDO::FETCH_ASSOC);
+	$upd = $row['Update_time'];
+	if ($upd) $updTS = strtotime($upd);
+	};
 
-
-
-$res = $pdo->query("SHOW TABLE STATUS FROM $db LIKE 'superperms'");
-$row = $res->fetch();
-$upd = $row['Update_time'];
-$updTS0 = strtotime($upd);
-
-$res = $pdo->query("SHOW TABLE STATUS FROM $db LIKE 'witness_strings'");
-$row = $res->fetch();
-$upd = $row['Update_time'];
-$updTS = strtotime($upd);
-
-for ($n = $max_n; $n >= $min_n; $n--) {
+for ($n = $max_n; $n >= $min_n; $n--)
+	{
 	$res = $pdo->query("SELECT status, COUNT(id) FROM tasks WHERE n=$n GROUP BY status");
-	
-	if ($res->rowCount() != 0) {
+	if ($res->rowCount() != 0)
+		{
 		$noResults = FALSE;
 		echo "<table class='strings'><caption>Tasks for <i>n</i> = $n</caption>\n";
 		echo "<tr>\n";
-		for ($i = 0; $i < $nFields2; $i++) {
+		for ($i = 0; $i < $nFields2; $i++)
+			{
 			echo "<th class='". $fieldAlign2[$i] ."'>" . $fieldNamesDisplay2[$i] . "</th>\n";
-		}
+			};
 		echo "</tr>\n";
-
-		while ($row = $res->fetch()) {
+		for ($row_no = 0; $row_no < $res->rowCount(); $row_no++)
+			{
 			echo "<tr>\n";
-			$rowNames = ['status', 'COUNT(id)'];
-			for ($i = 0; $i < $nFields2; $i++) {
-				if ($i==0) {
-					echo "<td class='". $fieldAlign2[$i] ."'>" . $statusAssoc2[$row[$rowNames[$i]]] . "</td>\n";
-				} else {
-					echo "<td class='". $fieldAlign2[$i] ."'>" . $row[$rowNames[$i]] . "</td>\n";
-				}
-			}
+			$row = $res->fetch(PDO::FETCH_NUM);
+			for ($i = 0; $i < $nFields2; $i++)
+				{
+				if ($i==0) echo "<td class='". $fieldAlign2[$i] ."'>" . $statusAssoc2[$row[$i]] . "</td>\n";
+				else echo "<td class='". $fieldAlign2[$i] ."'>" . $row[$i] . "</td>\n";
+				};
 			echo "</tr>\n";
-		}
-
-		$res = $pdo->query("SELECT num_finished from num_finished_tasks");
-		if ($row = $res->fetch()){
-			echo "<tr>\n";
-			echo "<td class='center'>Finished</td>\n";
-			echo "<td class='right'>" . $row['num_finished'] . "</td>\n";
-			echo "</tr>\n";
-		}
-
-		$res = $pdo->query("SELECT num_redundant from num_redundant_tasks");
-		if ($row = $res->fetch()){
-			echo "<tr>\n";
-			echo "<td class='center'>Redundant</td>\n";
-			echo "<td class='right'>" . $row['num_redundant'] . "</td>\n";
-			echo "</tr>\n";
-		}
+			};
 		echo "</table>\n";
-	}
+		};
 
-	$fname0 = "Super$n.html";
+	$fname0 = $phpFiles . "Super$n.html";
 	
 	//	Create a fresh HTML file if the database has been updated since the file was modified
 	
-	if ((!file_exists($fname0)) || $updTS0 > filemtime($fname0)) {
+	if ((!file_exists($fname0)) || $updTS0 > filemtime($fname0))
+		{
 		$fp=fopen($fname0,"w");
 		$res = $pdo->query("SELECT * FROM superperms WHERE n=$n ORDER BY ts DESC");
 
-		if ($res->rowCount() != 0) {
+		if ($res->rowCount() != 0)
+			{
 			$noResults = FALSE;
 			
 			fwrite($fp,"<table class='strings'><caption>Superpermutations for <i>n</i> = $n</caption>\n<tr>\n");
-			for ($i = 0; $i < $nFields3; $i++) {
+			for ($i = 0; $i < $nFields3; $i++)
+				{
 				fwrite($fp,"<th class='". $fieldAlign3[$i] ."'>" . $fieldNamesDisplay3[$i] . "</th>\n");
-			}
+				};
 			fwrite($fp,"</tr>\n");
-			while ($row = $res->fetch()) {
+			for ($row_no = 0; $row_no < $res->rowCount(); $row_no++)
+				{
 				fwrite($fp,"<tr>\n");
-				for ($i = 0; $i < $nFields3; $i++) {
+				$row = $res->fetch(PDO::FETCH_ASSOC);
+				for ($i = 0; $i < $nFields3; $i++)
+					{
 					$val = $row[$fieldNames3[$i]];
-					if ($i==1) {
-						$val=decorateString($val, $n);
-					}
+					if ($i==1) $val=decorateString($val, $n);
 					fwrite($fp,"<td class='". $fieldAlign3[$i] ."'>" . $val . "</td>\n");
-				}
+					};
 				fwrite($fp,"</tr>\n");
-			}
+				};
 			fwrite($fp,"</table>\n");
-		}
+			};
 		fclose($fp);
-	}
+		};
 		
 	echo file_get_contents($fname0);
 	
-	$fname = "Witness$n.html";
+	$fname = $phpFiles . "Witness$n.html";
 	
 	//	Create a fresh HTML file if the database has been updated since the file was modified
 	
-	if ((!file_exists($fname)) || $updTS > filemtime($fname)) {
+	if ((!file_exists($fname)) || $updTS > filemtime($fname))
+		{
 		$fp=fopen($fname,"w");
 		$res = $pdo->query("SELECT * FROM witness_strings WHERE n=$n ORDER BY waste DESC");
 
-		if ($res->rowCount() != 0) {
+		if ($res->rowCount() != 0)
+			{
 			$noResults = FALSE;
 			
 			fwrite($fp,"<table class='strings'><caption>Results for <i>n</i> = $n</caption>\n<tr>\n");
-			for ($i = 0; $i < $nFields; $i++) {
+			for ($i = 0; $i < $nFields; $i++)
+				{
 				fwrite($fp,"<th class='". $fieldAlign[$i] ."'>" . $fieldNamesDisplay[$i] . "</th>\n");
-			}
-
+				};
 			fwrite($fp,"</tr>\n");
-			while ($row = $res->fetch()) {
+			for ($row_no = 0; $row_no < $res->rowCount(); $row_no++)
+				{
 				fwrite($fp,"<tr>\n");
-				for ($i = 0; $i < $nFields; $i++) {
+				$row = $res->fetch(PDO::FETCH_ASSOC);
+				for ($i = 0; $i < $nFields; $i++)
+					{
 					$val = $row[$fieldNames[$i]];
-					if ($i==4) {
-						$val=decorateString($val, $n);
-					}
+					if ($i==4) $val=decorateString($val, $n);
 					fwrite($fp,"<td class='". $fieldAlign[$i] ."'>" . $val . "</td>\n");
-				}
+					};
 				fwrite($fp,"</tr>\n");
-			}
+				};
 			fwrite($fp,"</table>\n");
-		}
+			};
 		fclose($fp);
-	}
+		};
 		
 	echo file_get_contents($fname);
+	};
 	
+$pdo=NULL;
+
+if ($noResults) echo "<p>The database contains no results.</p>\n";
+} catch (PDOException $e) {
+    print "Error: " . $e->getMessage() . "<br/>";
+    die();
 }
 
-if ($noResults) {
-	echo "<p>The database contains no results.</p>\n";
-}
 
 ?>
-
-<?php echo rand(); ?>
 </body>
 </html>
-
-<?php
-	
-	$pageContents = ob_get_contents();
-
-	$fp=fopen($statusCache,"w");
-	fwrite($fp,$pageContents);
-	fclose($fp);
-
-?>

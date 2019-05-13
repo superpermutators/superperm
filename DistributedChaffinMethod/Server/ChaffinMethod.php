@@ -1,5 +1,5 @@
 <?php
-include '../config.php';
+include '../inc/dbinfo.inc';
 
 //	Version of the client ABSOLUTELY required.
 //  Note that if this is changed while clients are running tasks,
@@ -7,17 +7,17 @@ include '../config.php';
 //	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
 //	with a call to cancelStalledClients.
 
-$versionAbsolutelyRequired = 9;
+$versionAbsolutelyRequired = 10;
 
 //	Version of the client required for new registrations and new tasks to be allocated.
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 9;
+$versionForNewTasks = 10;
 
 //	Maximum number of clients to register
 
-$maxClients = 1000;
+$maxClients = 5000;
 
 //	Maximum number of times to retry a transaction
 
@@ -71,7 +71,7 @@ function instanceCount($inc,$def,&$didUpdate) {
 
 function handlePDOError($e) {
 	print("Error: " . $e->getMessage());
-	mail("jay.pantone@gmail.com", "PDO ERROR :(", $e->getMessage());
+	mail("gregegan@netspace.net.au", "PDO ERROR", $e->getMessage());
 }
 
 function factorial($n) {
@@ -838,6 +838,8 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 			}
 		}
 	}
+	
+	if ($n==5 || ($n==6 && $w < 100)) maybeFinishedAllTasks();
 
 	return "OK\n";
 }
@@ -1035,6 +1037,8 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
+$pdo = new PDO('mysql:host='.DB_SERVER.';dbname='.DB_DATABASE,DB_USERNAME, DB_PASSWORD);
+
 //	Currently not using instanceCount
 
 /*
@@ -1129,19 +1133,19 @@ if (is_string($qs)) {
 					} else if ($action == "cancelStalledTasks") {
 						$maxMins_str = $q['maxMins'];
 						$maxMins = intval($maxMins_str);
-						if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd']) {
+						if (is_string($maxMins_str) && $maxMins>0 && DB_PASSWORD==$q['pwd']) {
 							$queryOK = TRUE;
 							echo cancelStalledTasks($maxMins);
 						}
 					} else if ($action == "cancelStalledClients") {
 						$maxMins_str = $q['maxMins'];
 						$maxMins = intval($maxMins_str);
-						if (is_string($maxMins_str) && $maxMins>0 && $pwd==$q['pwd']) {
+						if (is_string($maxMins_str) && $maxMins>0 && DB_PASSWORD==$q['pwd']) {
 							$queryOK = TRUE;
 							echo cancelStalledClients($maxMins);
 						}
 					} else if ($action == "maybeFinishedAllTasks") {
-						if ($pwd==$q['pwd']) {
+						if (DB_PASSWORD==$q['pwd']) {
 							$queryOK = TRUE;
 							echo maybeFinishedAllTasks();
 						}
@@ -1214,7 +1218,7 @@ if (is_string($qs)) {
 								
 									else if ($action == "createTask") {
 										$p_str = $q['pte'];
-										if (is_string($p_str) && $pwd==$q['pwd']) {
+										if (is_string($p_str) && DB_PASSWORD==$q['pwd']) {
 											$p = intval($p_str);
 											if ($p > 0 && analyseString($str,$n) > 0) {
 												$queryOK = TRUE;
