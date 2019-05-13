@@ -86,7 +86,7 @@ another instance of the program.
 //	Set NO_SERVER to TRUE to run a debugging version that makes no contact with the server, and just
 //	performs a search with parameters that need to be inserted into the source code (in getTask()) manually.
 
-#define NO_SERVER FALSE 
+#define NO_SERVER FALSE
 
 //	Server URL
 
@@ -97,7 +97,7 @@ another instance of the program.
 //	URL for InstanceCount file
 
 	#define IC_URL "http://ada.mscsnet.mu.edu/InstanceCount.txt"
-	
+
 #endif
 
 #if USE_SERVER_LOCK_FILE
@@ -105,12 +105,12 @@ another instance of the program.
 //	Name of server lock file shared by sibling clients running with a shared working directory
 
 	#define SERVER_LOCK_FILE_NAME "ServerLock.txt"
-	
+
 //	Maximum number of times we sleep consecutively waiting for siblings to free the lock on the server;
 //	if this is exceeded, we assume something has gone awry with the lock file.
 
 	#define MAX_SLEEP_WAITING_ON_SIBS 20
-	
+
 #endif
 
 //	Smallest and largest values of n accepted
@@ -158,7 +158,7 @@ another instance of the program.
 #define VAR_TIME_BETWEEN_SERVER_CHECKINS 4
 
 
-//	Time we aim to check in with the server, when checking for tasks or running a task	
+//	Time we aim to check in with the server, when checking for tasks or running a task
 
 #define TIME_BETWEEN_SERVER_CHECKINS (3*MINUTE)
 
@@ -188,7 +188,7 @@ another instance of the program.
 //	Macros
 //	------
 
-#define MFREE(p) if ((p)!=NULL) free(p); 
+#define MFREE(p) if ((p)!=NULL) free(p);
 #define CHECK_MEM(p) if ((p)==NULL) {printf("Insufficient memory\n"); exit(EXIT_FAILURE);};
 
 //	Structure definitions
@@ -247,7 +247,7 @@ int *ldd=NULL;				//	For each digit sequence, n - (the longest run of distinct d
 struct digitScore *nextDigits=NULL;	//	For each (n-1)-length digit sequence, possible next digits in preferred order
 
 int noc;					//	Number of 1-cycles
-int nocThresh;				//	Threshold for unvisited 1-cycles before we try new bounds		
+int nocThresh;				//	Threshold for unvisited 1-cycles before we try new bounds
 int *oneCycleCounts=NULL;	//	Number of unvisited permutations in each 1-cycle
 int *oneCycleIndices=NULL;	//	The 1-cycle to which each permutation belongs
 int oneCycleBins[MAX_N+1];	//	The numbers of 1-cycles that have 0 ... n unvisited permutations
@@ -367,7 +367,51 @@ static char buffer[BUFFER_SIZE];
 FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
-teamName = DEFAULT_TEAM_NAME;
+
+
+char* envTeamName = getenv("TEAMNAME");
+if (envTeamName!=NULL) {
+	// FIXME I'm not a C hero, this is piece is copy-pasted from the argument handling section and should be refactored into a function.
+	if (strlen(envTeamName) <= MAX_TEAM_NAME_LENGTH) {
+		teamName = envTeamName;
+		for (int pos=0; teamName[pos]!= '\0'; pos++) {
+			if (!isalpha(teamName[pos]) && !isdigit(teamName[pos]) && (teamName[pos] != ' ')) {
+				printf("Team names must contain only alphanumeric ascii characters and spaces.\n");
+				exit(EXIT_FAILURE);
+			}
+		}
+		// We have to encode spaces in the team name as "%20" to pass them via curl
+		// From https://stackoverflow.com/questions/3424474/replacing-spaces-with-20-in-c
+
+		int new_string_length = 0;
+		for (char *c = teamName; *c != '\0'; c++) {
+			if (*c == ' ') new_string_length += 2;
+			new_string_length++;
+		}
+
+		char *qstr = malloc((new_string_length + 1) * sizeof qstr[0]);
+		char *c1, *c2;
+		for (c1 = teamName, c2 = qstr; *c1 != '\0'; c1++) {
+			if (*c1 == ' ') {
+				c2[0] = '%';
+				c2[1] = '2';
+				c2[2] = '0';
+				c2 += 3;
+			}else{
+				*c2 = *c1;
+				c2++;
+			}
+		}
+		*c2 = '\0';
+		teamName = qstr;
+	} else {
+		printf("Team names are limited to %d characters.\n", MAX_TEAM_NAME_LENGTH);
+		exit(EXIT_FAILURE);
+	}
+
+} else {
+	teamName = DEFAULT_TEAM_NAME;
+}
 
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
@@ -391,9 +435,9 @@ while(TRUE)
 	sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,programInstance);
 	sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,programInstance);
 	sprintf(STOP_FILE_NAME,STOP_FILE_NAME_TEMPLATE,programInstance);
-	
+
 	//	Check for pre-existing files to avoid any collisions
-	
+
 	fp = fopen(LOG_FILE_NAME,"r");
 	if (fp!=NULL)
 		{
@@ -406,10 +450,10 @@ while(TRUE)
 		fclose(fp);
 		continue;
 		};
-		
+
 	break;
 	};
-	
+
 sprintf(buffer,"Program instance number: %u",programInstance);
 logString(buffer);
 
@@ -426,7 +470,7 @@ for (int i=1;i<argc;i++)
 			else i++;
 			}
 		else timeQuotaMins = DEFAULT_TIME_LIMIT;
-		
+
 		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
 		logString(buffer);
 		}
@@ -465,7 +509,6 @@ for (int i=1;i<argc;i++)
 				}
 				*c2 = '\0';
 				teamName = qstr;
-
 			} else {
 				printf("Team names are limited to %d characters.\n", MAX_TEAM_NAME_LENGTH);
 				exit(EXIT_FAILURE);
@@ -473,7 +516,7 @@ for (int i=1;i<argc;i++)
 			i++;
 		}
 		else teamName = DEFAULT_TEAM_NAME;
-		
+
 		sprintf(buffer,"Team name set to %s.\n",teamName);
 		logString(buffer);
 		}
@@ -522,20 +565,20 @@ registerClient();
 while (TRUE)
 	{
 	//	Check for CTRL-C / SIGINT
-	
+
 	#if UNIX_LIKE
-	
+
 	if (hadSigInt)
 		{
 		logString("Received CTRL-C / SIGINT, so stopping.\n");
 		unregisterClient();
 		exit(0);
 		};
-	
+
 	#endif
-	
+
 	//	Check for STOP files
-	
+
 	fp = fopen(STOP_FILE_NAME,"r");
 	if (fp!=NULL)
 		{
@@ -544,7 +587,7 @@ while (TRUE)
 		unregisterClient();
 		exit(0);
 		};
-	
+
 	fp = fopen(STOP_FILE_ALL,"r");
 	if (fp!=NULL)
 		{
@@ -553,9 +596,9 @@ while (TRUE)
 		unregisterClient();
 		exit(0);
 		};
-		
+
 	//	Check to see if we exceed time quota
-	
+
 	if (timeQuotaMins > 0)
 		{
 		time_t currentTime;
@@ -569,17 +612,17 @@ while (TRUE)
 			exit(0);
 			};
 		};
-	
+
 	sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);	//	Put a floor under the frequency of server contacts
-	
+
 	int t = getTask(&currentTask);
-	
+
 	if (t<0)
 		{
 		logString("Quit instruction from server");
 		break;
 		};
-	
+
 	if (t==0)
 		{
 		logString("No tasks available");
@@ -596,9 +639,9 @@ while (TRUE)
 			currentTask.perm_to_exceed,
 			currentTask.prev_perm_ruled_out);
 		logString(buffer);
-		
+
 		doTask();
-		
+
 		#if NO_SERVER
 		break;
 		#endif
@@ -668,7 +711,7 @@ if (knownN==NULL)
 	printf("Error: No data available for n=%d\n",n);
 	exit(EXIT_FAILURE);
 	};
-	
+
 if (currentTask.w_value > numKnownW)
 	{
 	printf("Error: No data available for w=%d\n",currentTask.w_value);
@@ -718,28 +761,28 @@ for (int i=0;i<fn;i++)
 	for (int j0=0;j0<n;j0++)
 		{
 		tperm+=(p0[n*i+j0]<<(j0*DBITS));
-		
+
 		//	Left shift digits by one to get weight-1 successor
-		
+
 		tperm1+=(p0[n*i+(j0+1)%n]<<(j0*DBITS));
-		
+
 		//	Left shift digits by 2 and swap last pair
-		
+
 		int k0;
 		if (j0==n-1) k0=0;
 		else if (j0==n-2) k0=1;
 		else k0=(j0+2)%n;
-		
+
 		tperm2+=(p0[n*i+k0]<<(j0*DBITS));
 		};
 	valid[tperm]=TRUE;
 	successor1[tperm]=tperm1;
 	successor2[tperm]=tperm2;
 	};
-	
+
 for (int i=0;i<n;i++) free(permTab[i]);
 free(permTab);
-	
+
 //	For each number d_1 d_2 d_3 ... d_n as a digit sequence, what is
 //	the length of the longest run d_j ... d_n in which all the digits are distinct.
 
@@ -767,7 +810,7 @@ while (more)
 		{
 		tperm+=(dseq[j0]<<(j0*DBITS));
 		};
-		
+
 	if (valid[tperm])
 		{
 		ldd[tperm]=0;
@@ -802,7 +845,7 @@ while (more)
 				};
 			};
 		};
-		
+
 	for (int h=n-1;h>=0;h--)
 		{
 		if (++dseq[h]>n)
@@ -815,9 +858,9 @@ while (more)
 			dseq[h]=1;
 			}
 		else break;
-		};	
+		};
 	};
-	
+
 //	Set up a table of the next digits to follow from a given (n-1)-digit sequence
 
 MFREE(nextDigits)
@@ -836,9 +879,9 @@ while (more)
 		part+=(dseq[j0]<<(j0*DBITS));
 		};
 	struct digitScore *nd = nextDigits+(n-1)*part;
-		
+
 	//	Sort potential next digits by the ldd score we get by appending them
-	
+
 	int q=0;
 	for (int d=1;d<=n;d++)
 	if (d != dseq[n-2])
@@ -846,17 +889,17 @@ while (more)
 		int t = (d<<nmbits) + part;
 		nd[q].digit = d;
 		int ld = nd[q].score = ldd[t];
-		
+
 		//	The full number n-digit number we get if we append the chosen digit to the previous n-1
-		
+
 		nd[q].fullNum = t;
-		
+
 		//	The next (n-1)-digit partial number that follows (dropping oldest of the current n)
-		
+
 		int p = nd[q].nextPart = t>>DBITS;
-		
+
 		//	If there is a unique permutation after 0 or 1 wasted characters, precompute its number
-		
+
 		if (ld==0) nd[q].nextPerm = t;		//	Adding the current chosen digit gets us there
 		else if (ld==1)						//	After the current chosen digit, a single subsequent choice gives a unique permutation
 			{
@@ -867,9 +910,9 @@ while (more)
 		else nd[q].nextPerm = -1;
 		q++;
 		};
-		
+
 	qsort(nd,n-1,sizeof(struct digitScore),compareDS);
-	
+
 	for (int h=n-2;h>=0;h--)
 		{
 		if (++dseq[h]>n)
@@ -882,9 +925,9 @@ while (more)
 			dseq[h]=1;
 			}
 		else break;
-		};	
+		};
 	};
-	
+
 mperm_res[0] = n;		//	With no wasted characters, we can visit n permutations
 }
 
@@ -919,7 +962,7 @@ for (int j0=0;j0<currentTask.prefixLen;j0++)
 		{
 		if (unvisited[tperm0]) pf++;
 		unvisited[tperm0] = FALSE;
-		
+
 		int prevC, oc;
 		oc=oneCycleIndices[tperm0];
 		prevC = oneCycleCounts[oc]--;
@@ -1020,17 +1063,17 @@ totalNodeCount++;
 if (++nodesChecked >= nodesBeforeTimeCheck)
 	{
 	//	We have hit a threshold for nodes checked, so time to check the time
-	
+
 	time_t t;
 	time(&t);
 	double elapsedTime = difftime(t, timeOfLastCheckin);
-	
+
 	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
 	//	time closer to the target
-	
+
 	printf("ElapsedTime=%lf\n",elapsedTime);
 	printf("Current nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
-	
+
 	int64_t nbtc = nodesBeforeTimeCheck;
 	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (int64_t) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
 	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
@@ -1038,18 +1081,18 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
-	
+
 	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
 
 	timeOfLastCheckin = t;
 	nodesChecked = 0;
-	
+
 	/*	Version 7.2: Since a change in the maximum permutation is a rare event, it's not really worth the overhead to
 		check for it within a task's run.
-	
+
 	//	We have hit a threshold for elapsed time since last check in with the server
 	//	Check in and get current maximum for the (n,w) pair we are working on
-	
+
 	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm,
 		currentTask.task_id, currentTask.access_code,clientID,ipAddress,programInstance);
 	isSuper = (max_perm==fn);
@@ -1059,14 +1102,14 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		return;
 		};
 	*/
-	
+
 	elapsedTime = difftime(t, startedCurrentTask);
 	if (elapsedTime > TIME_BEFORE_SPLIT)
 		{
 		//	We have hit a threshold for elapsed time since we started this task, so split the task
-		
+
 		startedCurrentTask = t;
-		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
+		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS);
 		sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 		logString(buffer);
 		splitMode=TRUE;
@@ -1079,7 +1122,7 @@ int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we
 
 //	Loop to try each possible next digit we could append.
 //	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation.
-	
+
 struct digitScore *nd = nextDigits + nm*partNum;
 
 //	To be able to fully exploit foreknowledge that we are heading for a visited permutation after 1 wasted character, we need to ensure
@@ -1117,27 +1160,27 @@ for	(int y=0; y<nm; y++)
 		}
 	else if (swap12)
 		{
-		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y; 
+		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y;
 		}
 	else z=y;
-	
+
 	struct digitScore *ndz = nd+z;
 	ld = ndz->score;
-	
+
 	//	ld tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
-	
+
 	int spareW0 = spareW - ld;
-	
+
 	//	Having taken care of ordering issues, we can treat a visited permutation after 1 wasted character as an extra wasted character
-	
+
 	if (ld==1 && !unvisited[ndz->nextPerm]) spareW0--;
-		
+
 	if (spareW0<0) break;
-	
+
 	curstr[pos] = ndz->digit;
 	tperm = ndz->fullNum;
-	
+
 	int vperm = (ld==0);
 	if (vperm && unvisited[tperm])
 		{
@@ -1175,10 +1218,10 @@ for	(int y=0; y<nm; y++)
 			prevC = oneCycleCounts[oc]--;
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
-		
+
 			curi[pos] = childIndex++;
 			fillStr(pos+1, pfound+1, ndz->nextPart);
-		
+
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
 			oneCycleCounts[oc]=prevC;
@@ -1212,10 +1255,10 @@ for	(int y=0; y<nm; y++)
 			};
 		};
 	};
-	
+
 //	If we encountered a choice that led to a repeat visit to a permutation, we follow (or prune) that branch now.
 //	It will always come from the FIRST choice in the original list, as that is where any valid permutation must be.
-	
+
 if (deferredRepeat)
 	{
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
@@ -1242,14 +1285,14 @@ if (pfound > bestSeenP)
 	bestSeenLen = pos;
 	for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
 	};
-	
+
 int tperm, ld;
 int alreadyWasted = pos - pfound - n + 1;	//	Number of character wasted so far
 int spareW = tot_bl - alreadyWasted;		//	Maximum number of further characters we can waste while not exceeding tot_bl
 
 //	Loop to try each possible next digit we could append.
 //	These have been sorted into increasing order of ldd[tperm], the minimum number of further wasted characters needed to get a permutation.
-	
+
 struct digitScore *nd = nextDigits + nm*partNum;
 
 //	To be able to fully exploit foreknowledge that we are heading for a visited permutation after 1 wasted character, we need to ensure
@@ -1287,27 +1330,27 @@ for	(int y=0; y<nm; y++)
 		}
 	else if (swap12)
 		{
-		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y; 
+		if (y==1) z=2; else if (y==2) {z=1; swap12=FALSE;} else z=y;
 		}
 	else z=y;
-	
+
 	struct digitScore *ndz = nd+z;
 	ld = ndz->score;
-	
+
 	//	ld tells us the minimum number of further characters we would need to waste
 	//	before visiting another permutation.
-	
+
 	int spareW0 = spareW - ld;
-	
+
 	//	Having taken care of ordering issues, we can treat a visited permutation after 1 wasted character as an extra wasted character
-	
+
 	if (ld==1 && !unvisited[ndz->nextPerm]) spareW0--;
-		
+
 	if (spareW0<0) break;
-	
+
 	curstr[pos] = ndz->digit;
 	tperm = ndz->fullNum;
-	
+
 	int vperm = (ld==0);
 	if (vperm && unvisited[tperm])
 		{
@@ -1345,10 +1388,10 @@ for	(int y=0; y<nm; y++)
 			prevC = oneCycleCounts[oc]--;
 			oneCycleBins[prevC]--;
 			oneCycleBins[prevC-1]++;
-		
+
 			curi[pos] = childIndex++;
 			res = fillStrNL(pos+1, pfound+1, ndz->nextPart);
-		
+
 			oneCycleBins[prevC-1]--;
 			oneCycleBins[prevC]++;
 			oneCycleCounts[oc]=prevC;
@@ -1383,10 +1426,10 @@ for	(int y=0; y<nm; y++)
 		};
 	if (!res) return FALSE;
 	};
-	
+
 //	If we encountered a choice that led to a repeat visit to a permutation, we follow (or prune) that branch now.
 //	It will always come from the FIRST choice in the original list, as that is where any valid permutation must be.
-	
+
 if (deferredRepeat)
 	{
 	int d = pruneOnPerms(spareW-1, pfound - max_perm);
@@ -1397,7 +1440,7 @@ if (deferredRepeat)
 		res = fillStrNL(pos+1, pfound, nd->nextPart);
 		};
 	};
-	
+
 return res;
 }
 
@@ -1662,7 +1705,7 @@ return res;
 
 //	Send a command string via URL_UTILITY to the server at SERVER_URL, putting the response in the file SERVER_RESPONSE_FILE_NAME
 //
-//	Returns non-zero if an error was encountered 
+//	Returns non-zero if an error was encountered
 
 #if NO_SERVER
 
@@ -1688,7 +1731,7 @@ while (TRUE)
 	logString("Waiting for server to be free");
 	sleepForSecs(ic + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS);
 	};
-	
+
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
 //	current command fails.
 
@@ -1742,7 +1785,7 @@ int logServerResponse(const char *reqd)
 {
 static char buffer[BUFFER_SIZE], lbuffer[BUFFER_SIZE];
 int error=FALSE, wait=FALSE;
-	
+
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
@@ -1754,7 +1797,7 @@ int lineNumber = 0;
 while (!feof(fp))
 	{
 	//	Get a line from the server response, ensure it is null-terminated without a newline
-	
+
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
 	size_t blen = strlen(buffer);
@@ -1764,16 +1807,16 @@ while (!feof(fp))
 		blen--;
 		};
 	lineNumber++;
-		
+
 	if (strncmp(buffer,"Error",5)==0  || buffer[0]=='<') error=TRUE;
 	if (strncmp(buffer,"Wait",4)==0) wait=TRUE;
 	if (!wait && lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) error=TRUE;
-	
+
 	sprintf(lbuffer,"Server: %s",buffer);
 	logString(lbuffer);
 	};
 fclose(fp);
-	
+
 if (error) return -1;
 if (wait) return 1;
 return 0;
@@ -1795,55 +1838,55 @@ for (int i=0;i<N_TASK_STRINGS;i++)
 			case 0:
 				sscanf(s+len,"%u",&tsk->task_id);
 				break;
-			
+
 			case 1:
 				sscanf(s+len,"%u",&tsk->access_code);
 				break;
-			
+
 			case 2:
 				sscanf(s+len,"%u",&tsk->n_value);
 				setupForN(tsk->n_value);
 				break;
-			
+
 			case 3:
 				sscanf(s+len,"%u",&tsk->w_value);
 				break;
-			
+
 			case 4:
 				CHECK_MEM( tsk->prefix = malloc((slen-len+1)*sizeof(char)) )
 				strcpy(tsk->prefix, s+len);
 				tsk->prefixLen = (unsigned int)strlen(tsk->prefix);
 				break;
-			
+
 			case 5:
 				sscanf(s+len,"%u",&tsk->perm_to_exceed);
 				break;
-			
+
 			case 6:
 				sscanf(s+len,"%u",&tsk->prev_perm_ruled_out);
 				break;
-			
+
 			case 7:
 				CHECK_MEM( tsk->branchOrder = malloc((slen-len+1)*sizeof(char)) )
 				strcpy(tsk->branchOrder, s+len);
 				tsk->branchOrderLen = (unsigned int)strlen(tsk->branchOrder);
 				break;
-			
+
 			default:
 				break;
 			};
-		
+
 		if (tif)
 			{
 			if (!tif[i]) taskItems++;
 			tif[i]=TRUE;
 			}
 		else taskItems++;
-		
+
 		break;
 		};
 	};
-	
+
 return taskItems;
 }
 
@@ -1903,7 +1946,7 @@ tsk->branchOrderLen = 0;
 while (!feof(fp))
 	{
 	//	Get a line from the server response, ensure it is null-terminated without a newline
-	
+
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
 	size_t blen = strlen(buffer);
@@ -1912,18 +1955,18 @@ while (!feof(fp))
 		buffer[blen-1]='\0';
 		blen--;
 		};
-	
+
 	if (strncmp(buffer,"Quit",4)==0)
 		{
 		quit=TRUE;
 		break;
 		};
-	
+
 	if (strncmp(buffer,"No tasks",8)==0)
 		{
 		break;
 		};
-	
+
 	if (taskItems < N_TASK_STRINGS)
 		{
 		taskItems = parseTaskParameters(buffer, blen, tsk, taskItems, tif);
@@ -1931,7 +1974,7 @@ while (!feof(fp))
 	else
 		{
 		//	Look for a (w,p) pair
-		
+
 		if (buffer[0]=='(')
 			{
 			int w, p;
@@ -1939,7 +1982,7 @@ while (!feof(fp))
 			mperm_res[w]=p;
 			};
 		};
-		
+
 	};
 fclose(fp);
 
@@ -1973,12 +2016,12 @@ while (TRUE)
 		{
 		int sr = logServerResponse(reqd);
 		if (sr==0) return;
-		
+
 		if (sr<0) exit(EXIT_FAILURE);
 		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
 		}
 	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
-	
+
 	sprintf(buffer,"Unable to send command to server, will retry after %d seconds",sleepTime);
 	logString(buffer);
 	sleepForSecs(sleepTime);
@@ -2012,7 +2055,7 @@ int max = oldMax;
 while (!feof(fp))
 	{
 	//	Get a line from the server response, ensure it is null-terminated without a newline
-	
+
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
 	size_t blen = strlen(buffer);
@@ -2021,7 +2064,7 @@ while (!feof(fp))
 		buffer[blen-1]='\0';
 		blen--;
 		};
-	
+
 	if (buffer[0]=='(')
 		{
 		int n0, w0, p0;
@@ -2087,7 +2130,7 @@ unsigned int dummyPIN;
 while (!feof(fp))
 	{
 	//	Get a line from the server response, ensure it is null-terminated without a newline
-	
+
 	char *f=fgets(buffer,BUFFER_SIZE,fp);
 	if (f==NULL) break;
 	size_t blen = strlen(buffer);
@@ -2108,13 +2151,13 @@ while (!feof(fp))
 					sscanf(buffer+len,"%u",&clientID);
 					clientItems++;
 					break;
-				
+
 				case 1:
 					CHECK_MEM( ipAddress = malloc((blen-len+1)*sizeof(char)) )
 					strcpy(ipAddress, buffer+len);
 					clientItems++;
 					break;
-				
+
 				case 2:
 					sscanf(buffer+len,"%u",&dummyPIN);
 					if (dummyPIN!=programInstance)
@@ -2124,11 +2167,11 @@ while (!feof(fp))
 						};
 					clientItems++;
 					break;
-				
+
 				default:
 					break;
 				};
-			
+
 			break;
 			};
 		};
@@ -2204,7 +2247,7 @@ if (useServerLock)
 			break;
 			};
 		};
-		
+
 	if (!serverLockIsOurs)
 		{
 		sprintf(buffer,"Unable to lock file %s after %d attempts, so giving up on locking",
@@ -2262,12 +2305,12 @@ while (unvisited[t])
 	okT = t;			//	Record the last unvisited permutation integer
 	t=successor1[t];
 	};
-	
+
 int m = p + nu;
 if (nu > 0 && m > mperm_res[w+1])
 	{
 	mperm_res[w+1] = m;
-	
+
 	curstr[size] = curstr[size-(n-1)];
 	curstr[size+1] = curstr[size-n];
 	for (int j=0;j<nu-1;j++) curstr[size+2+j] = curstr[size-(n-2)+j];
@@ -2275,7 +2318,7 @@ if (nu > 0 && m > mperm_res[w+1])
 	for (int k=0;k<size+nu+1;k++) klbStrings[w+1][k]=curstr[k];
 	klbLen[w+1] = size+nu+1;
 	witnessLowerBound(klbStrings[w+1], klbLen[w+1], w+1, m);
-	
+
 	maybeUpdateLowerBoundAppend(okT, klbLen[w+1], w+1, m);
 	};
 
@@ -2290,7 +2333,7 @@ unvisited[tperm]=TRUE;
 //	We follow a weight-2 edge instead of the weight-3 edge, then follow four weight-1 edges, then
 //	a weight-3 edge will again take us back to the permutation we would have reached without the detour.
 //	If all five permutations in question were unvisited, we will have added them at the cost of an increase in
-//	weight of 1. 
+//	weight of 1.
 
 void maybeUpdateLowerBoundSplice(int size, int w, int p)
 {
@@ -2311,7 +2354,7 @@ for (int j0=0;j0<size;j0++)
 	perms[j0]=tperm0;
 	wasted[j0] = !valid[tperm0];
 	};
-	
+
 //	Look for weight-3 edges.  Skip the initial n-1 characters, which will always be marked as wasted.
 
 for (int j0=n;j0+3<size;j0++)
@@ -2319,7 +2362,7 @@ for (int j0=n;j0+3<size;j0++)
 	if (!wasted[j0] && wasted[j0+1] && wasted[j0+2] && !wasted[j0+3])
 		{
 		//	We are at a weight-3 edge
-		
+
 		int t0 = perms[j0];
 		int t = successor2[t0];
 		int nu=0, okT=0;
@@ -2332,7 +2375,7 @@ for (int j0=n;j0+3<size;j0++)
 		if (nu==5)
 			{
 			//	We found 5 unvisited permutations we can visit this way
-			
+
 			mperm_res[w+1]=p+5;
 			int sz=j0+1;
 			char *ks=klbStrings[w+1];
@@ -2348,7 +2391,7 @@ for (int j0=n;j0+3<size;j0++)
 			};
 		};
 	};
-	
+
 free(wasted);
 free(perms);
 }

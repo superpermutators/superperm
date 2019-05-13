@@ -138,4 +138,14 @@ The program writes files:
 
 where NNNNNNNNNN is a random integer chosen by each instance of the program.
 
+## Using Docker
 
+You can also build & run using Docker.
+
+### Building
+
+docker build -t superperm/distributed-chaffin-method:latest .
+
+### Running
+
+docker run --rm -e TEAMNAME="Your teamname here" superperm/distributed-chaffin-method:latest 
