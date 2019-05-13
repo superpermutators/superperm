@@ -138,4 +138,16 @@ The program writes files:
 
 where NNNNNNNNNN is a random integer chosen by each instance of the program.
 
+## Using Docker
 
+You can also build & run using Docker.
+
+### Building
+
+    docker build -t superperm/distributed-chaffin-method:latest .
+
+### Running
+
+    docker run --rm -e TEAMNAME="Your teamname here" -v /path/to/your/local/working/dir:/opt/workingdir superperm/distributed-chaffin-method:latest 
+
+You can use `/path/to/your/local/working/dir` to see the files outputted by the program and you can place the `STOP_ALL.txt` or `STOP_NNNNNNNNNN.txt` files there.
