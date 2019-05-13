@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: localhost:3306
--- Generation Time: May 04, 2019 at 11:18 PM
+-- Generation Time: May 13, 2019 at 03:43 PM
 -- Server version: 5.6.41-log
 -- PHP Version: 7.2.7
 
@@ -19,8 +19,58 @@ SET time_zone = "+00:00";
 /*!40101 SET NAMES utf8mb4 */;
 
 --
--- Database: `superpermutations`
+-- Database: `grgr2554_superpermutations`
 --
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `finished_tasks`
+--
+
+CREATE TABLE `finished_tasks` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `original_task_id` int(10) UNSIGNED NOT NULL,
+  `access` int(10) UNSIGNED NOT NULL,
+  `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `n` int(10) UNSIGNED NOT NULL,
+  `waste` int(10) UNSIGNED NOT NULL,
+  `prefix` varchar(6000) NOT NULL,
+  `branch_order` varchar(6000) DEFAULT NULL,
+  `perm_to_exceed` int(10) UNSIGNED NOT NULL,
+  `iteration` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `prev_perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
+  `perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
+  `excl_witness` varchar(6000) DEFAULT NULL,
+  `status` char(1) NOT NULL DEFAULT 'U',
+  `ts_allocated` timestamp NULL DEFAULT NULL,
+  `client_id` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `checkin_count` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `ts_finished` timestamp NULL DEFAULT NULL,
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `num_finished_tasks`
+--
+
+CREATE TABLE `num_finished_tasks` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `num_finished` int(10) UNSIGNED NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `num_redundant_tasks`
+--
+
+CREATE TABLE `num_redundant_tasks` (
+  `id` int(10) UNSIGNED NOT NULL,
+  `num_redundant` int(10) NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
 
@@ -35,8 +85,9 @@ CREATE TABLE `superperms` (
   `waste` int(10) UNSIGNED NOT NULL,
   `perms` int(10) UNSIGNED NOT NULL,
   `str` varchar(6000) NOT NULL,
-  `IP` varchar(100) DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  `IP` varchar(100) DEFAULT NULL,
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
 
@@ -61,8 +112,20 @@ CREATE TABLE `tasks` (
   `ts_allocated` timestamp NULL DEFAULT NULL,
   `client_id` int(10) UNSIGNED NOT NULL DEFAULT '0',
   `checkin_count` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `ts_finished` timestamp NULL DEFAULT NULL
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  `ts_finished` timestamp NULL DEFAULT NULL,
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `teams`
+--
+
+CREATE TABLE `teams` (
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous',
+  `tasks_completed` int(10) UNSIGNED NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
 
@@ -78,8 +141,9 @@ CREATE TABLE `witness_strings` (
   `perms` int(10) UNSIGNED NOT NULL,
   `str` varchar(6000) NOT NULL,
   `excl_perms` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
-  `final` char(1) NOT NULL DEFAULT 'N'
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  `final` char(1) NOT NULL DEFAULT 'N',
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
 
@@ -94,12 +158,33 @@ CREATE TABLE `workers` (
   `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `ts_registered` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   `checkin_count` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `current_task` int(10) UNSIGNED NOT NULL DEFAULT '0'
-) ENGINE=MyISAM DEFAULT CHARSET=latin1;
+  `current_task` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 --
 -- Indexes for dumped tables
 --
+
+--
+-- Indexes for table `finished_tasks`
+--
+ALTER TABLE `finished_tasks`
+  ADD PRIMARY KEY (`id`) USING BTREE,
+  ADD KEY `n_waste` (`n`,`waste`) USING BTREE,
+  ADD KEY `branch_order` (`branch_order`(767));
+
+--
+-- Indexes for table `num_finished_tasks`
+--
+ALTER TABLE `num_finished_tasks`
+  ADD PRIMARY KEY (`id`);
+
+--
+-- Indexes for table `num_redundant_tasks`
+--
+ALTER TABLE `num_redundant_tasks`
+  ADD PRIMARY KEY (`id`);
 
 --
 -- Indexes for table `superperms`
@@ -113,7 +198,13 @@ ALTER TABLE `superperms`
 ALTER TABLE `tasks`
   ADD PRIMARY KEY (`id`) USING BTREE,
   ADD KEY `n_waste` (`n`,`waste`) USING BTREE,
-  ADD KEY `branch_order` (`branch_order`(1000));
+  ADD KEY `branch_order` (`branch_order`(767));
+
+--
+-- Indexes for table `teams`
+--
+ALTER TABLE `teams`
+  ADD PRIMARY KEY (`team`);
 
 --
 -- Indexes for table `witness_strings`
@@ -131,6 +222,24 @@ ALTER TABLE `workers`
 --
 -- AUTO_INCREMENT for dumped tables
 --
+
+--
+-- AUTO_INCREMENT for table `finished_tasks`
+--
+ALTER TABLE `finished_tasks`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `num_finished_tasks`
+--
+ALTER TABLE `num_finished_tasks`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
+
+--
+-- AUTO_INCREMENT for table `num_redundant_tasks`
+--
+ALTER TABLE `num_redundant_tasks`
+  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT;
 
 --
 -- AUTO_INCREMENT for table `superperms`
