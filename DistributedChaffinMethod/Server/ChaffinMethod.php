@@ -79,8 +79,8 @@ fwrite($fp,$rtime . $b ."\n\n");
 fclose($fp);
 }
 
-function handlePDOError0($e) {
-	logError("PDO ERROR", $e->getMessage());
+function handlePDOError0($f, $e) {
+	logError("PDO ERROR",$f.($e->getMessage()));
 }
 
 function handlePDOError($e) {
@@ -172,7 +172,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / superperms] ".$e);
+				else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / superperms] ", $e);
 			}
 		}
 	};
@@ -236,7 +236,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / witness_strings] ".$e);
+			else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / witness_strings] ", $e);
 		}
 	}
 }
@@ -275,7 +275,7 @@ function makeTask($n, $w, $pte, $str) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in makeTask() / tasks] ".$e);
+			else handlePDOError0("[retry $r in makeTask() / tasks] ", $e);
 		}
 	}
 }
@@ -300,7 +300,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		try {
 			$pdo->beginTransaction();
 			
-			$res = $pdo->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 1 FOR UPDATE");
+			$res = $pdo->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 10 FOR UPDATE");
 			if ($res && ($row = $res->fetch(PDO::FETCH_ASSOC))) {
 				$id = $row['id'];
 				$access = $row['access'];
@@ -343,7 +343,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in getTask() / tasks] ".$e);
+			else handlePDOError0("[retry $r in getTask() / tasks] ", $e);
 		}
 	}
 	
@@ -386,7 +386,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in getTask() / witness_strings] ".$e);
+				else handlePDOError0("[retry $r in getTask() / witness_strings] ", $e);
 			}
 		}
 	}
@@ -417,7 +417,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in getTask() / workers] ".$e);
+			else handlePDOError0("[retry $r in getTask() / workers] ", $e);
 		}
 	}
 
@@ -465,7 +465,7 @@ function relinquishTask($id, $access) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in relinquishTask() / tasks] ".$e);
+			else handlePDOError0("[retry $r in relinquishTask() / tasks] ", $e);
 		}
 	}
 	
@@ -486,7 +486,7 @@ function relinquishTask($id, $access) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in relinquishTask() / workers] ".$e);
+				else handlePDOError0("[retry $r in relinquishTask() / workers] ", $e);
 			}
 		}
 	}
@@ -542,7 +542,7 @@ function cancelStalledTasks($maxMin) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in cancelStalledTasks() / tasks] ".$e);
+			else handlePDOError0("[retry $r in cancelStalledTasks() / tasks] ", $e);
 		}
 	}
 	
@@ -570,7 +570,7 @@ function cancelStalledTasks($maxMin) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in cancelStalledTasks() / workers] ".$e);
+				else handlePDOError0("[retry $r in cancelStalledTasks() / workers] ", $e);
 			}
 		}
 	}
@@ -614,7 +614,7 @@ function cancelStalledClients($maxMin)
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in cancelStalledClients() / workers] ".$e);
+			else handlePDOError0("[retry $r in cancelStalledClients() / workers] ", $e);
 		}
 	}
 }
@@ -652,7 +652,7 @@ function maybeFinishedAllTasks() {
 			
 		} catch (Exception $e) {
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (1)] ".$e);
+			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (1)] ", $e);
 		}
 	}
 	
@@ -697,7 +697,7 @@ function maybeFinishedAllTasks() {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (1)] ".$e);
+			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (1)] ", $e);
 		}
 	}
 	
@@ -746,7 +746,7 @@ function maybeFinishedAllTasks() {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / witness_strings] ".$e);
+			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / witness_strings] ", $e);
 		}
 	}
 
@@ -777,7 +777,7 @@ function maybeFinishedAllTasks() {
 				} catch (Exception $e) {
 					$pdo->rollback();
 					if ($r==$maxRetries) {handlePDOError($e); return;}
-					else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (2)] ".$e);
+					else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (2)] ", $e);
 
 				}
 			}
@@ -802,7 +802,7 @@ function maybeFinishedAllTasks() {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) {handlePDOError($e); return;}
-				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (2)] ".$e);
+				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (2)] ", $e);
 			}
 		}
 	
@@ -824,7 +824,7 @@ function maybeFinishedAllTasks() {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) {handlePDOError($e); return;}
-				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (3)] ".$e);
+				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (3)] ", $e);
 			}
 		}
 	}
@@ -944,7 +944,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / Transaction #1] ".$e);
+			else handlePDOError0("[retry $r in finishTask() / Transaction #1] ", $e);
 		}
 	}
 	
@@ -971,7 +971,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / teams] ".$e);
+			else handlePDOError0("[retry $r in finishTask() / teams] ", $e);
 		}
 	}
 	
@@ -989,7 +989,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in finishTask() / workers] ".$e);
+				else handlePDOError0("[retry $r in finishTask() / workers] ", $e);
 			}
 		}
 	}
@@ -1101,7 +1101,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in splitTask() / tasks] ".$e);
+			else handlePDOError0("[retry $r in splitTask() / tasks] ", $e);
 		}
 	}
 	
@@ -1122,7 +1122,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in splitTask() / workers] ".$e);
+				else handlePDOError0("[retry $r in splitTask() / workers] ", $e);
 			}
 		}
 	}
@@ -1168,7 +1168,7 @@ function register($pi, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in register() / workers] ".$e);
+			else handlePDOError0("[retry $r in register() / workers] ", $e);
 		}
 	}
 }
@@ -1200,7 +1200,7 @@ function unregister($cid,$ip,$pi) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in unregister() / workers] ".$e);
+			else handlePDOError0("[retry $r in unregister() / workers] ", $e);
 		}
 	}
 	
@@ -1238,7 +1238,7 @@ function unregister($cid,$ip,$pi) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in unregister() / tasks] ".$e);
+				else handlePDOError0("[retry $r in unregister() / tasks] ", $e);
 			}
 		}		
 	}
