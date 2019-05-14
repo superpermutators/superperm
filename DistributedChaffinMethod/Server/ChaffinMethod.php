@@ -34,6 +34,10 @@ $max_n = 7;
 $A_LO = 100000000;
 $A_HI = 999999999;
 
+//	Debugging
+
+$stage=0;
+
 //	Currently not using instanceCount
 
 /*
@@ -835,19 +839,25 @@ function maybeFinishedAllTasks() {
 //	Returns: "OK ..." or "Error: ... "
 	
 function finishTask($id, $access, $pro, $str, $teamName) {
-	global $pdo, $maxRetries;
+	global $pdo, $maxRetries, $stage;
 	
-	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks' / 'num_finished_tasks'
+	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks'
 
 	$ok=FALSE;
 	$cid=0;
+	$redun=FALSE;
+	$numNew=0;
 	
 	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
+			$stage=0;
 			$pdo->beginTransaction();
+			$stage=1;
 
 			$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? AND status='A' FOR UPDATE");
+			$stage=2;
 			$res->execute([$id, $access]);
+			$stage=3;
 
 			if ($row = $res->fetch(PDO::FETCH_ASSOC)) {
 
@@ -881,44 +891,30 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 							$ppro = intval($row['prev_perm_ruled_out']);
 
 							if ($ppro > 0 && $pro >= $ppro && $pro != factorial($n)+1) {
-
+							
 								$res = $pdo->prepare("SELECT * FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U' FOR UPDATE");
+								$stage=4;
 								$res->execute([$n, $w, $iter]);
+								$stage=5;
 
 								$numNew = 0;
 
 								// Note: you can prepare a statement just once and execute it multiple times!
 								
 								$res2 = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)");
+								$stage=6;
 								while ($row2 = $res->fetch(PDO::FETCH_ASSOC)) {
 									$numNew += 1;
 									$res2->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName,'Y',$row2['parent_id']]);
 								}
-
-								$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
-								$update_res->execute([$numNew]);
-
-								$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
-								$res->execute([$n, $w, $iter]);
-								
-							//	Mark assigned tasks as redundant, so splitTask won't split them
-							
-							$res3 = $pdo->query("UPDATE tasks SET redundant='Y' WHERE n=? AND waste=? AND iteration=? AND status='A'");
-							$res3->execute([$n, $w, $iter]);
+								$redun = TRUE;
+								$stage=7;
 							}
 
 							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)");
+							$stage=8;
 							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str0, $row['checkin_count'], $pro, $row['client_id'], $teamName,$row['redundant'],$row['parent_id']]);
-
-							$res = $pdo->prepare("DELETE FROM tasks WHERE id=? AND access=?");
-							$res->execute([$id, $access]);
-
-							$pdo->query("UPDATE num_finished_tasks SET num_finished = num_finished + 1");
-							
-							//	Turn any children split from this task from pending into unassigned
-							
-							$res = $pdo->prepare("UPDATE tasks SET status = 'U' WHERE parent_id=? AND status='P'");
-							$res->execute([$id]);
+							$stage=9;
 
 							$ok=TRUE;
 
@@ -944,13 +940,124 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / Transaction #1] ", $e);
+			else handlePDOError0("[retry $r in finishTask() / Transaction #1, stage=$stage, task id=$id, client id=$cid] ", $e);
 		}
 	}
 	
 	if (!$ok) return $result;
 	
-	//	Transaction #2: 'teams'
+	if ($redun) {
+	
+		//	Transaction #2R: 'tasks'
+
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				
+				//	Delete the redundant tasks, having copied them
+				
+				$res = $pdo->prepare("DELETE FROM tasks WHERE n=? AND waste=? AND iteration=? AND status='U'");
+				$res->execute([$n, $w, $iter]);
+				$pdo->commit();
+				break;
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+				else handlePDOError0("[retry $r in finishTask() / tasks DEL-R] ", $e);
+			}
+		}
+
+		//	Transaction #3R: 'tasks'
+
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				
+				//	Mark assigned tasks as redundant, so splitTask won't split them
+				
+				$res3 = $pdo->prepare("UPDATE tasks SET redundant='Y' WHERE n=? AND waste=? AND iteration=? AND status='A'");
+				$res3->execute([$n, $w, $iter]);
+				$pdo->commit();
+				break;
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+				else handlePDOError0("[retry $r in finishTask() / tasks RED] ", $e);
+			}
+		}
+	
+		//	Transaction #4R: 'num_redundant_tasks'
+
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+				$update_res = $pdo->prepare("UPDATE num_redundant_tasks SET num_redundant = num_redundant + ?");
+				$update_res->execute([$numNew]);
+				$pdo->commit();
+				break;
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+				else handlePDOError0("[retry $r in finishTask() / num_redundant_tasks] ", $e);
+			}
+		}
+	}
+	
+	
+	//	Transaction #2: 'tasks'
+
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			
+			//	Delete the finished task, having copied it
+			
+			$res = $pdo->prepare("DELETE FROM tasks WHERE id=?");
+			$res->execute([$id]);
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in finishTask() / tasks DEL] ", $e);
+		}
+	}
+	
+	//	Transaction #3: 'tasks'
+
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			
+			//	Turn any children split from this task from pending into unassigned
+			
+			$res = $pdo->prepare("UPDATE tasks SET status = 'U' WHERE parent_id=? AND status='P'");
+			$res->execute([$id]);
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in finishTask() / tasks PEND] ", $e);
+		}
+	}
+	
+	//	Transaction #4: 'num_finished_tasks'
+
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$pdo->query("UPDATE num_finished_tasks SET num_finished = num_finished + 1");
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in finishTask() / num_finished_tasks] ", $e);
+		}
+	}
+	
+	//	Transaction #5: 'teams'
 
 	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
@@ -975,7 +1082,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		}
 	}
 	
-	//	Transaction #3: 'workers'
+	//	Transaction #6: 'workers'
 
 	if ($cid>0) {
 		for ($r=1;$r<=$maxRetries;$r++) {
