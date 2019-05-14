@@ -4,12 +4,15 @@ DistributedChaffinMethod.c
 ==========================
 
 Author: Greg Egan
-Version: up to 8.2, 10
+Version: up to 8.2
 
 Secondary Author: Jay Pantone
 Version: 9
 
-Last Updated: 13 May 2019
+Author: Greg Egan
+Version: 10.0 - 10.1
+
+Last Updated: 14 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -158,7 +161,6 @@ another instance of the program.
 #define MIN_TIME_BETWEEN_SERVER_CHECKINS 2
 #define VAR_TIME_BETWEEN_SERVER_CHECKINS 4
 
-
 //	Time we aim to check in with the server, when checking for tasks or running a task	
 
 #define TIME_BETWEEN_SERVER_CHECKINS (3*MINUTE)
@@ -256,6 +258,7 @@ int oneCycleBins[MAX_N+1];	//	The numbers of 1-cycles that have 0 ... n unvisite
 int done=FALSE;				//	Global flag we can set for speedy fall-through of recursion once we know there is nothing else we want to do
 int splitMode=FALSE;		//	Set TRUE when we are splitting the task
 int isSuper=FALSE;			//	Set TRUE when we have found a superpermutation
+int cancelledTask=FALSE;	//	Set TRUE when the server cancelled our connection to the task
 
 //	Monitoring 1-cycle tracking
 
@@ -334,14 +337,15 @@ void logString(const char *s);
 void sleepForSecs(int secs);
 void setupForN(int nval);
 int sendServerCommand(const char *command);
-void sendServerCommandAndLog(const char *s, const char *reqd);
-int logServerResponse(const char *reqd);
+int sendServerCommandAndLog(const char *s, const char **responseList, int nrl);
+int logServerResponse(const char **responseList, int nrl);
 void registerClient(void);
 void unregisterClient(void);
+void relinquishTask(void);
 int getTask(struct task *tsk);
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi);
 void doTask(void);
-void splitTask(int pos);
+int splitTask(int pos);
 void fillStr(int pos, int pfound, int partNum);
 int fillStrNL(int pos, int pfound, int partNum);
 int fac(int k);
@@ -369,6 +373,8 @@ FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
 teamName = DEFAULT_TEAM_NAME;
+currentTask.task_id = 0;
+
 
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
@@ -489,9 +495,18 @@ for (int i=1;i<argc;i++)
 
 sprintf(buffer,"Team name: %s",teamName);
 logString(buffer);
-sendServerCommandAndLog("action=hello","Hello world.");
+const char *hwRL[]={"Hello world."};
+if (sendServerCommandAndLog("action=hello",hwRL,sizeof(hwRL)/sizeof(hwRL[0])) != 1)
+	{
+	printf("Did not obtained expected response from server\n");
+	exit(EXIT_FAILURE);
+	};
 
 if (justTest) exit(0);
+
+//	Register with the server, offering to do actual work
+
+registerClient();
 
 sprintf(buffer,
 	"To stop the program automatically between tasks, create a file %s or %s in the working directory\n",
@@ -508,7 +523,7 @@ sigaddset(&sigIntAction.sa_mask, SIGINT);
 sigIntAction.sa_flags = 0;
 if (sigaction(SIGINT, &sigIntAction,NULL)==0) logString("CTRL-C / SIGINT will be trapped, so you can use it to tell the program to quit after it has finished the current task.\n");
 else logString("Unable to set a handler for CTRL-C / SIGINT, so these actions will kill the program immediately.\n");
-hadSigInt=FALSE;
+hadSigInt=0;
 
 //	Flag to say we should use a lock file to stop siblings trying to talk to server simultaneously
 
@@ -516,17 +531,13 @@ useServerLock = TRUE;
 
 #endif
 
-//	Register with the server, offering to do actual work
-
-registerClient();
-
 while (TRUE)
 	{
 	//	Check for CTRL-C / SIGINT
 	
 	#if UNIX_LIKE
 	
-	if (hadSigInt)
+	if (hadSigInt>0)
 		{
 		logString("Received CTRL-C / SIGINT, so stopping.\n");
 		unregisterClient();
@@ -950,6 +961,7 @@ time(&timeOfLastCheckin);
 
 done=FALSE;
 splitMode=FALSE;
+cancelledTask=FALSE;
 max_perm = currentTask.perm_to_exceed;
 isSuper = (max_perm==fn);
 
@@ -973,12 +985,23 @@ for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
 asciiString[bestSeenLen] = '\0';
 
 #if !NO_SERVER
-sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s",
-	currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName);
-sendServerCommandAndLog(buffer,NULL);
+
+if (!cancelledTask)
+while (TRUE)
+	{
+	sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s",
+		currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName);
+	const char *ftRL[]={"OK","Cancelled"};
+	if (sendServerCommandAndLog(buffer,ftRL,sizeof(ftRL)/sizeof(ftRL[0]))>0) break;
+	
+	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
 
 free(currentTask.prefix);
 free(currentTask.branchOrder);
+currentTask.task_id = 0;
 #endif
 }
 
@@ -1001,7 +1024,12 @@ if (splitMode)
 		}
 	else
 		{
-		splitTask(pos);
+		//	When we ask to split this task, we might be told it's redundant
+		
+		int sres=splitTask(pos);
+		if (sres>=2) done=TRUE;
+		if (sres==3) cancelledTask=TRUE;
+		
 		if ((subTreesSplit++)%10==9)
 			{
 			printf("Delegated %"PRId64" sub-trees so far ...\n",subTreesSplit);
@@ -1467,8 +1495,17 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,tot_bl,asciiString,teamName);
-sendServerCommandAndLog(buffer,NULL);
+while (TRUE)
+	{
+	sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,tot_bl,asciiString,teamName);
+	const char *wsRL[]={"Valid string"};
+	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
+	
+	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
+
 #endif
 }
 
@@ -1490,8 +1527,17 @@ logString(buffer);
 
 //	Log it with the server
 
-sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,w,asciiString,teamName);
-sendServerCommandAndLog(buffer,NULL);
+while (TRUE)
+	{
+	sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,w,asciiString,teamName);
+	const char *wsRL[]={"Valid string"};
+	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
+	
+	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
+
 #endif
 }
 
@@ -1712,7 +1758,19 @@ sprintf(cmd,"%s \"%s%s\" > %s",URL_UTILITY,SERVER_URL,command,SERVER_RESPONSE_FI
 int res = system(cmd);
 free(cmd);
 
-//	Release local lock on server access
+//	Check if file is still empty.  If it is, that counts as an error making contact and we need to retry.
+
+fp = fopen(SERVER_RESPONSE_FILE_NAME,"r");
+if (fp==NULL)
+	{
+	printf("Error: Unable to open server response file %s to read\n",SERVER_RESPONSE_FILE_NAME);
+	exit(EXIT_FAILURE);
+	};
+fseek(fp,0,SEEK_END);
+if (ftell(fp)==0) res=-1;
+fclose(fp);
+
+//	Release local lock on server access, if any
 
 releaseServerLock();
 
@@ -1726,24 +1784,25 @@ return res;
 //
 //	Returns:
 //
-//	0 if all is OK
-//	1 if it contains a Wait request
-//	-1 if there was an Error
+//	-2 if there was an Error
+//	-1 if there was a Wait request from the server
+//	1 + <the index to the list of possible first line responses>, if there is such a list
+//	0 otherwise
 
 #if NO_SERVER
 
-int logServerResponse(const char *reqd)
+int logServerResponse(const char **responseList, int nrl)
 {
 return 0;
 }
 
 #else
 
-int logServerResponse(const char *reqd)
+int logServerResponse(const char **responseList, int nrl)
 {
 static char buffer[BUFFER_SIZE], lbuffer[BUFFER_SIZE];
-int error=FALSE, wait=FALSE;
-	
+int error=FALSE, wait=FALSE, response=0;
+
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
@@ -1768,16 +1827,26 @@ while (!feof(fp))
 		
 	if (strncmp(buffer,"Error",5)==0  || buffer[0]=='<') error=TRUE;
 	if (strncmp(buffer,"Wait",4)==0) wait=TRUE;
-	if (!wait && lineNumber==1 && reqd!=NULL && strncmp(buffer,reqd,strlen(reqd))!=0) error=TRUE;
+	if (lineNumber==1 && responseList!=NULL)
+		{
+		for (int q=0;q<nrl;q++)
+			{
+			if (strncmp(buffer,responseList[q],strlen(responseList[q]))==0)
+				{
+				response=1+q;
+				break;
+				};
+			};
+		};
 	
 	sprintf(lbuffer,"Server: %s",buffer);
 	logString(lbuffer);
 	};
 fclose(fp);
 	
-if (error) return -1;
-if (wait) return 1;
-return 0;
+if (error) return -2;
+if (wait) return -1;
+return response;
 }
 
 #endif
@@ -1885,7 +1954,7 @@ int getTask(struct task *tsk)
 {
 static char buffer[BUFFER_SIZE];
 sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u&team=%s",clientID,ipAddress,programInstance,teamName);
-sendServerCommandAndLog(buffer,NULL);
+sendServerCommandAndLog(buffer,NULL,0);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -1959,7 +2028,7 @@ return 0;
 
 #endif
 
-void sendServerCommandAndLog(const char *s, const char *reqd)
+int sendServerCommandAndLog(const char *s, const char **responseList, int nrl)
 {
 #if !NO_SERVER
 static char buffer[BUFFER_SIZE];
@@ -1972,10 +2041,12 @@ while (TRUE)
 	int srep=sendServerCommand(s);
 	if (srep==0)
 		{
-		int sr = logServerResponse(reqd);
-		if (sr==0) return;
+		int sr = logServerResponse(responseList, nrl);
+		if (sr>=0) return sr;
 		
-		if (sr<0) exit(EXIT_FAILURE);
+		if (sr==-2) exit(EXIT_FAILURE);
+		
+		//	Wait request
 		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
 		}
 	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
@@ -2000,7 +2071,7 @@ static char buffer[BUFFER_SIZE];
 sprintf(buffer,
 	"action=checkMax&n=%d&w=%d&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
 		nval, wval, tid, acc, cid, ip, pi);
-sendServerCommandAndLog(buffer,NULL);
+sendServerCommandAndLog(buffer,NULL,0);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -2044,8 +2115,9 @@ return max;
 
 //	Create a new task to delegate a branch exploration that the current task would have performed
 
-void splitTask(int pos)
+int splitTask(int pos)
 {
+int res=0;
 static char buffer[BUFFER_SIZE];
 
 for (int i=0;i<pos;i++) asciiString[i]='0'+curstr[i];
@@ -2054,10 +2126,21 @@ asciiString[pos]='\0';
 for (int i=0;i<pos;i++) asciiString2[i]='0'+curi[i];
 asciiString2[pos]='\0';
 
-sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
-	currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
-sendServerCommandAndLog(buffer,NULL);
+while (TRUE)
+	{
+	sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
+		currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
+	const char *stRL[]={"OK","Done","Cancelled"};
+	res = sendServerCommandAndLog(buffer,stRL,sizeof(stRL)/sizeof(stRL[0]));
+	if (res>0) break;
+	
+	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
+
 sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);
+return res;
 }
 
 #if NO_SERVER
@@ -2073,8 +2156,17 @@ void registerClient()
 {
 static char buffer[BUFFER_SIZE];
 
-sprintf(buffer,"action=register&programInstance=%u&team=%s",programInstance,teamName);
-sendServerCommandAndLog(buffer,NULL);
+while (TRUE)
+	{
+	sprintf(buffer,"action=register&programInstance=%u&team=%s",programInstance,teamName);
+	const char *regRL[]={"Registered"};
+	int sr = sendServerCommandAndLog(buffer,regRL,sizeof(regRL)/sizeof(regRL[0]));
+	if (sr==1) break;
+	
+	sprintf(buffer,"Will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -2156,12 +2248,33 @@ return;
 
 void unregisterClient()
 {
-static char buffer[BUFFER_SIZE];
+char buffer[256];
 
 sprintf(buffer,
 	"action=unregister&clientID=%u&IP=%s&programInstance=%u",
 		clientID, ipAddress, programInstance);
-sendServerCommandAndLog(buffer,NULL);
+sendServerCommandAndLog(buffer,NULL,0);
+}
+
+#endif
+
+#if NO_SERVER
+
+void relinquishTask()
+{
+return;
+}
+
+#else
+
+void relinquishTask()
+{
+char buffer[128];
+
+sprintf(buffer,
+	"action=relinquishTask&id=%u&access=%u",
+		currentTask.task_id,currentTask.access_code);
+sendServerCommandAndLog(buffer,NULL,0);
 }
 
 #endif
@@ -2172,9 +2285,25 @@ sendServerCommandAndLog(buffer,NULL);
 
 void sigIntHandler(int a)
 {
-hadSigInt=TRUE;
+hadSigInt++;
 printf("\n");
-logString("CTRL-C / SIGINT received, so program will quit after the current task.\n");
+if (hadSigInt<=2)
+	{
+	logString("CTRL-C / SIGINT received, so program will quit after the current task.\n");
+	}
+else if (hadSigInt<=6)
+	{
+	//	Try to relinquish current task, if any
+	
+	logString("More than 2 CTRL-C / SIGINTs received, so program will try to relinquish the current task with the server then quit.\n");
+	if (currentTask.task_id != 0) unregisterClient();
+	exit(0);
+	}
+else
+	{
+	logString("More than 6 CTRL-C / SIGINTs received, so program is quitting immediately.\n");
+	exit(EXIT_FAILURE);
+	};
 }
 #endif
 

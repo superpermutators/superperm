@@ -2,7 +2,7 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			13 May 2019
+Date:			14 May 2019
 
 NB:  These notes include some features that are only present from version 10 onwards. Please always install the latest
 version of the program.
@@ -79,7 +79,10 @@ STOP_ALL.txt
 
 then any instance of the program using that directory will treat that as a signal to shut down.
 
-If you are running under MacOS/Linux, you can type CTRL-C to tell the program to quit when it has finished with the current task.
+If you are running under MacOS/Linux, you can:
+* Type CTRL-C once to tell the program to quit when it has finished with the current task;
+* Type CTRL-C between three and six times, to tell the program to *relinquish* the current task (tell the server it has abandoned it) and quit.
+* If the program is unable to make contact with the server at all, hitting CTRL-C repeatedly will eventually force it to quit.
 
 Under Windows, CTRL-C will kill the program immediately, so we would prefer that you shut it down by creating a STOP file.
 Any text editor can be used to create a file with the required name, and it doesn't matter what text the
