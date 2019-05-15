@@ -10,9 +10,9 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10 - 11
+Version: 10 - 11.0.2
 
-Current version: 11.0.1
+Current version: 11.0.2
 Last Updated: 15 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -40,6 +40,8 @@ other instances can deal with other sub-branches; this splitting can take place 
 If the program fails to check back with the server after a set time (determined by the server's administrator)
 then it is assumed to have crashed (or been terminated by the user) and the task it was performing is reassigned to
 another instance of the program.
+
+For me details, see the accompanying README.
 
 */
 
@@ -619,6 +621,7 @@ while (TRUE)
 				stime,timeSinceLastTask);
 			sleepForSecs(stime);
 			startedCurrentTask=0;
+			continue;
 			};
 		};
 	
@@ -1074,26 +1077,26 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	double timeSinceLastTimeCheck = difftime(timeNow, timeOfLastTimeCheck);
 	double timeSinceLastServerCheckin = difftime(timeNow, timeOfLastServerCheckin);
 	
+
+	int tskTime = (int)timeSpentOnTask;
+	int tskMin = tskTime / 60;
+	int tskSec = tskTime % 60;
+
+	printf("Time spent on task so far = ");
+	if (tskMin==0) printf("       ");
+	else printf(" %2d min",tskMin);
+	printf(" %2d sec.",tskSec);
+	printf("  Nodes searched per second = %"PRId64"\n",(int64_t)((double)nodesBeforeTimeCheck/(timeSinceLastTimeCheck)));
+
 	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
 	//	time closer to the target
 	
-	printf("Time spent on task so far = %lf seconds\n",timeSpentOnTask);
-	printf("Time since last time check = %lf seconds\n",timeSinceLastTimeCheck);
-	printf("Time since last server check-in = %lf seconds\n",timeSinceLastServerCheckin);
-	
-	printf("Current nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
-	
-	int64_t nbtc = nodesBeforeTimeCheck;
 	nodesBeforeTimeCheck = timeSinceLastTimeCheck<=0 ? 2*nodesBeforeTimeCheck :
 		(int64_t) ((TIME_BETWEEN_TIME_CHECKS / timeSinceLastTimeCheck) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
 
-	nbtc = nodesBeforeTimeCheck;
 	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
 	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
 	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
-
 	timeOfLastTimeCheck = timeNow;
 	nodesChecked = 0;
 	

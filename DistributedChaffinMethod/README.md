@@ -35,16 +35,15 @@ Fri May 10 07:39:29 2019 Server: Hello world.
 If you wish to commit to running the program to assist in the distributed search, simply run it with no arguments and it will
 loop indefinitely, waiting for available tasks to execute. Note that:
 
-* If a task completes in less than a certain amount of time, your program might sleep for the remainder of the time, to avoid bombarding the server with too much traffic
+* To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet; if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
+computations.
+* If a task completes in less than a certain amount of time, your program might sleep for the remainder of the time, to avoid bombarding the server with too much traffic.
 * If you wish to quit the program, there are several choices, discussed in the section **Shutting down the program**. It is much better if you can follow one of these methods, rather than killing the program while it is working on a task.
 
 You can monitor the ongoing results of the search at:
 
 <http://www.supermutations.net/ChaffinMethodResults.php>
 
-To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
-if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
-computations.
 
 ## Building under Windows
 

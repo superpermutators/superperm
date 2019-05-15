@@ -6,7 +6,7 @@ $rtime = date('Y-m-d H:i:s').' UTC';
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<title>Chaffin Method Results</title>
+<title>Distributed Chaffin Method Results</title>
 <style><!--
 table.strings td, table.strings th {padding-left: 10px; padding-right: 10px; border-style: solid; border-color: #aaaaaa; border-width: 1px;}
 table.strings td.str, table.strings th.str {text-align: left; word-wrap: break-word; overflow-wrap: break-word; max-width: 500px;}
@@ -92,7 +92,10 @@ function factorial($n) {
 
 function eDisc($n,$w,$pwit,$pte,$ppro,$iter)
 {
-global $rtime;
+global $rtime, $noStatusShown;
+
+$noStatusShown=FALSE;
+
 $passNames = array("first","second","third","fourth","fifth");
 $rlens=array(0,0,0,9,33,153,872,5906);
 $edisc = "<div class='status'><h3>Search status as of $rtime</h3>\n";
@@ -108,17 +111,75 @@ else $edisc = $edisc . " thanks to the result for <i>w</i>=".($w-1).", which can
 };
 if ($pwit>0)
 {
-$edisc = $edisc . "So far, we have found a string with $pwit permutations.</p>" ;
+$edisc = $edisc . "So far, we have found a string with $pwit permutations.";
 }
 else
 {
-$edisc = $edisc . "So far, we have not found any string at all for <i>w</i>=$w.</p>" ;
+$edisc = $edisc . "So far, we have not found any string at all for <i>w</i>=$w.";
 };
+$edisc = $edisc . "</p><p>[If you&#x2019;re wondering why we have some strings in the table for higher <i>w</i> as well, with some not-all-that-impressive permutation counts, these are ones we found along the way, essentially for free, by making simple extensions to the record-holders. They serve to set a lower bound on what we know is achievable once we reach those higher values of <i>w</i>.]</p>";
 $edisc = $edisc . "<p class='fp'>If we are lucky, when we reach a high enough value of <i>w</i> we might find a new superpermutation &#8212; a string that contains ";
 $edisc = $edisc . "<b>all</b> ".factorial($n)." permutations of the digits between 1 and $n &#8212; that is shorter than the previous record (which has ";
 $edisc = $edisc . "a length of ".$rlens[$n]." and wastes ".($rlens[$n]-factorial($n)-($n-1))." digits).</p>";
 $edisc = $edisc . "</div>";
 return $edisc;
+}
+
+function writeClients($fp)
+{
+global $pdo, $noClientsShown, $rtime;
+
+$noClientsShown = FALSE;
+
+$fieldNamesDisplay0 = array('status','Number of clients'); 
+$fieldAlign0 = array('center','right');
+$nFields0 = count($fieldNamesDisplay0);
+$statusAssoc0 = array("Inactive","Active on a task","<i>Total</i>");
+
+$res = $pdo->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
+if ($res && $res->rowCount() != 0)
+	{
+	fwrite($fp,"<table class='strings'><caption><b>Registered clients</b> as of<br />$rtime</caption>\n");
+	fwrite($fp,"<tr>\n");
+	for ($i = 0; $i < $nFields0; $i++)
+		{
+		fwrite($fp,"<th class='". $fieldAlign0[$i] ."'>" . $fieldNamesDisplay0[$i] . "</th>\n");
+		};
+	fwrite($fp,"</tr>\n");
+	$total=0;
+	$rc = $res->rowCount();
+	for ($row_no = 0; $row_no < $rc+1; $row_no++)
+		{
+		fwrite($fp,"<tr>\n");
+		if ($row_no == $rc)
+			{
+			$row=array(2,$total);
+			}
+		else
+			{
+			$row = $res->fetch(PDO::FETCH_NUM);
+			$total+=intval($row[1]);
+			};
+		for ($i = 0; $i < $nFields0; $i++)
+			{
+			if ($i==0) fwrite($fp,"<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$i]] . "</td>\n");
+			else fwrite($fp,"<td class='". $fieldAlign0[$i] ."'>" . $row[$i] . "</td>\n");
+			};
+		fwrite($fp,"</tr>\n");
+		};
+	$res2 = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
+	$distinctIP = $res2->rowCount();
+	$maxTPI = 0;
+	for ($i=0; $i < $distinctIP; $i++)
+		{
+		$row2 = $res2->fetch(PDO::FETCH_NUM);
+		$tpi = intval($row2[0]);
+		if ($tpi > $maxTPI) $maxTPI=$tpi;
+		};
+	fwrite($fp,"<tr><td class='left' colspan='$nFields0'>$distinctIP distinct IP address".($distinctIP>1?"es":"")."</td></tr>\n");
+	fwrite($fp,"<tr><td class='left' colspan='$nFields0'>Maximum # of clients with same IP: $maxTPI</td></tr>\n");
+	fwrite($fp,"</table>\n");
+	};
 }
 
 //	Directory in which we create files that PHP/apache can read/write
@@ -131,11 +192,8 @@ $phpFiles = "phpFiles/";
 $min_n = 3;
 $max_n = 7;
 $noResults = TRUE;
-
-$fieldNamesDisplay0 = array('status','Number of clients'); 
-$fieldAlign0 = array('center','right');
-$nFields0 = count($fieldNamesDisplay0);
-$statusAssoc0 = array("Inactive","Active on a task","<i>Total</i>");
+$noClientsShown = TRUE;
+$noStatusShown = TRUE;
 
 $fieldNames = array('ts','n','waste','perms','str','excl_perms','final');
 $fieldNamesDisplay = array('time stamp','n','waste','maximum<br />perms seen','string showing<br />current maximum','minimum<br />perms excluded','finalised?');
@@ -155,53 +213,7 @@ $nFields3 = count($fieldNames3);
 try {
 $pdo = new PDO('mysql:host='.DB_SERVER.';dbname='.DB_DATABASE,DB_USERNAME, DB_PASSWORD);
 
-echo "<h1>Chaffin Method Results</h1>\n";
-
-$res = $pdo->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
-if ($res && $res->rowCount() != 0)
-	{
-	$noResults = FALSE;
-	echo "<table class='strings'><caption>Registered clients</caption>\n";
-	echo "<tr>\n";
-	for ($i = 0; $i < $nFields0; $i++)
-		{
-		echo "<th class='". $fieldAlign0[$i] ."'>" . $fieldNamesDisplay0[$i] . "</th>\n";
-		};
-	echo "</tr>\n";
-	$total=0;
-	$rc = $res->rowCount();
-	for ($row_no = 0; $row_no < $rc+1; $row_no++)
-		{
-		echo "<tr>\n";
-		if ($row_no == $rc)
-			{
-			$row=array(2,$total);
-			}
-		else
-			{
-			$row = $res->fetch(PDO::FETCH_NUM);
-			$total+=intval($row[1]);
-			};
-		for ($i = 0; $i < $nFields0; $i++)
-			{
-			if ($i==0) echo "<td class='". $fieldAlign0[$i] ."'>" . $statusAssoc0[$row[$i]] . "</td>\n";
-			else echo "<td class='". $fieldAlign0[$i] ."'>" . $row[$i] . "</td>\n";
-			};
-		echo "</tr>\n";
-		};
-	$res2 = $pdo->query("SELECT COUNT(id) FROM workers GROUP BY IP");
-	$distinctIP = $res2->rowCount();
-	$maxTPI = 0;
-	for ($i=0; $i < $distinctIP; $i++)
-		{
-		$row2 = $res2->fetch(PDO::FETCH_NUM);
-		$tpi = intval($row2[0]);
-		if ($tpi > $maxTPI) $maxTPI=$tpi;
-		};
-	echo "<tr><td class='left' colspan='$nFields0'>$distinctIP distinct IP address".($distinctIP>1?"es":"")."</td></tr>\n";
-	echo "<tr><td class='left' colspan='$nFields0'>Maximum # of clients with same IP: $maxTPI</td></tr>\n";
-	echo "</table>\n";
-	};
+echo "<h1>Distributed Chaffin Method Results</h1>\n";
 
 $updTS0=time();
 $res = $pdo->query("SHOW TABLE STATUS FROM ".DB_DATABASE." LIKE 'superperms'");
@@ -233,7 +245,8 @@ for ($n = $max_n; $n >= $min_n; $n--)
 		if ($res->rowCount() != 0)
 			{
 			$noResults = FALSE;
-			fwrite($fp,"<table class='strings'><caption>Tasks for <i>n</i> = $n</caption>\n<tr>\n");
+			if ($noClientsShown) writeClients($fp);
+			fwrite($fp,"<table class='strings'><caption><b>Tasks for <i>n</i> = $n</b> as of<br />$rtime</caption>\n<tr>\n");
 			for ($i = 0; $i < $nFields2; $i++)
 				{
 				fwrite($fp,"<th class='". $fieldAlign2[$i] ."'>" . $fieldNamesDisplay2[$i] . "</th>\n");
@@ -264,16 +277,20 @@ for ($n = $max_n; $n >= $min_n; $n--)
 			$ppro = intval($row[2]);
 			$iter = intval($row[3]);
 			
-			//	Get anything relevant from the witness strings
-			
-			$pwit=-1;
-			$res = $pdo->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w");
-			if ($res && $res->rowCount() !=0)
+			if ($noStatusShown)
 				{
-				$row = $res->fetch(PDO::FETCH_NUM);
-				$pwit=intval($row[0]);
+				
+				//	Get anything relevant from the witness strings
+				
+				$pwit=-1;
+				$res = $pdo->query("SELECT perms FROM witness_strings WHERE n=$n AND waste=$w");
+				if ($res && $res->rowCount() !=0)
+					{
+					$row = $res->fetch(PDO::FETCH_NUM);
+					$pwit=intval($row[0]);
+					};
+				fwrite($fp,eDisc($n,$w,$pwit,$pte,$ppro,$iter));
 				};
-			fwrite($fp,eDisc($n,$w,$pwit,$pte,$ppro,$iter));
 			};
 		fclose($fp);
 		};
@@ -330,7 +347,7 @@ for ($n = $max_n; $n >= $min_n; $n--)
 		if ($res->rowCount() != 0)
 			{
 			$noResults = FALSE;
-			fwrite($fp,"<table class='strings'><caption>Results for <i>n</i> = $n at $rtime</caption><tr>\n");
+			fwrite($fp,"<table class='strings'><caption><b>Results for <i>n</i> = $n</b> as of $rtime</caption><tr>\n");
 			for ($i = 0; $i < $nFields; $i++)
 				{
 				fwrite($fp,"<th class='". $fieldAlign[$i] ."'>" . $fieldNamesDisplay[$i] . "</th>\n");
