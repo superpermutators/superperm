@@ -2,6 +2,11 @@
 include '../inc/dbinfo.inc';
 define('PHP_FILES', 'phpFiles/');
 
+//	Main or fork frepo
+
+//define('CODE_REPO','https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c');
+define('CODE_REPO','https://github.com/nagegerg/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c [Note this is still just a test fork of the main project.]');
+
 //	Version of the client ABSOLUTELY required.
 //  Note that if this is changed while clients are running tasks,
 //	those tasks will be disrupted and will need to be cancelled and reallocated
@@ -14,7 +19,7 @@ $versionAbsolutelyRequired = 10;
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 10;
+$versionForNewTasks = 11;
 
 //	Maximum number of clients to register
 
@@ -181,15 +186,19 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 		}
 	};
 	
-	//	Transaction #2: Table 'witness_strings' 
+	//	Transaction #2: Table 'witness_strings'
 	
 	for ($r=1;$r<=$maxRetries;$r++) {
-		try {			
+		try {
+			$pexcl = 1000000000;
+			$haveData = FALSE;
+		
 			$pdo->beginTransaction();
-			$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
+			$res = $pdo->prepare("SELECT perms, excl_perms FROM witness_strings WHERE n=? AND waste=?" . ($p>=0 ? " FOR UPDATE" : ""));
 			$res->execute([$n, $w]);
 
 			if (!($row = $res->fetch(PDO::FETCH_NUM))) {
+			
 				//	No data at all for this (n,w) pair
 				
 				if ($p >= 0) {
@@ -202,11 +211,15 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 						$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
 						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
 						$result = "($n, $w, $p)\n";
+						$pexcl = $pro;
 					} else {
 						$res = $pdo->prepare("INSERT INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
 						$res->execute([$n, $w, $p, $str, $teamName]);
 						$result = "($n, $w, $p)\n";
 					}
+					
+					$haveData = TRUE;
+
 				} else {
 					//	If we are just querying, return -1 in lieu of maximum
 					$result = "($n, $w, -1)\n";
@@ -214,16 +227,20 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 			} else {
 				//	There is existing data for this (n,w) pair, so check to see if we have a greater permutation count
 				
+				$haveData = TRUE;
 				$p0 = intval($row[0]);
+				$pexcl = intval($row[1]);
 				
 				if ($p > $p0) {
+				
 					//	Our new data has a greater permutation count, so update the entry
 				
-					if ($pro > 0) {
+					if ($pro > 0 && $pro < $pexcl) {
 						$final = ($pro == $p+1) ? "Y" : "N";
 						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
 						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
 						$result = "($n, $w, $p)\n";
+						$pexcl = $pro;
 					} else {
 						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
 						$res->execute([$n, $w, $p, $str, $teamName]);
@@ -235,6 +252,23 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 					$result = "($n, $w, $p0)\n";
 				}
 			}
+			
+		//	If there is a finalised value for one less waste, ensure that the value ruled out in our current waste reflects that
+		
+			if ($haveData) {
+				$res = $pdo->prepare("SELECT perms FROM witness_strings WHERE n=? AND waste=? AND final='Y'");
+				$res->execute([$n, $w-1]);
+				if ($row = $res->fetch(PDO::FETCH_NUM)) {
+					$pprev = intval($row[0]);
+					$pexclFromPrev = $pprev + $n+1;
+					if ($pexclFromPrev < $pexcl) {
+						$final = ($pexclFromPrev == $p+1) ? "Y" : "N";
+						$res = $pdo->prepare("UPDATE witness_strings SET excl_perms = ?, final = ? WHERE n=? AND waste=?");
+						$res->execute([$pexclFromPrev,$final,$n,$w]);
+					}
+				}
+			}
+
 			$pdo->commit();
 			return $result;
 		} catch (Exception $e) {
@@ -1497,7 +1531,7 @@ if (is_string($qs)) {
 	if ($ok) {
 		$version = intval($q['version']);
 		if ($version < $versionAbsolutelyRequired) {
-			$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionAbsolutelyRequired or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+			$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionAbsolutelyRequired or later from " . CODE_REPO . "\nThanks for being part of this project!";
 		} else {
 			if ($version >= 7 && $ic != 0) {
 				$queryOK = TRUE;
@@ -1511,7 +1545,7 @@ if (is_string($qs)) {
 						echo "Hello world.\n";
 					} else if ($action == "register") {
 						if ($version < $versionForNewTasks) {
-							$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+							$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from " . CODE_REPO . "\nThanks for being part of this project!";
 						} else {
 							$pi = $q['programInstance'];
 							$teamName = "anonymous";
@@ -1530,7 +1564,7 @@ if (is_string($qs)) {
 						if (is_string($pi) && is_string($cid) && is_string($ip) && is_string($teamName)) {
 							if ($version < $versionForNewTasks) {
 								unregister($cid,$ip,$pi);
-								$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c\nThanks for being part of this project!";
+								$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from " . CODE_REPO . "\nThanks for being part of this project!";
 							} else {
 								$queryOK = TRUE;
 								echo getTask($cid,$ip,$pi,$version,$teamName);
@@ -1626,7 +1660,7 @@ if (is_string($qs)) {
 										$p0 = $slen - $w - $n + 1;
 										if ($p == $p0) {
 											$queryOK = TRUE;
-											echo "Valid string $str with $p permutations\n";
+											echo "Valid string with $p permutations\n";
 											$pp = strpos($qs,'pro');
 											if ($pp===FALSE) {
 												$pro = -1;

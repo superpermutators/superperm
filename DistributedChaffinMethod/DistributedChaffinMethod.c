@@ -12,7 +12,7 @@ Version: 9
 Author: Greg Egan
 Version: 10 - 11
 
-Current version: 11.0
+Current version: 11.0.1
 Last Updated: 15 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -1013,22 +1013,13 @@ if (isSuper || max_perm+1 < currentTask.prev_perm_ruled_out)
 	{
 	fillStr(currentTask.prefixLen,pf,partNum0);
 	};
-
-//	Finish with current task with the server
-
-sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%"PRId64,
-	bestSeenP,totalNodeCount);
-logString(buffer);
-if (splitMode)
-	{
-	sprintf(buffer,"Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
-	logString(buffer);
-	};
-
+	
 for (int k=0;k<bestSeenLen;k++) asciiString[k] = '0'+bestSeen[k];
 asciiString[bestSeenLen] = '\0';
 
 #if !NO_SERVER
+
+//	Finish with current task with the server
 
 if (!cancelledTask)
 while (TRUE)
@@ -1047,6 +1038,25 @@ free(currentTask.prefix);
 free(currentTask.branchOrder);
 currentTask.task_id = 0;
 #endif
+
+//	Give stats on the task
+
+time_t timeNow;
+time(&timeNow);
+int tskTime = (int)difftime(timeNow, startedCurrentTask);
+int tskMin = tskTime / 60;
+int tskSec = tskTime % 60;
+
+sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%"PRId64", time taken=%d min %d sec",
+	bestSeenP,totalNodeCount,tskMin,tskSec);
+logString(buffer);
+if (splitMode)
+	{
+	sprintf(buffer,"Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
+	logString(buffer);
+	};
+sprintf(buffer,"--------------------------------------------------------\n");
+logString(buffer);
 }
 
 void nodesAndTime()
