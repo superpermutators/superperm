@@ -96,6 +96,8 @@ global $rtime, $noStatusShown;
 
 $noStatusShown=FALSE;
 
+if ($pwit > $pte) $pte=$pwit;
+
 $passNames = array("first","second","third","fourth","fifth");
 $rlens=array(0,0,0,9,33,153,872,5906);
 $edisc = "<div class='status'><h3>Search status as of $rtime</h3>\n";
@@ -268,18 +270,18 @@ for ($n = $max_n; $n >= $min_n; $n--)
 			
 		//	Get details of any task as a guide
 		
-		$res = $pdo->query("SELECT waste, perm_to_exceed, prev_perm_ruled_out, iteration FROM tasks WHERE n=$n LIMIT 1");
-		if ($res && $res->rowCount() !=0)
+		if ($noStatusShown)
 			{
-			$row = $res->fetch(PDO::FETCH_NUM);
-			$w = intval($row[0]);
-			$pte = intval($row[1]);
-			$ppro = intval($row[2]);
-			$iter = intval($row[3]);
-			
-			if ($noStatusShown)
+			$res = $pdo->query("SELECT waste, perm_to_exceed, prev_perm_ruled_out, iteration FROM tasks WHERE n=$n LIMIT 1");
+			if ($res && $res->rowCount() !=0)
 				{
+				$row = $res->fetch(PDO::FETCH_NUM);
+				$w = intval($row[0]);
+				$pte = intval($row[1]);
+				$ppro = intval($row[2]);
+				$iter = intval($row[3]);
 				
+					
 				//	Get anything relevant from the witness strings
 				
 				$pwit=-1;
@@ -290,8 +292,8 @@ for ($n = $max_n; $n >= $min_n; $n--)
 					$pwit=intval($row[0]);
 					};
 				fwrite($fp,eDisc($n,$w,$pwit,$pte,$ppro,$iter));
-				};
-			};
+				}
+			}
 		fclose($fp);
 		};
 		

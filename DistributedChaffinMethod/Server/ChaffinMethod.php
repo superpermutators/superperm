@@ -13,13 +13,13 @@ define('CODE_REPO','https://github.com/nagegerg/superperm/blob/master/Distribute
 //	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
 //	with a call to cancelStalledClients.
 
-$versionAbsolutelyRequired = 10;
+$versionAbsolutelyRequired = 11;
 
 //	Version of the client required for new registrations and new tasks to be allocated.
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 11;
+$versionForNewTasks = 12;
 
 //	Maximum number of clients to register
 

@@ -10,9 +10,9 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10 - 11.0.2
+Version: 10 - 12.0
 
-Current version: 11.0.2
+Current version: 12.0
 Last Updated: 15 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -97,7 +97,7 @@ For me details, see the accompanying README.
 
 //	Server URL
 
-#define SERVER_URL "http://www.supermutations.net/ChaffinMethod.php?version=11&"
+#define SERVER_URL "http://www.supermutations.net/ChaffinMethod.php?version=12&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 
@@ -181,6 +181,13 @@ For me details, see the accompanying README.
 //	Default maximum time to spend exploring a subtree when splitting
 
 #define DEFAULT_MAX_TIME_IN_SUBTREE (2*MINUTE)
+
+//	When the time spent on a task exceeds this threshold, we start exponentially reducing the number of nodes
+//	we explore in each subtree, with an (1/e)-life given
+
+#define TAPER_THRESHOLD (60*MINUTE)
+
+#define TAPER_DECAY (5*MINUTE)
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
@@ -290,7 +297,7 @@ char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
 int64_t totalNodeCount, subTreesSplit, subTreesCompleted;
 int64_t nodesChecked;		//	Count of nodes checked since last time check
 int64_t nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
-int64_t nodesToProbe, nodesLeft;
+int64_t nodesToProbe0, nodesToProbe, nodesLeft;
 time_t startedRunning;				//	Time program started running
 time_t startedCurrentTask=0;		//	Time we started current task
 time_t timeOfLastTimeCheck;			//	Time we last checked the time
@@ -1115,11 +1122,20 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 			{
 			//	We have hit a threshold for elapsed time since we started this task, so split the task
 			
-			nodesToProbe = (int64_t) (nodesBeforeTimeCheck * maxTimeInSubtree) / (TIME_BETWEEN_TIME_CHECKS); 
+			nodesToProbe0 = nodesToProbe = (int64_t) (nodesBeforeTimeCheck * maxTimeInSubtree) / (TIME_BETWEEN_TIME_CHECKS); 
 			sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 			logString(buffer);
 			splitMode=TRUE;
 			};
+		};
+	
+	//	Taper off nodesToProbe if we have been running too long
+
+	if (timeSpentOnTask > TAPER_THRESHOLD)
+		{
+		nodesToProbe = (int64_t)(nodesToProbe0 * exp(-(timeSpentOnTask-TAPER_THRESHOLD)/TAPER_DECAY));
+		sprintf(buffer,"Task taking too long, will only examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
+		logString(buffer);
 		};
 	};
 }
