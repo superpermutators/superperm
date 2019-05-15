@@ -284,6 +284,57 @@ function makeTask($n, $w, $pte, $str) {
 	}
 }
 
+//	Function to relinquish a task, affecting no other databases.
+//	Returns -1 if can't locate task, or client_id of task if successful.
+//	If we think we know client_id and/or access already, we make operation provisional on that matching;
+//	otherwise arguments supplied should be -1.
+
+function relTask($id, $cid0, $access0) {
+
+	global $A_LO, $A_HI, $pdo, $maxRetries;
+	$cid = -1;
+	
+	//	Transaction #1: 'tasks'
+	
+	for ($r=1;$r<=$maxRetries;$r++) {
+		$cid = -1;
+		try {
+			$pdo->beginTransaction();
+
+			$res = $pdo->prepare("SELECT id, client_id, access FROM tasks WHERE status='A' AND id=? FOR UPDATE");
+			$res->execute([$id]);
+			
+			if (($row = $res->fetch(PDO::FETCH_NUM))
+				&& $id==$row[0]
+				&& (($access0 < 0) || $access0==$row[2])
+				&& (($cid0 < 0) || $cid0==$row[1])) {
+				$cid = intval($row[1]);
+				$access2 = mt_rand($A_LO,$A_HI);
+
+				$res2 = $pdo->prepare("UPDATE tasks SET status='U', access=?, client_id=0  WHERE id=?");
+				$res2->execute([$access2, $id]);
+				
+				//	Delete any pending children of the deassigned task
+				
+				$res3 = $pdo->prepare("DELETE FROM tasks WHERE parent_id=? AND status='P'");
+				$res3->execute([$id]);
+			} else {
+				$cid = -1;
+			}
+			
+			$pdo->commit();
+			break;
+			
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in relTask() / tasks] ", $e);
+		}
+	}
+
+return $cid;
+}
+
 //	Function to allocate an unallocated task, if there is one.
 //
 //	Returns:	"Task id: ... " / "Access code:" /"n: ..." / "w: ..." / "str: ... " / "pte: ... " / "pro: ... " / "branchOrder: ..."
@@ -381,6 +432,13 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 				$res->execute([$n, $w0]);
 
 				$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
+				
+				//	If we are just starting out, split early and spend less time in trees
+				
+				if (strlen($str) <= 2*$n) {
+					$result = $result . "timeBeforeSplit: 300\nmaxTimeInSubtree: 30\n";
+				}
+				
 				while ($row = $res->fetch(PDO::FETCH_NUM)) {
 					$result = $result . "(" . $row[0] . "," . $row[1] . ")\n";
 				}
@@ -398,6 +456,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 	//	Transaction #3: Table 'workers'
 	//	Bump the checkin_count for this worker, as proof they're still alive, and link the worker to this task
 
+	$ctsk=0;
 	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
@@ -409,7 +468,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 				return "Error: No client found with those details\n";
 			} else {
 				$ctsk = intval($row[0]);
-				if ($ctsk!=0) {
+				if ($ctsk>0) {
 				logError("Client already had task", 
 					"Client $cid in getTask() was already assigned the task $ctsk, is now being given $id");
 				}				
@@ -424,59 +483,27 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 			else handlePDOError0("[retry $r in getTask() / workers] ", $e);
 		}
 	}
+	
+	//	Relinquish any orphaned task from this client
+	
+	if ($ctsk>0) relTask($ctsk, $cid, -1);
 
 return $result;
 }
 
 //	Function for a client to abandon a task
 
-function relinquishTask($id, $access) {
+function relinquishTask($id, $access, $cid) {
 
 	global $A_LO, $A_HI, $pdo, $maxRetries;
 	$result = "Error: Unable to locate task to abandon\n";
 	
 	//	Transaction #1: 'tasks'
 	
-	for ($r=1;$r<=$maxRetries;$r++) {
-		try {
-			$pdo->beginTransaction();
-
-			$res = $pdo->prepare("SELECT id, client_id FROM tasks WHERE status='A' AND id=? AND access=? FOR UPDATE");
-			$res->execute([$id, $access]);
-
-			$cancelled = 0;
-			$cid = 0;
-			
-			if (($row = $res->fetch(PDO::FETCH_NUM)) && $id==$row[0]) {
-				$cid = $row[1];
-				$access2 = mt_rand($A_LO,$A_HI);
-
-				$res2 = $pdo->prepare("UPDATE tasks SET status='U', access=?, client_id=0  WHERE id=?");
-				$res2->execute([$access2, $id]);
-				
-				//	Delete any pending children of the deassigned task
-				
-				$res3 = $pdo->prepare("DELETE FROM tasks WHERE parent_id=? AND status='P'");
-				$res3->execute([$id]);
-
-				$cancelled++;
-			}
-			
-			if ($cancelled) $result = "Relinquished task\n";
-			$pdo->commit();
-			break;
-			
-		} catch (Exception $e) {
-			$pdo->rollback();
-			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in relinquishTask() / tasks] ", $e);
-		}
-	}
+	if (relTask($id,$cid,$access) > 0) {
 	
 	//	Transaction #2: 'workers'
-	//	Zero the current task in the workers whose stalled tasks were cancelled
 
-	if ($cancelled && $cid) {
 		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
@@ -493,6 +520,7 @@ function relinquishTask($id, $access) {
 				else handlePDOError0("[retry $r in relinquishTask() / workers] ", $e);
 			}
 		}
+	$result = "Relinquished task\n";
 	}
 	
 return $result;
@@ -763,7 +791,13 @@ function maybeFinishedAllTasks() {
 			$w1 = $w+1;
 			$str = substr("123456789",0,$n);
 			$br = substr("000000000",0,$n);
-			$pte = $p + 2*($n-4);
+			
+			//	Step back on increment at high w
+			
+			$pInc = 2*($n-4);
+			if ($n==6 && $w >= 115) $pInc--;
+			
+			$pte = $p + $pInc;
 			if ($pte >= $fn) $pte = $fn-1;
 			$pro2 = $p+$n+1;
 			$access = mt_rand($A_LO,$A_HI);
@@ -838,7 +872,7 @@ function maybeFinishedAllTasks() {
 //
 //	Returns: "OK ..." or "Error: ... "
 	
-function finishTask($id, $access, $pro, $str, $teamName) {
+function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 	global $pdo, $maxRetries, $stage;
 	
 	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks'
@@ -911,9 +945,9 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 								$stage=7;
 							}
 
-							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)");
+							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id,nodeCount) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)");
 							$stage=8;
-							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str0, $row['checkin_count'], $pro, $row['client_id'], $teamName,$row['redundant'],$row['parent_id']]);
+							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str0, $row['checkin_count'], $pro, $row['client_id'], $teamName,$row['redundant'],$row['parent_id'],$nodeCount]);
 							$stage=9;
 
 							$ok=TRUE;
@@ -1057,20 +1091,35 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		}
 	}
 	
-	//	Transaction #5: 'teams'
+	//	Transaction #5: 'total_nodeCount'
+
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+			$pdo->query("UPDATE total_nodeCount SET nodeCount = nodeCount + $nodeCount");
+			$pdo->commit();
+			break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in finishTask() / total_nodeCount] ", $e);
+		}
+	}
+	
+	//	Transaction #6: 'teams'
 
 	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
 			$pdo->beginTransaction();
 
 			// Try to increment team task count
-			$res = $pdo->prepare("UPDATE teams SET tasks_completed = tasks_completed + 1 WHERE team = ?");
-			$res->execute([$teamName]);
+			$res = $pdo->prepare("UPDATE teams SET tasks_completed = tasks_completed + 1, nodeCount = nodeCount + ? WHERE team = ?");
+			$res->execute([$nodeCount, $teamName]);
 
 			// If no rows were affected, we need to add the team to this table
 			if ($res->rowCount() == 0) {
-				$res = $pdo->prepare("INSERT INTO teams (team, tasks_completed) values (?, 1)");
-				$res->execute([$teamName]);
+				$res = $pdo->prepare("INSERT INTO teams (team, tasks_completed, nodeCount) values (?, 1, ?)");
+				$res->execute([$teamName, $nodeCount]);
 			}
 			
 			$pdo->commit();
@@ -1082,7 +1131,7 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 		}
 	}
 	
-	//	Transaction #6: 'workers'
+	//	Transaction #7: 'workers'
 
 	if ($cid>0) {
 		for ($r=1;$r<=$maxRetries;$r++) {
@@ -1104,6 +1153,88 @@ function finishTask($id, $access, $pro, $str, $teamName) {
 	if ($n==5 || ($n==6 && $w < 100)) maybeFinishedAllTasks();
 
 	return "OK\n";
+}
+
+//	Function to check-in a task
+//
+//	Returns: "OK" (or "Done" for tasks that have become redundant)
+//	or "Error: ... "
+
+function checkIn($id, $access) {
+	global $pdo, $maxRetries;
+	
+	$ok = FALSE;
+	$taskDone = FALSE;
+	$cid=0;
+	
+	//	Transaction #1: 'tasks'
+
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$pdo->beginTransaction();
+
+			$res = $pdo->prepare("SELECT * FROM tasks WHERE id=? AND access=? FOR UPDATE");
+			$res->execute([$id, $access]);
+			
+			if ($row = $res->fetch(PDO::FETCH_ASSOC)) {
+
+				//	Check that task is still active
+				
+				if ($row['status'] == 'A') {
+					$cid = intval($row['client_id']);
+						
+				//	Check that task is not redundant
+				
+					$taskDone = ($row['redundant']=='Y');
+			
+					$res = $pdo->prepare("UPDATE tasks SET checkin_count=checkin_count+1 WHERE id=? AND access=?");
+					$res->execute([$id, $access]);
+
+					$ok = TRUE;
+				} else {
+					if ($row['status']=='F') {
+						$result = "Cancelled: The task checking in was marked finalised, which was unexpected\n";
+					} else {
+						$result = "Cancelled: The task checking in was found to have status ".$row['status']. ", which was unexpected\n";
+					}
+				}
+			} else {
+				$result = "Cancelled: No match to id=$id, access=$access for the task checking in\n";
+			}
+				
+			$pdo->commit();
+			break;
+
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r in checkIn() / tasks] ", $e);
+		}
+	}
+	
+	if (!$ok) return $result;
+
+	//	Transaction #2: 'workers'
+
+	if ($cid>0) {
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {
+
+				$pdo->beginTransaction();
+				$res = $pdo->prepare("UPDATE workers SET checkin_count=checkin_count+1 WHERE id=?");
+				$res->execute([$cid]);
+				$pdo->commit();
+				break;
+
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+				else handlePDOError0("[retry $r in checkIn() / workers] ", $e);
+			}
+		}
+	}
+	
+	return $taskDone ? "Done\n" : "OK\n";
 }
 
 //	Function to create a task split from an existing one, with a specified prefix and branch
@@ -1315,39 +1446,7 @@ function unregister($cid,$ip,$pi) {
 	//	Unassign any task that was assigned to this client
 	
 	if ($ctsk>0) {
-		for ($r=1;$r<=$maxRetries;$r++) {
-			try {
-				$pdo->beginTransaction();
-
-				$res = $pdo->prepare("SELECT id FROM tasks WHERE status='A' AND id=? AND client_id=? FOR UPDATE");
-				$res->execute([$ctsk,$cid]);
-
-				$cancelled = 0;
-				
-				if (($row = $res->fetch(PDO::FETCH_NUM)) && $ctsk==$row[0]) {
-					$access2 = mt_rand($A_LO,$A_HI);
-
-					$res2 = $pdo->prepare("UPDATE tasks SET status='U', access=?, client_id=0  WHERE id=?");
-					$res2->execute([$access2, $ctsk]);
-					
-					//	Delete any pending children of the deassigned task
-					
-					$res3 = $pdo->prepare("DELETE FROM tasks WHERE parent_id=? AND status='P'");
-					$res3->execute([$ctsk]);
-
-					$cancelled++;
-				}
-				
-				if ($cancelled) $result = $result . "Relinquished task $ctsk\n";
-				$pdo->commit();
-				break;
-				
-			} catch (Exception $e) {
-				$pdo->rollback();
-				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in unregister() / tasks] ", $e);
-			}
-		}		
+		if (relTask($ctsk, $cid, -1)==$cid) $result = $result . "Relinquished task $ctsk\n";
 	}
 	
 	return $result;
@@ -1445,6 +1544,13 @@ if (is_string($qs)) {
 							$queryOK = TRUE;
 							echo unregister($cid,$ip,$pi);
 						}
+					} else if ($action == "checkIn") {
+						$id = $q['id'];
+						$access = $q['access'];
+						if (is_string($id) && is_string($access)) {
+							$queryOK = TRUE;
+							echo checkIn($id, $access);
+						}
 					} else if ($action == "splitTask") {
 						$id = $q['id'];
 						$access = $q['access'];
@@ -1480,19 +1586,22 @@ if (is_string($qs)) {
 						$str = $q['str'];
 						$teamName = "anonymous";
 						if (strpos($qs,'team')) $teamName = $q['team'];
+						$nodeCount = "0";
+						if (strpos($qs,'nodeCount')) $nodeCount = $q['nodeCount'];
 						if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str) && is_string($teamName)) {
 							$pro = intval($pro_str);
 							if ($pro > 0) {
 								$queryOK = TRUE;
-								echo finishTask($id, $access, $pro, $str, $teamName);
+								echo finishTask($id, $access, $pro, $str, $teamName, $nodeCount);
 							}
 						}
 					} else if ($action == "relinquishTask") {
 						$id = $q['id'];
 						$access = $q['access'];
-						if (is_string($id) && is_string($access)) {
+						$cid = $q['clientID'];
+						if (is_string($id) && is_string($access) && is_string($cid)) {
 							$queryOK = TRUE;
-							echo relinquishTask($id, $access);
+							echo relinquishTask($id, $access, $cid);
 						}
 					} else {
 						$n_str = $q['n'];

@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			14 May 2019
+Date:			15 May 2019
 
-NB:  These notes include some features that are only present from version 10 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 11.0 onwards. Please always install the latest
 version of the program.
 
 
@@ -33,7 +33,10 @@ Fri May 10 07:39:29 2019 Server: Hello world.
 ```
 
 If you wish to commit to running the program to assist in the distributed search, simply run it with no arguments and it will
-loop indefinitely, waiting for available tasks to execute.
+loop indefinitely, waiting for available tasks to execute. Note that:
+
+* If a task completes in less than a certain amount of time, your program might sleep for the remainder of the time, to avoid bombarding the server with too much traffic
+* If you wish to quit the program, there are several choices, discussed in the section **Shutting down the program**. It is much better if you can follow one of these methods, rather than killing the program while it is working on a task.
 
 You can monitor the ongoing results of the search at:
 

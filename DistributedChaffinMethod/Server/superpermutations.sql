@@ -29,27 +29,39 @@ SET time_zone = "+00:00";
 --
 
 CREATE TABLE `finished_tasks` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `original_task_id` int(10) UNSIGNED NOT NULL,
-  `access` int(10) UNSIGNED NOT NULL,
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `original_task_id` int(10) unsigned NOT NULL,
+  `access` int(10) unsigned NOT NULL,
   `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `n` int(10) UNSIGNED NOT NULL,
-  `waste` int(10) UNSIGNED NOT NULL,
+  `n` int(10) unsigned NOT NULL,
+  `waste` int(10) unsigned NOT NULL,
   `prefix` varchar(6000) NOT NULL,
-  `branch_order` varchar(6000) DEFAULT NULL,
-  `perm_to_exceed` int(10) UNSIGNED NOT NULL,
-  `iteration` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `prev_perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
-  `perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
+  `perm_to_exceed` int(10) unsigned NOT NULL,
+  `iteration` int(10) unsigned NOT NULL DEFAULT '0',
+  `prev_perm_ruled_out` int(10) unsigned NOT NULL DEFAULT '1000000000',
+  `perm_ruled_out` int(10) unsigned NOT NULL DEFAULT '1000000000',
   `excl_witness` varchar(6000) DEFAULT NULL,
   `status` char(1) NOT NULL DEFAULT 'U',
   `ts_allocated` timestamp NULL DEFAULT NULL,
-  `client_id` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `checkin_count` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `client_id` int(10) unsigned NOT NULL DEFAULT '0',
+  `checkin_count` int(10) unsigned NOT NULL DEFAULT '0',
   `ts_finished` timestamp NULL DEFAULT NULL,
-  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous',
+  `nodeCount` bigint(20) NOT NULL DEFAULT '0',
+  `redundant` char(1) NOT NULL DEFAULT 'N',
+  `parent_id` int(10) unsigned NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `total_nodeCount`
+--
+
+CREATE TABLE `total_nodeCount` (
+  `id` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `nodeCount` bigint(20) UNSIGNED NOT NULL DEFAULT '0'
+) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 -- --------------------------------------------------------
 
 --
@@ -57,7 +69,7 @@ CREATE TABLE `finished_tasks` (
 --
 
 CREATE TABLE `num_finished_tasks` (
-  `id` int(10) UNSIGNED NOT NULL,
+  `id` int(10) UNSIGNED NOT NULL DEFAULT '0',
   `num_finished` int(10) UNSIGNED NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
@@ -68,7 +80,7 @@ CREATE TABLE `num_finished_tasks` (
 --
 
 CREATE TABLE `num_redundant_tasks` (
-  `id` int(10) UNSIGNED NOT NULL,
+  `id` int(10) UNSIGNED NOT NULL DEFAULT '0',
   `num_redundant` int(10) NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
@@ -96,24 +108,26 @@ CREATE TABLE `superperms` (
 --
 
 CREATE TABLE `tasks` (
-  `id` int(10) UNSIGNED NOT NULL,
-  `access` int(10) UNSIGNED NOT NULL,
+  `id` int(10) unsigned NOT NULL AUTO_INCREMENT,
+  `access` int(10) unsigned NOT NULL,
   `ts` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `n` int(10) UNSIGNED NOT NULL,
-  `waste` int(10) UNSIGNED NOT NULL,
+  `n` int(10) unsigned NOT NULL,
+  `waste` int(10) unsigned NOT NULL,
   `prefix` varchar(6000) NOT NULL,
   `branch_order` varchar(6000) DEFAULT NULL,
-  `perm_to_exceed` int(10) UNSIGNED NOT NULL,
-  `iteration` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `prev_perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
-  `perm_ruled_out` int(10) UNSIGNED NOT NULL DEFAULT '1000000000',
+  `perm_to_exceed` int(10) unsigned NOT NULL,
+  `iteration` int(10) unsigned NOT NULL DEFAULT '0',
+  `prev_perm_ruled_out` int(10) unsigned NOT NULL DEFAULT '1000000000',
+  `perm_ruled_out` int(10) unsigned NOT NULL DEFAULT '1000000000',
   `excl_witness` varchar(6000) DEFAULT NULL,
   `status` char(1) NOT NULL DEFAULT 'U',
   `ts_allocated` timestamp NULL DEFAULT NULL,
-  `client_id` int(10) UNSIGNED NOT NULL DEFAULT '0',
-  `checkin_count` int(10) UNSIGNED NOT NULL DEFAULT '0',
+  `client_id` int(10) unsigned NOT NULL DEFAULT '0',
+  `checkin_count` int(10) unsigned NOT NULL DEFAULT '0',
   `ts_finished` timestamp NULL DEFAULT NULL,
-  `team` varchar(32) NOT NULL DEFAULT 'anonymous'
+  `team` varchar(32) NOT NULL DEFAULT 'anonymous',
+  `redundant` char(1) NOT NULL DEFAULT 'N',
+  `parent_id` int(10) unsigned NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------
@@ -124,7 +138,8 @@ CREATE TABLE `tasks` (
 
 CREATE TABLE `teams` (
   `team` varchar(32) NOT NULL DEFAULT 'anonymous',
-  `tasks_completed` int(10) UNSIGNED NOT NULL DEFAULT '0'
+  `tasks_completed` int(10) unsigned NOT NULL DEFAULT '0',
+  `nodeCount` bigint(20) NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
 -- --------------------------------------------------------

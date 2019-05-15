@@ -10,9 +10,10 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10.0 - 10.1
+Version: 10 - 11
 
-Last Updated: 14 May 2019
+Current version: 11.0
+Last Updated: 15 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -94,7 +95,7 @@ another instance of the program.
 
 //	Server URL
 
-#define SERVER_URL "http://www.supermutations.net/ChaffinMethod.php?version=10&"
+#define SERVER_URL "http://www.supermutations.net/ChaffinMethod.php?version=11&"
 
 #if USE_SERVER_INSTANCE_COUNTS
 
@@ -156,27 +157,33 @@ another instance of the program.
 
 #define MINUTE 60
 
-//	Ensure we don't contact the server in a burst, even when we are completing calculations very rapidly
+//	Time we AIM to spend between system calls to check on the time;
+//	we count nodes between these checks
 
-#define MIN_TIME_BETWEEN_SERVER_CHECKINS 2
-#define VAR_TIME_BETWEEN_SERVER_CHECKINS 4
+#define TIME_BETWEEN_TIME_CHECKS (1*MINUTE)
 
-//	Time we aim to check in with the server, when checking for tasks or running a task	
+//	Time for (short) delays when the server wants us to wait
+
+#define MIN_SERVER_WAIT 2
+#define VAR_SERVER_WAIT 4
+
+//	Time we AIM to check in with the server
+//	NB:  This is independent of time until splitting and time spent on each subtree
 
 #define TIME_BETWEEN_SERVER_CHECKINS (3*MINUTE)
 
-//	Time to spend on a prefix before splitting the search
+//	Default time to spend on a prefix before splitting the search
 
-#define TIME_BEFORE_SPLIT (5*MINUTE)
+#define DEFAULT_TIME_BEFORE_SPLIT (20*MINUTE)
 
-//	Maximum time to spend exploring a subtree when splitting
+//	Default maximum time to spend exploring a subtree when splitting
 
-#define MAX_TIME_IN_SUBTREE 10
+#define DEFAULT_MAX_TIME_IN_SUBTREE (2*MINUTE)
 
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
 
-#define NODES_BEFORE_TIME_CHECK 5000000000
+#define NODES_BEFORE_TIME_CHECK 1000000000
 
 //	Set a floor and ceiling so we can't waste an absurd amount of time doing time checks,
 //	or take too long between them.
@@ -216,6 +223,8 @@ char *prefix, *branchOrder;
 unsigned int prefixLen, branchOrderLen;
 unsigned int perm_to_exceed;
 unsigned int prev_perm_ruled_out;
+unsigned int timeBeforeSplit;
+unsigned int maxTimeInSubtree;
 };
 
 //	Global variables
@@ -269,8 +278,9 @@ int ocpThreshold[]={1000,1000,1000,1000, 6, 24, 120, 720};
 
 struct task currentTask;
 
-#define N_TASK_STRINGS 8
-char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","pro: ","branchOrder: "};
+#define N_TASK_STRINGS 10
+#define N_TASK_STRINGS_OBLIGATORY 8
+char *taskStrings[] = {"Task id: ","Access code: ","n: ","w: ","str: ","pte: ","pro: ","branchOrder: ", "timeBeforeSplit: ", "maxTimeInSubtree: "};
 
 #define N_CLIENT_STRINGS 3
 char *clientStrings[] = {"Client id: ", "IP: ","programInstance: "};
@@ -280,8 +290,12 @@ int64_t nodesChecked;		//	Count of nodes checked since last time check
 int64_t nodesBeforeTimeCheck = NODES_BEFORE_TIME_CHECK;
 int64_t nodesToProbe, nodesLeft;
 time_t startedRunning;				//	Time program started running
-time_t startedCurrentTask;			//	Time we started current task
-time_t timeOfLastCheckin;			//	Time we last contacted the server
+time_t startedCurrentTask=0;		//	Time we started current task
+time_t timeOfLastTimeCheck;			//	Time we last checked the time
+time_t timeOfLastServerCheckin;		//	Time we last contacted the server
+
+int timeBeforeSplit = DEFAULT_TIME_BEFORE_SPLIT;
+int maxTimeInSubtree = DEFAULT_MAX_TIME_IN_SUBTREE;
 
 #if UNIX_LIKE
 
@@ -345,6 +359,7 @@ void relinquishTask(void);
 int getTask(struct task *tsk);
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi);
 void doTask(void);
+int checkIn(void);
 int splitTask(int pos);
 void fillStr(int pos, int pfound, int partNum);
 int fillStrNL(int pos, int pfound, int partNum);
@@ -362,6 +377,7 @@ int getServerInstanceCount(void);
 void sigIntHandler(int a);
 void sleepUntilSiblingsFreeServer(void);
 void releaseServerLock(void);
+void nodesAndTime(void);
 
 //	Main program
 //	------------
@@ -521,7 +537,12 @@ sigIntAction.sa_handler = sigIntHandler;
 sigemptyset(&sigIntAction.sa_mask);
 sigaddset(&sigIntAction.sa_mask, SIGINT);
 sigIntAction.sa_flags = 0;
-if (sigaction(SIGINT, &sigIntAction,NULL)==0) logString("CTRL-C / SIGINT will be trapped, so you can use it to tell the program to quit after it has finished the current task.\n");
+if (sigaction(SIGINT, &sigIntAction,NULL)==0)
+	logString("CTRL-C / SIGINT will be trapped:\n"
+	"1 x CTRL-C will quit when current task is finished\n"
+	"3 x CTRL-C will relinquish the current task with the server, then quit\n"
+	"7 x CTRL-C will quit immediately\n"
+	);
 else logString("Unable to set a handler for CTRL-C / SIGINT, so these actions will kill the program immediately.\n");
 hadSigInt=0;
 
@@ -530,6 +551,8 @@ hadSigInt=0;
 useServerLock = TRUE;
 
 #endif
+
+startedCurrentTask=0;
 
 while (TRUE)
 	{
@@ -581,8 +604,23 @@ while (TRUE)
 			exit(0);
 			};
 		};
+		
+	//	If we did a very quick task, maybe sleep
 	
-	sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);	//	Put a floor under the frequency of server contacts
+	if (startedCurrentTask>0)
+		{
+		time_t timeNow;
+		time(&timeNow);
+		int timeSinceLastTask = (int)difftime(timeNow, startedCurrentTask);
+		int stime = TIME_BETWEEN_SERVER_CHECKINS - timeSinceLastTask;
+		if (stime >= 1)
+			{
+			printf("Sleeping for %d seconds, because the last task completed just %d seconds ago ...\n",
+				stime,timeSinceLastTask);
+			sleepForSecs(stime);
+			startedCurrentTask=0;
+			};
+		};
 	
 	int t = getTask(&currentTask);
 	
@@ -599,14 +637,17 @@ while (TRUE)
 		}
 	else
 		{
-		sprintf(buffer,"Assigned new task (id=%u, access=%u, n=%u, w=%u, prefix=%s, perm_to_exceed=%u, prev_perm_ruled_out=%u)",
+		sprintf(buffer,
+			"Assigned new task (id=%u, access=%u, n=%u, w=%u, prefix=%s, perm_to_exceed=%u, prev_perm_ruled_out=%u, timeBeforeSplit=%u seconds, maxTimeInSubtree=%u seconds)",
 			currentTask.task_id,
 			currentTask.access_code,
 			currentTask.n_value,
 			currentTask.w_value,
 			currentTask.prefix,
 			currentTask.perm_to_exceed,
-			currentTask.prev_perm_ruled_out);
+			currentTask.prev_perm_ruled_out,
+			currentTask.timeBeforeSplit,
+			currentTask.maxTimeInSubtree);
 		logString(buffer);
 		
 		doTask();
@@ -955,7 +996,10 @@ totalNodeCount = 0;
 subTreesSplit = 0;
 subTreesCompleted = 0;
 time(&startedCurrentTask);
-time(&timeOfLastCheckin);
+timeOfLastTimeCheck = startedCurrentTask;
+
+timeBeforeSplit = currentTask.timeBeforeSplit;
+maxTimeInSubtree = currentTask.maxTimeInSubtree;
 
 //	Recursively fill in the string
 
@@ -989,8 +1033,8 @@ asciiString[bestSeenLen] = '\0';
 if (!cancelledTask)
 while (TRUE)
 	{
-	sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s",
-		currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName);
+	sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s&nodeCount=%"PRId64,
+		currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName, totalNodeCount);
 	const char *ftRL[]={"OK","Cancelled"};
 	if (sendServerCommandAndLog(buffer,ftRL,sizeof(ftRL)/sizeof(ftRL[0]))>0) break;
 	
@@ -1005,12 +1049,74 @@ currentTask.task_id = 0;
 #endif
 }
 
+void nodesAndTime()
+{
+static char buffer[BUFFER_SIZE];
+
+totalNodeCount++;
+if (++nodesChecked >= nodesBeforeTimeCheck)
+	{
+	//	We have hit a threshold for nodes checked, so time to check the time
+	
+	time_t timeNow;
+	time(&timeNow);
+	double timeSpentOnTask = difftime(timeNow, startedCurrentTask);
+	double timeSinceLastTimeCheck = difftime(timeNow, timeOfLastTimeCheck);
+	double timeSinceLastServerCheckin = difftime(timeNow, timeOfLastServerCheckin);
+	
+	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
+	//	time closer to the target
+	
+	printf("Time spent on task so far = %lf seconds\n",timeSpentOnTask);
+	printf("Time since last time check = %lf seconds\n",timeSinceLastTimeCheck);
+	printf("Time since last server check-in = %lf seconds\n",timeSinceLastServerCheckin);
+	
+	printf("Current nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
+	
+	int64_t nbtc = nodesBeforeTimeCheck;
+	nodesBeforeTimeCheck = timeSinceLastTimeCheck<=0 ? 2*nodesBeforeTimeCheck :
+		(int64_t) ((TIME_BETWEEN_TIME_CHECKS / timeSinceLastTimeCheck) * nodesBeforeTimeCheck);
+	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
+
+	nbtc = nodesBeforeTimeCheck;
+	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
+	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
+	
+	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck = %"PRId64"\n",nodesBeforeTimeCheck);
+
+	timeOfLastTimeCheck = timeNow;
+	nodesChecked = 0;
+	
+	if (timeSinceLastServerCheckin > TIME_BETWEEN_SERVER_CHECKINS)
+		{
+		//	When we check in for this task, we might be told it's redundant
+		
+		int sres=checkIn();
+		if (sres>=2) done=TRUE;
+		if (sres==3) cancelledTask=TRUE;
+		};
+
+	if (!splitMode)
+		{
+		if (timeSpentOnTask > timeBeforeSplit)
+			{
+			//	We have hit a threshold for elapsed time since we started this task, so split the task
+			
+			nodesToProbe = (int64_t) (nodesBeforeTimeCheck * maxTimeInSubtree) / (TIME_BETWEEN_TIME_CHECKS); 
+			sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
+			logString(buffer);
+			splitMode=TRUE;
+			};
+		};
+	};
+}
+
 // this function recursively fills the string
 
 void fillStr(int pos, int pfound, int partNum)
 {
-static char buffer[BUFFER_SIZE];
 if (done) return;
+nodesAndTime();
 
 if (splitMode)
 	{
@@ -1043,63 +1149,6 @@ if (pfound > bestSeenP)
 	bestSeenP = pfound;
 	bestSeenLen = pos;
 	for (int i=0;i<bestSeenLen;i++) bestSeen[i] = curstr[i];
-	};
-
-totalNodeCount++;
-if (++nodesChecked >= nodesBeforeTimeCheck)
-	{
-	//	We have hit a threshold for nodes checked, so time to check the time
-	
-	time_t t;
-	time(&t);
-	double elapsedTime = difftime(t, timeOfLastCheckin);
-	
-	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
-	//	time closer to the target
-	
-	printf("ElapsedTime=%lf\n",elapsedTime);
-	printf("Current nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
-	
-	int64_t nbtc = nodesBeforeTimeCheck;
-	nodesBeforeTimeCheck = elapsedTime<=0 ? 2*nodesBeforeTimeCheck : (int64_t) ((TIME_BETWEEN_SERVER_CHECKINS / elapsedTime) * nodesBeforeTimeCheck);
-	if (nbtc!=nodesBeforeTimeCheck) printf("Adjusted nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
-
-	nbtc = nodesBeforeTimeCheck;
-	if (nodesBeforeTimeCheck <= MIN_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MIN_NODES_BEFORE_TIME_CHECK;
-	else if (nodesBeforeTimeCheck >= MAX_NODES_BEFORE_TIME_CHECK) nodesBeforeTimeCheck = MAX_NODES_BEFORE_TIME_CHECK;
-	
-	if (nbtc!=nodesBeforeTimeCheck) printf("Clipped nodesBeforeTimeCheck=%"PRId64"\n",nodesBeforeTimeCheck);
-
-	timeOfLastCheckin = t;
-	nodesChecked = 0;
-	
-	/*	Version 7.2: Since a change in the maximum permutation is a rare event, it's not really worth the overhead to
-		check for it within a task's run.
-	
-	//	We have hit a threshold for elapsed time since last check in with the server
-	//	Check in and get current maximum for the (n,w) pair we are working on
-	
-	max_perm = getMax(currentTask.n_value, currentTask.w_value, max_perm,
-		currentTask.task_id, currentTask.access_code,clientID,ipAddress,programInstance);
-	isSuper = (max_perm==fn);
-	if (max_perm+1 >= currentTask.prev_perm_ruled_out && !isSuper)
-		{
-		done=TRUE;
-		return;
-		};
-	*/
-	
-	elapsedTime = difftime(t, startedCurrentTask);
-	if (elapsedTime > TIME_BEFORE_SPLIT)
-		{
-		//	We have hit a threshold for elapsed time since we started this task, so split the task
-		
-		startedCurrentTask = t;
-		nodesToProbe = (int64_t) (nodesBeforeTimeCheck * MAX_TIME_IN_SUBTREE) / (TIME_BETWEEN_SERVER_CHECKINS); 
-		sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
-		logString(buffer);
-		splitMode=TRUE;
-		};
 	};
 
 int tperm, ld;
@@ -1263,6 +1312,8 @@ int fillStrNL(int pos, int pfound, int partNum)
 {
 if (done) return TRUE;
 if (--nodesLeft < 0) return FALSE;
+nodesAndTime();
+
 int res = TRUE;
 
 if (pfound > bestSeenP)
@@ -1733,7 +1784,7 @@ while (TRUE)
 	int ic = getServerInstanceCount();
 	if (ic==0) break;
 	logString("Waiting for server to be free");
-	sleepForSecs(ic + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS);
+	sleepForSecs(ic + rand() % VAR_SERVER_WAIT);
 	};
 	
 //	Pre-empty the response file so it does not end up with any misleading content from a previous command if the
@@ -1786,7 +1837,7 @@ return res;
 //
 //	-2 if there was an Error
 //	-1 if there was a Wait request from the server
-//	1 + <the index to the list of possible first line responses>, if there is such a list
+//	1 + [the index to the list of possible first line responses], if there is such a list
 //	0 otherwise
 
 #if NO_SERVER
@@ -1899,6 +1950,14 @@ for (int i=0;i<N_TASK_STRINGS;i++)
 				tsk->branchOrderLen = (unsigned int)strlen(tsk->branchOrder);
 				break;
 			
+			case 8:
+				sscanf(s+len,"%u",&tsk->timeBeforeSplit);
+				break;
+			
+			case 9:
+				sscanf(s+len,"%u",&tsk->maxTimeInSubtree);
+				break;
+			
 			default:
 				break;
 			};
@@ -1969,6 +2028,8 @@ for (int i=0;i<N_TASK_STRINGS;i++) tif[i]=FALSE;
 
 tsk->prefixLen = 0;
 tsk->branchOrderLen = 0;
+tsk->timeBeforeSplit = DEFAULT_TIME_BEFORE_SPLIT;
+tsk->maxTimeInSubtree = DEFAULT_MAX_TIME_IN_SUBTREE;
 
 while (!feof(fp))
 	{
@@ -2022,7 +2083,7 @@ if (tsk->branchOrderLen != tsk->prefixLen)
 	exit(EXIT_FAILURE);
 	};
 
-if (taskItems == N_TASK_STRINGS) return tsk->n_value;
+if (taskItems <= N_TASK_STRINGS && taskItems >= N_TASK_STRINGS_OBLIGATORY) return tsk->n_value;
 return 0;
 }
 
@@ -2035,6 +2096,8 @@ static char buffer[BUFFER_SIZE];
 sprintf(buffer,"To server: %s",s);
 logString(buffer);
 
+time(&timeOfLastServerCheckin);
+
 while (TRUE)
 	{
 	int sleepTime = 0;
@@ -2046,9 +2109,13 @@ while (TRUE)
 		
 		if (sr==-2) exit(EXIT_FAILURE);
 		
-		//	Wait request
-		sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
+		//	explicit wait request, server overwhelmed
+		
+		sleepTime = MIN_SERVER_WAIT + rand() % VAR_SERVER_WAIT;
 		}
+		
+		//	No actual contact with server, so wait longer
+		
 	else sleepTime = TIME_BETWEEN_SERVER_CHECKINS;
 	
 	sprintf(buffer,"Unable to send command to server, will retry after %d seconds",sleepTime);
@@ -2057,7 +2124,6 @@ while (TRUE)
 	};
 #endif
 }
-
 
 int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi)
 {
@@ -2114,6 +2180,7 @@ return max;
 }
 
 //	Create a new task to delegate a branch exploration that the current task would have performed
+//	Returns 1,2,3 for OK/Done/Cancelled
 
 int splitTask(int pos)
 {
@@ -2139,7 +2206,30 @@ while (TRUE)
 	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
 	};
 
-sleepForSecs(MIN_TIME_BETWEEN_SERVER_CHECKINS);
+return res;
+}
+
+//	Check in with the server
+//	Returns 1,2,3 for OK/Done/Cancelled
+
+int checkIn()
+{
+int res=0;
+static char buffer[128];
+
+while (TRUE)
+	{
+	sprintf(buffer,"action=checkIn&id=%u&access=%u",
+		currentTask.task_id, currentTask.access_code);
+	const char *chkRL[]={"OK","Done","Cancelled"};
+	res = sendServerCommandAndLog(buffer,chkRL,sizeof(chkRL)/sizeof(chkRL[0]));
+	if (res>0) break;
+	
+	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",TIME_BETWEEN_SERVER_CHECKINS);
+	logString(buffer);
+	sleepForSecs(TIME_BETWEEN_SERVER_CHECKINS);
+	};
+
 return res;
 }
 
@@ -2272,8 +2362,8 @@ void relinquishTask()
 char buffer[128];
 
 sprintf(buffer,
-	"action=relinquishTask&id=%u&access=%u",
-		currentTask.task_id,currentTask.access_code);
+	"action=relinquishTask&id=%u&access=%u&clientID=%u",
+		currentTask.task_id,currentTask.access_code,clientID);
 sendServerCommandAndLog(buffer,NULL,0);
 }
 
@@ -2322,7 +2412,7 @@ if (useServerLock)
 		serverLockFD = open(SERVER_LOCK_FILE_NAME, O_RDWR|O_CREAT|O_EXCL, 0666);
 		if (serverLockFD<0)
 			{
-			int sleepTime = MIN_TIME_BETWEEN_SERVER_CHECKINS + rand() % VAR_TIME_BETWEEN_SERVER_CHECKINS;
+			int sleepTime = MIN_SERVER_WAIT + rand() % VAR_SERVER_WAIT;
 			sprintf(buffer,"Sibling program has lock on server, sleeping for %d seconds",sleepTime);
 			logString(buffer);
 			sleepForSecs(sleepTime);
