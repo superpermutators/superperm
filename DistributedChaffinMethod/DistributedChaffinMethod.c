@@ -41,7 +41,7 @@ If the program fails to check back with the server after a set time (determined 
 then it is assumed to have crashed (or been terminated by the user) and the task it was performing is reassigned to
 another instance of the program.
 
-For me details, see the accompanying README.
+For more details, see the accompanying README.
 
 */
 
@@ -1905,7 +1905,7 @@ while (!feof(fp))
 		};
 	lineNumber++;
 		
-	if (strncmp(buffer,"Error",5)==0  || buffer[0]=='<') error=TRUE;
+	if (strncmp(buffer,"Error",5)==0) error=TRUE;
 	if (strncmp(buffer,"Wait",4)==0) wait=TRUE;
 	if (lineNumber==1 && responseList!=NULL)
 		{
