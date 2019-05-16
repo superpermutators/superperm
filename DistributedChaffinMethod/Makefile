@@ -1,5 +1,6 @@
 CC=gcc
-CFLAGS = -O3 -lm
+CFLAGS = -O3
+LDLIBS = -lm
 
 all: DistributedChaffinMethod
 
