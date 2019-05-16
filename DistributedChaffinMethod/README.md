@@ -20,6 +20,8 @@ In order to run correctly, the program needs:
 3. The presence of the "curl" command line tool, and the ability for the program to run it via the system() call
 in the C standard library. These are standard in MacOS/Linux, but for Windows will depend on your precise environment.
 
+Note that the program uses functions in `math.h`, so with some compilers it will require the switch `-lm` to link with the mathematical functions library.
+
 If the program compiles correctly, running it with the option "test" will simply test whether or not it can connect to
 the server and read back the expected response:
 
