@@ -1,0 +1,71 @@
+﻿ 1. Follow instructions on this website to enable Windows Subsystem for Linux on Windows 10.
+    *** Must have 64-bit Windows10 ***
+    *** Requires Windows10 reboot before step 2 ***
+
+    https://www.howtogeek.com/249966/how-to-install-and-use-the-linux-bash-shell-on-windows-10/
+
+ 2. Open the Windows Store app; find Ubuntu; Click Get, then Click Install as outlined on website above.
+
+ 3. Once Ubuntu download/install finished, complete the install by setting a username/password.  That's all there is to do!
+
+    Enter new UNIX username: user
+    Enter new UNIX password:
+    Retype new UNIX password:
+
+ 4. Update packages [enter password if requested]
+
+    sudo apt-get update
+    [sudo] password for user:
+
+ 5. Install gcc [enter password if requested]
+
+    sudo apt install gcc
+
+ 6. Agree to download packages is prompted.
+
+    Do you want to continue? [Y/n] y
+
+ 7. Install make
+
+    sudo apt install make
+
+ 8. Obtain DistributedChaffinMethod.c and its Makefile in your current directory
+
+    + git is already installed, so clone the entire superpermutators repo if that is your wish:
+
+        git clone https://github.com/superpermutators/superperm
+        cp superperm/DistributedChaffinMethod/DistributedChaffinMethod.c .
+        cp superperm/DistributedChaffinMethod/Makefile .
+
+    + wget/curl is already installed, so simply grab the two specific files you need if that is your wish:
+
+        wget https://raw.githubusercontent.com/superpermutators/superperm/master/DistributedChaffinMethod/DistributedChaffinMethod.c
+        wget https://raw.githubusercontent.com/superpermutators/superperm/master/DistributedChaffinMethod/Makefile
+
+    + If in doubt, validate the file content
+
+        $ file DistributedChaffinMethod.c
+        DistributedChaffinMethod.c: C source, ASCII text, with very long lines
+        $ file Makefile
+        Makefile: makefile script, ASCII text
+
+    + If you used the wrong github URL, you might see this instead
+
+        $ file Makefile
+        Makefile: HTML document, UTF-8 Unicode text, with very long lines
+
+ 9. Compile the program
+
+    $ make
+    gcc -O3    DistributedChaffinMethod.c   -o DistributedChaffinMethod
+
+10. Test the program
+
+    $ ./DistributedChaffinMethod test
+    Random seed is: 1558087104
+    Fri May 17 01:43:33 2019 Program instance number: 1932335239
+    Fri May 17 01:43:33 2019 Team name: anonymous
+    Fri May 17 01:43:33 2019 To server: action=hello
+    Fri May 17 01:43:41 2019 Server: Hello world.
+
+11. Python3 is also already installed if you wish to play with other superpermuators github content

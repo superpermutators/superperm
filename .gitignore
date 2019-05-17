@@ -16,3 +16,7 @@
 
 # Ignore compiled binaries
 /demutator/demutator
+bin/stat_clusters.sh
+bin/872_distribution.csv
+bin/clusters.sh
+bin/tmp.txt
