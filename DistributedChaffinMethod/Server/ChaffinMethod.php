@@ -1,8 +1,15 @@
 <?php
+//	Version 12.1
+//	Last updated: 17 May 2019
+//	Authors: Greg Egan, Jay Pantone
+
 include '../inc/dbinfo.inc';
+
+//	Directory where scripts have permission to write
+
 define('PHP_FILES', 'phpFiles/');
 
-//	Main or fork frepo
+//	Main or fork repo to send people to for upgrade
 
 //define('CODE_REPO','https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c');
 define('CODE_REPO','https://github.com/nagegerg/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c [Note this is still just a test fork of the main project.]');
@@ -27,7 +34,7 @@ $maxClients = 5000;
 
 //	Maximum number of times to retry a transaction
 
-$maxRetries = 5;
+$maxRetries = 10;
 
 //	Valid range for $n
 
@@ -89,6 +96,7 @@ fclose($fp);
 }
 
 function handlePDOError0($f, $e) {
+	sleep(1);
 	logError("PDO ERROR",$f.($e->getMessage()));
 }
 
@@ -113,6 +121,13 @@ return (ctype_digit(str_replace('.','',$str)));
 
 function checkString2($str) {
 return (ctype_alnum(str_replace(' ','',$str)));
+}
+
+//	Function to pad odd-length branch string on the right with zero
+
+function bPad($b) {
+if (strlen($b) % 2 == 0) return $b;
+return ($b . "0");
 }
 
 //	Function to check (what should be) a digit string to see if it is valid, and count the number of distinct permutations it visits.
@@ -181,7 +196,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / superperms] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in maybeUpdateWitnessStrings() / superperms] ", $e);
 			}
 		}
 	};
@@ -274,7 +289,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in maybeUpdateWitnessStrings() / witness_strings] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in maybeUpdateWitnessStrings() / witness_strings] ", $e);
 		}
 	}
 }
@@ -283,7 +298,7 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 //
 //	Returns "Task id: ... " or "Error: ... "
 
-function makeTask($n, $w, $pte, $str) {
+function makeTask($n, $w, $pte, $str, $stressTest) {
 	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	//	Transaction #1: Table 'tasks'
@@ -302,8 +317,8 @@ function makeTask($n, $w, $pte, $str) {
 				$access = mt_rand($A_LO,$A_HI);
 				$br = substr("000000000",0,$n);
 
-				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_order) VALUES(?, ?, ?, ?, ?, ?)");
-				$res->execute([$access, $n, $w, $str, $pte, $br]);
+				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,branch_bin,test) VALUES(?, ?, ?, ?, ?, UNHEX(?), ?)");
+				$res->execute([$access, $n, $w, $str, $pte, bPad($br), $stressTest]);
 
 				$result = "Task id: " . $pdo->lastInsertId() . "\n";
 			}
@@ -313,7 +328,7 @@ function makeTask($n, $w, $pte, $str) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in makeTask() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in makeTask() / tasks] ", $e);
 		}
 	}
 }
@@ -362,7 +377,7 @@ function relTask($id, $cid0, $access0) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in relTask() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in relTask() / tasks] ", $e);
 		}
 	}
 
@@ -376,7 +391,7 @@ return $cid;
 //	or:			"No tasks"
 //	or:			"Error ... "
 
-function getTask($cid,$ip,$pi,$version,$teamName) {
+function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 	global $pdo, $maxRetries;
 	
 	//	Transaction #1: Table 'tasks'
@@ -389,18 +404,18 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		try {
 			$pdo->beginTransaction();
 			
-			$res = $pdo->query("SELECT * FROM tasks WHERE status='U' ORDER BY branch_order LIMIT 10 FOR UPDATE");
-			if ($res && ($row = $res->fetch(PDO::FETCH_ASSOC))) {
-				$id = $row['id'];
-				$access = $row['access'];
-				$n = intval($row['n']);
-				$w = $row['waste'];
-				$str = $row['prefix'];
-				$pte = intval($row['perm_to_exceed']);
-				$ppro = $row['prev_perm_ruled_out'];
-				$br = $row['branch_order'];
+			$res = $pdo->query("SELECT id,access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,HEX(branch_bin),client_id FROM tasks WHERE status='U' AND test='$stressTest' ORDER BY branch_bin LIMIT 1 FOR UPDATE");
+			if ($res && ($row = $res->fetch(PDO::FETCH_NUM))) {
+				$id = $row[0];
+				$access = $row[1];
+				$n = intval($row[2]);
+				$w = $row[3];
+				$str = $row[4];
+				$pte = intval($row[5]);
+				$ppro = $row[6];
+				$br = substr($row[7],0,strlen($str));
 				
-				if (intval($row['client_id'])!=0) {
+				if (intval($row[8])!=0) {
 				logError("Task already had client", 
 					"Unassigned task $id in getTask() was already assigned to client ".$row['client_id']. ", and is now being assigned to client $cid ");
 				}
@@ -414,7 +429,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 				
 				$noTasks=FALSE;
 				$ntasks=-1;
-				$res0 = $pdo->query("SELECT COUNT(id) FROM tasks WHERE status='U'");
+				$res0 = $pdo->query("SELECT COUNT(id) FROM tasks WHERE status='U' AND test='$stressTest'");
 				if ($res0 && ($row = $res0->fetch(PDO::FETCH_NUM))) {
 					if (is_string($row[0])) {
 						$ntasks = intval($row[0]);
@@ -432,7 +447,29 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in getTask() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in getTask() / tasks] ", $e);
+		}
+	}
+	
+	//	Non-transaction (read only, currency non-critical): many idle clients, i.e. 80%+?
+	
+	$manyIdle = FALSE;
+	for ($r=1;$r<=$maxRetries;$r++) {
+		try {
+			$res = $pdo->query("SELECT current_task!=0, COUNT(id) FROM workers GROUP BY current_task!=0");
+			if ($res) {
+				$idleBusy=[0,0];
+				while ($row = $res->fetch(PDO::FETCH_NUM)) {
+					$idleBusy[intval($row[0])]=intval($row[1]);
+				}
+			$total = $idleBusy[0]+$idleBusy[1];
+			if ($total && $idleBusy[0]/$total > 0.8) $manyIdle=TRUE;
+			}
+		break;
+		} catch (Exception $e) {
+			$pdo->rollback();
+			if ($r==$maxRetries) handlePDOError($e);
+			else handlePDOError0("[retry $r of $maxRetries in getTask() / idle clients count] ", $e);
 		}
 	}
 	
@@ -467,9 +504,9 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 
 				$result = "Task id: $id\nAccess code: $access\nn: $n\nw: $w\nstr: $str\npte: $pte\npro: $ppro\nbranchOrder: $br\n";
 				
-				//	If we are just starting out, split early and spend less time in trees
+				//	If a large fraction of clients are idle, split early and spend less time in trees
 				
-				if (strlen($str) <= 2*$n) {
+				if ($manyIdle) {
 					$result = $result . "timeBeforeSplit: 300\nmaxTimeInSubtree: 30\n";
 				}
 				
@@ -482,7 +519,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in getTask() / witness_strings] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in getTask() / witness_strings] ", $e);
 			}
 		}
 	}
@@ -514,7 +551,7 @@ function getTask($cid,$ip,$pi,$version,$teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in getTask() / workers] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in getTask() / workers] ", $e);
 		}
 	}
 	
@@ -551,7 +588,7 @@ function relinquishTask($id, $access, $cid) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in relinquishTask() / workers] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in relinquishTask() / workers] ", $e);
 			}
 		}
 	$result = "Relinquished task\n";
@@ -608,7 +645,7 @@ function cancelStalledTasks($maxMin) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in cancelStalledTasks() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in cancelStalledTasks() / tasks] ", $e);
 		}
 	}
 	
@@ -636,7 +673,7 @@ function cancelStalledTasks($maxMin) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in cancelStalledTasks() / workers] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in cancelStalledTasks() / workers] ", $e);
 			}
 		}
 	}
@@ -680,7 +717,7 @@ function cancelStalledClients($maxMin)
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in cancelStalledClients() / workers] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in cancelStalledClients() / workers] ", $e);
 		}
 	}
 }
@@ -718,7 +755,7 @@ function maybeFinishedAllTasks() {
 			
 		} catch (Exception $e) {
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (1)] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / tasks (1)] ", $e);
 		}
 	}
 	
@@ -763,7 +800,7 @@ function maybeFinishedAllTasks() {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (1)] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / finished_tasks (1)] ", $e);
 		}
 	}
 	
@@ -785,10 +822,8 @@ function maybeFinishedAllTasks() {
 			if ($row = $res->fetch(PDO::FETCH_NUM)) {
 				//	Yes.  Update the excl_perms and final fields.
 				
-				$p_str = $row[0];
-				$p = intval($p_str);
-				$pro0_str = $row[1];
-				$pro0 = intval($pro0_str);
+				$p = intval($row[0]);
+				$pro0 = intval($row[1]);
 				
 				if ($pro0 > 0 && $pro0 < $pro) {
 					$pro = $pro0;
@@ -797,6 +832,10 @@ function maybeFinishedAllTasks() {
 				if ($pro == $p + 1) {
 					$final = 'Y';
 					$needTighterBound = FALSE;
+					
+					//	If we finalised w, this might tighten exclusion on w+1
+					 
+					$pdo->query("UPDATE witness_strings SET excl_perms=LEAST(excl_perms,$p+$n+1) WHERE n=$n AND waste=".($w+1));
 				} else {
 					$final = 'N';
 					$needTighterBound = TRUE;
@@ -812,7 +851,7 @@ function maybeFinishedAllTasks() {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) {handlePDOError($e); return;}
-			else handlePDOError0("[retry $r in maybeFinishedAllTasks() / witness_strings] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / witness_strings] ", $e);
 		}
 	}
 
@@ -841,15 +880,15 @@ function maybeFinishedAllTasks() {
 			for ($r=1;$r<=$maxRetries;$r++) {
 				try {
 					$pdo->beginTransaction();
-					$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?)");
-					$res->execute([$access, $n, $w1, $str, $pte, $pro2, $br]);
+					$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,branch_bin) VALUES(?, ?, ?, ?, ?, ?, UNHEX(?))");
+					$res->execute([$access, $n, $w1, $str, $pte, $pro2, bPad($br)]);
 					$id=$pdo->lastInsertId();
 					$pdo->commit();
 					return "OK\nTask id: " . $id . " for waste=$w1, perm_to_exceed=$pte, prev_perm_ruled_out=$pro2\n";
 				} catch (Exception $e) {
 					$pdo->rollback();
 					if ($r==$maxRetries) {handlePDOError($e); return;}
-					else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (2)] ", $e);
+					else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / tasks (2)] ", $e);
 
 				}
 			}
@@ -874,7 +913,7 @@ function maybeFinishedAllTasks() {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) {handlePDOError($e); return;}
-				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / finished_tasks (2)] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / finished_tasks (2)] ", $e);
 			}
 		}
 	
@@ -888,15 +927,15 @@ function maybeFinishedAllTasks() {
 		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
-				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_order) VALUES(?, ?, ?, ?, ?, ?, ?, ?)");
-				$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, $br]);
+				$res = $pdo->prepare("INSERT INTO tasks (access,n,waste,prefix,perm_to_exceed,iteration,prev_perm_ruled_out,branch_bin) VALUES(?, ?, ?, ?, ?, ?, ?, UNHEX(?))");
+				$res->execute([$access, $n, $w, $str, $pte, $iter1, $pro, bPad($br)]);
 				$id=$pdo->lastInsertId();
 				$pdo->commit();
 				return "OK\nTask id: " . $id . " for waste=$w, perm_to_exceed=$pte, prev_perm_ruled_out=$pro, iteration=$iter1\n";
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) {handlePDOError($e); return;}
-				else handlePDOError0("[retry $r in maybeFinishedAllTasks() / tasks (3)] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in maybeFinishedAllTasks() / tasks (3)] ", $e);
 			}
 		}
 	}
@@ -906,7 +945,7 @@ function maybeFinishedAllTasks() {
 //
 //	Returns: "OK ..." or "Error: ... "
 	
-function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
+function finishTask($id, $access, $pro, $str, $teamName, $nodeCount, $stressTest) {
 	global $pdo, $maxRetries, $stage;
 	
 	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks'
@@ -969,19 +1008,21 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 
 								// Note: you can prepare a statement just once and execute it multiple times!
 								
-								$res2 = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?)");
+								$res2 = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id,parent_pl,test) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?)");
 								$stage=6;
 								while ($row2 = $res->fetch(PDO::FETCH_ASSOC)) {
 									$numNew += 1;
-									$res2->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], $row2['prefix'], $row2['perm_to_exceed'], 'F', $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName,'Y',$row2['parent_id']]);
+									$pl = intval($row2['parent_pl']);
+									$res2->execute([$row2['id'], $row2['access'], $row2['n'], $row2['waste'], substr($row2['prefix'],$pl), $row2['perm_to_exceed'], 'F', $row2['prev_perm_ruled_out'], $row2['iteration'], $row2['ts_allocated'], 'redundant', $row2['checkin_count'], $pro, $row2['client_id'], $teamName,'Y',$row2['parent_id'],$pl,$row2['test']]);
 								}
 								$redun = TRUE;
 								$stage=7;
 							}
 
-							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id,nodeCount) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?)");
+							$res = $pdo->prepare("INSERT INTO finished_tasks (original_task_id, access,n,waste,prefix,perm_to_exceed,status,prev_perm_ruled_out,iteration,ts_allocated,ts_finished,excl_witness,checkin_count,perm_ruled_out,client_id,team,redundant,parent_id,parent_pl,nodeCount,test) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+							$pl = intval($row['parent_pl']);
 							$stage=8;
-							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], $row['prefix'], $row['perm_to_exceed'], 'F', $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str0, $row['checkin_count'], $pro, $row['client_id'], $teamName,$row['redundant'],$row['parent_id'],$nodeCount]);
+							$res->execute([$row['id'], $row['access'], $row['n'], $row['waste'], substr($row['prefix'],$pl), $row['perm_to_exceed'], 'F', $row['prev_perm_ruled_out'], $row['iteration'], $row['ts_allocated'], $str0, $row['checkin_count'], $pro, $row['client_id'], $teamName,$row['redundant'],$row['parent_id'],$pl,$nodeCount,$row['test']]);
 							$stage=9;
 
 							$ok=TRUE;
@@ -1008,7 +1049,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / Transaction #1, stage=$stage, task id=$id, client id=$cid] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / Transaction #1, stage=$stage, task id=$id, client id=$cid] ", $e);
 		}
 	}
 	
@@ -1031,7 +1072,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in finishTask() / tasks DEL-R] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in finishTask() / tasks DEL-R] ", $e);
 			}
 		}
 
@@ -1050,7 +1091,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in finishTask() / tasks RED] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in finishTask() / tasks RED] ", $e);
 			}
 		}
 	
@@ -1066,7 +1107,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in finishTask() / num_redundant_tasks] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in finishTask() / num_redundant_tasks] ", $e);
 			}
 		}
 	}
@@ -1087,7 +1128,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / tasks DEL] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / tasks DEL] ", $e);
 		}
 	}
 	
@@ -1106,7 +1147,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / tasks PEND] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / tasks PEND] ", $e);
 		}
 	}
 	
@@ -1121,7 +1162,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / num_finished_tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / num_finished_tasks] ", $e);
 		}
 	}
 	
@@ -1136,7 +1177,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / total_nodeCount] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / total_nodeCount] ", $e);
 		}
 	}
 	
@@ -1161,7 +1202,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in finishTask() / teams] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in finishTask() / teams] ", $e);
 		}
 	}
 	
@@ -1179,7 +1220,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in finishTask() / workers] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in finishTask() / workers] ", $e);
 			}
 		}
 	}
@@ -1242,7 +1283,7 @@ function checkIn($id, $access) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in checkIn() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in checkIn() / tasks] ", $e);
 		}
 	}
 	
@@ -1263,7 +1304,7 @@ function checkIn($id, $access) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in checkIn() / workers] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in checkIn() / workers] ", $e);
 			}
 		}
 	}
@@ -1276,7 +1317,7 @@ function checkIn($id, $access) {
 //	Returns: "OK" (or "Done" for tasks that have become redundant)
 //	or "Error: ... "
 
-function splitTask($id, $access, $new_pref, $branchOrder) {
+function splitTask($id, $access, $new_pref, $branchOrder, $stressTest) {
 	global $A_LO, $A_HI, $pdo, $maxRetries;
 	
 	$ok = FALSE;
@@ -1316,6 +1357,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 							
 							$new_access = mt_rand($A_LO,$A_HI);
 							$fieldList = "";
+							$qList = "";
 							$valuesList = array();
 							$c = 0;
 							
@@ -1324,16 +1366,20 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 							for ($j=0; $j < count($row); $j++) {
 								$field = key($row);
 								$value = current($row);
+								$bb = ($field=='branch_bin');
+								
 								if ($field=='access') $value = $new_access;
 								else if ($field=='prefix') $value = $new_pref; 
 								else if ($field=='ts_allocated') $value = 'NOW()';
 								else if ($field=='status') $value = 'P';
-								else if ($field=='branch_order') $value = $branchOrder;
+								else if ($bb) $value = bPad($branchOrder);
 								else if ($field=='parent_id') $value = $id;
+								else if ($field=='parent_pl') $value = $pref_len;
 								
 								if ($field != 'id' && $field != 'ts' && $field != 'ts_finished' && $field != 'ts_allocated' && $field != 'checkin_count' && $field != 'client_id') {
 									$pre = ($c==0) ? "": ", ";
 									$fieldList = $fieldList . $pre . $field;
+									$qList = $qList . $pre . ($bb ? 'UNHEX(?)' : '?');
 									array_push($valuesList, $value);
 									$c++;
 								}
@@ -1341,7 +1387,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 								next($row);
 							}
 							
-							$qry = "INSERT INTO tasks (" . $fieldList .") VALUES( " . implode(",", array_fill(0, count($valuesList), "?")) .")";
+							$qry = "INSERT INTO tasks (" . $fieldList .") VALUES( " . $qList .")";
 							$res = $pdo->prepare($qry);
 							$res->execute($valuesList);
 						} else {
@@ -1373,7 +1419,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in splitTask() / tasks] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in splitTask() / tasks] ", $e);
 		}
 	}
 	
@@ -1394,7 +1440,7 @@ function splitTask($id, $access, $new_pref, $branchOrder) {
 			} catch (Exception $e) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
-				else handlePDOError0("[retry $r in splitTask() / workers] ", $e);
+				else handlePDOError0("[retry $r of $maxRetries in splitTask() / workers] ", $e);
 			}
 		}
 	}
@@ -1440,7 +1486,7 @@ function register($pi, $teamName) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in register() / workers] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in register() / workers] ", $e);
 		}
 	}
 }
@@ -1472,7 +1518,7 @@ function unregister($cid,$ip,$pi) {
 		} catch (Exception $e) {
 			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
-			else handlePDOError0("[retry $r in unregister() / workers] ", $e);
+			else handlePDOError0("[retry $r of $maxRetries in unregister() / workers] ", $e);
 		}
 	}
 	
@@ -1518,7 +1564,7 @@ if (is_string($qs)) {
 		$k = key($q);
 		$v = current($q);
 		next($q);
-		if ($k != 'action' && $k != 'pwd' && $k != 'team' && !checkString($v)) {
+		if ($k != 'action' && $k != 'pwd' && $k != 'team' && $k != 'stressTest' && !checkString($v)) {
 			$ok=FALSE;
 			break;
 		}
@@ -1538,6 +1584,12 @@ if (is_string($qs)) {
 				echo "Wait\n";
 			} else {
 				$action = $q['action'];
+				
+				$stressTest ='N';
+				if (strpos($qs,'stressTest')) $stressTest = $q['stressTest'];
+				
+				$teamName = 'anonymous';
+				if (strpos($qs,'team')) $teamName = $q['team'];
 			
 				if (is_string($action)) {
 					if ($action == "hello") {
@@ -1548,8 +1600,6 @@ if (is_string($qs)) {
 							$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from " . CODE_REPO . "\nThanks for being part of this project!";
 						} else {
 							$pi = $q['programInstance'];
-							$teamName = "anonymous";
-							if (strpos($qs,'team')) $teamName = $q['team'];
 							if (is_string($pi) && is_string($teamName)) {
 								$queryOK = TRUE;
 								echo register($pi, $teamName);
@@ -1559,15 +1609,13 @@ if (is_string($qs)) {
 						$pi = $q['programInstance'];
 						$cid = $q['clientID'];
 						$ip = $q['IP'];
-						$teamName = "anonymous";
-						if (strpos($qs,'team')) $teamName = $q['team'];
 						if (is_string($pi) && is_string($cid) && is_string($ip) && is_string($teamName)) {
 							if ($version < $versionForNewTasks) {
 								unregister($cid,$ip,$pi);
 								$err = "The version of DistributedChaffinMethod you are using has been superseded.\nPlease download version $versionForNewTasks or later from " . CODE_REPO . "\nThanks for being part of this project!";
 							} else {
 								$queryOK = TRUE;
-								echo getTask($cid,$ip,$pi,$version,$teamName);
+								echo getTask($cid,$ip,$pi,$version,$teamName,$stressTest);
 							}
 						}
 					} else if ($action == "unregister") {
@@ -1592,7 +1640,7 @@ if (is_string($qs)) {
 						$branchOrder = $q['branchOrder'];
 						if (is_string($id) && is_string($access) && is_string($new_pref) && is_string($branchOrder)) {
 							$queryOK = TRUE;
-							echo splitTask($id, $access, $new_pref, $branchOrder);
+							echo splitTask($id, $access, $new_pref, $branchOrder, $stressTest);
 						}
 					} else if ($action == "cancelStalledTasks") {
 						$maxMins_str = $q['maxMins'];
@@ -1618,15 +1666,13 @@ if (is_string($qs)) {
 						$access = $q['access'];
 						$pro_str = $q['pro'];
 						$str = $q['str'];
-						$teamName = "anonymous";
-						if (strpos($qs,'team')) $teamName = $q['team'];
 						$nodeCount = "0";
 						if (strpos($qs,'nodeCount')) $nodeCount = $q['nodeCount'];
 						if (is_string($id) && is_string($access) && is_string($pro_str) && is_string($str) && is_string($teamName)) {
 							$pro = intval($pro_str);
 							if ($pro > 0) {
 								$queryOK = TRUE;
-								echo finishTask($id, $access, $pro, $str, $teamName, $nodeCount);
+								echo finishTask($id, $access, $pro, $str, $teamName, $nodeCount,$stressTest);
 							}
 						}
 					} else if ($action == "relinquishTask") {
@@ -1672,8 +1718,6 @@ if (is_string($qs)) {
 													$pro = -1;
 												}
 											}
-											$teamName = "anonymous";
-											if (strpos($qs,'team')) $teamName = $q['team'];
 											echo maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName);
 										} else if ($p<0) {
 											$err = 'Invalid string';
@@ -1696,7 +1740,7 @@ if (is_string($qs)) {
 											$p = intval($p_str);
 											if ($p > 0 && analyseString($str,$n) > 0) {
 												$queryOK = TRUE;
-												echo makeTask($n, $w, $p, $str);
+												echo makeTask($n, $w, $p, $str, $stressTest);
 											}
 										}
 									}
