@@ -1,4 +1,17 @@
-﻿ 1. Follow instructions on this website to enable Windows Subsystem for Linux on Windows 10.
+﻿Win10_-_Using_Windows_Subsytem_for_Linux.txt
+============================================
+
+Author:			Bobby Metz
+Date:			17 May 2019
+
+This document covers a simple method to add Linux and associated tooling under Windows 10, 64-bit
+in order to download, create & execute DistributedChaffinMethod.  For additional questions about
+the tool itself, please refer to the readme.txt instead of this document.
+
+Building and testing
+--------------------
+
+ 1. Follow instructions on this website to enable Windows Subsystem for Linux on Windows 10.
     *** Must have 64-bit Windows10 ***
     *** Requires Windows10 reboot before step 2 ***
 
@@ -68,4 +81,12 @@
     Fri May 17 01:43:33 2019 To server: action=hello
     Fri May 17 01:43:41 2019 Server: Hello world.
 
-11. Python3 is also already installed if you wish to play with other superpermuators github content
+Bonus
+-----
+
+Python3 is also installed by default, should you wish to play with other content from the superpermutators github repo.
+
+    $ python3 -V
+    Python 3.6.5
+
+Installation of additional Python modules may be necessary, but are outside the scope of this document.
