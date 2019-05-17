@@ -158,7 +158,9 @@ else $edisc = $edisc . " thanks to the result for <i>w</i>=".($w-1).", which can
 };
 if ($pwit>0)
 {
-$edisc = $edisc . "So far, we have found a string with $pwit permutations.";
+$edisc = $edisc . "So far, we have found a string with $pwit permutations";
+if ($iter==0 && $pwit <= $pte) $edisc = $edisc . ", which was discovered as a by-product of an earlier search.";
+else $edisc = $edisc . ".";
 }
 else
 {
