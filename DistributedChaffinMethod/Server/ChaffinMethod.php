@@ -404,7 +404,7 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 		try {
 			$pdo->beginTransaction();
 			
-			$res = $pdo->query("SELECT id,access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,HEX(branch_bin),client_id FROM tasks WHERE status='U' AND test='$stressTest' ORDER BY branch_bin LIMIT 1 FOR UPDATE");
+			$res = $pdo->query("SELECT id,access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,HEX(branch_bin),client_id FROM tasks WHERE status='U' AND test='$stressTest' AND branch_bin = (SELECT MIN(branch_bin) FROM tasks WHERE status='U' AND test='$stressTest') FOR UPDATE");
 			if ($res && ($row = $res->fetch(PDO::FETCH_NUM))) {
 				$id = $row[0];
 				$access = $row[1];
@@ -439,7 +439,7 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 					}
 				}
 				if (!$noTasks) {
-				logError("LIMIT 1 failed to find tasks", "LIMIT 1 in getTask() failed to find $ntasks tasks");
+				logError("SELECT MIN failed to find tasks", "SELECT MIN in getTask() failed to find $ntasks tasks");
 				}
 			};
 		$pdo->commit();
@@ -611,11 +611,12 @@ function cancelStalledTasks($maxMin) {
 		try {
 			$pdo->beginTransaction();
 
-			$res = $pdo->prepare("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()), client_id FROM tasks WHERE status='A' AND TIMESTAMPDIFF(MINUTE,ts,NOW())>? FOR UPDATE");
+			$res = $pdo->prepare("SELECT id, TIMESTAMPDIFF(MINUTE,ts,NOW()), client_id, team FROM tasks WHERE status='A' AND TIMESTAMPDIFF(MINUTE,ts,NOW())>? FOR UPDATE");
 			$res->execute([$maxMin]);
 
 			$cancelled = 0;
 			$clientsWithStalledTasks = array();
+			$teamsWithStalledTasks = array();
 			
 			while ($row = $res->fetch(PDO::FETCH_NUM)) {
 
@@ -623,6 +624,7 @@ function cancelStalledTasks($maxMin) {
 				if ($stall > $maxMin) {
 					$id = $row[0];
 					$cid = $row[2];
+					$teamName = $row[3];
 					$access = mt_rand($A_LO,$A_HI);
 
 					$res2 = $pdo->prepare("UPDATE tasks SET status='U', access=?, client_id=0 WHERE id=?");
@@ -634,6 +636,7 @@ function cancelStalledTasks($maxMin) {
 					$res3->execute([$id]);
 
 					$clientsWithStalledTasks[] = [$cid,$id];
+					$teamsWithStalledTasks[] = $teamName;
 					$cancelled++;
 				}
 			}
@@ -649,10 +652,11 @@ function cancelStalledTasks($maxMin) {
 		}
 	}
 	
+	if ($cancelled > 0) {
+	
 	//	Transaction #2: 'workers'
 	//	Zero the current_task in the workers whose stalled tasks were cancelled
-
-	if ($cancelled > 0) {
+	
 		for ($r=1;$r<=$maxRetries;$r++) {
 			try {
 				$pdo->beginTransaction();
@@ -674,6 +678,36 @@ function cancelStalledTasks($maxMin) {
 				$pdo->rollback();
 				if ($r==$maxRetries) handlePDOError($e);
 				else handlePDOError0("[retry $r of $maxRetries in cancelStalledTasks() / workers] ", $e);
+			}
+		}
+		
+	//	Transaction #3: 'teams'
+	
+		for ($r=1;$r<=$maxRetries;$r++) {
+			try {
+				$pdo->beginTransaction();
+
+				for ($i=0;$i<count($teamsWithStalledTasks);$i++) {
+					$teamName = $teamsWithStalledTasks[$i];
+
+					// Try to increment team task count
+					$res = $pdo->prepare("UPDATE teams SET crashouts = crashouts + 1 WHERE team = ?");
+					$res->execute([$teamName]);
+
+					// If no rows were affected, we need to add the team to this table
+					if ($res->rowCount() == 0) {
+						$res = $pdo->prepare("INSERT INTO teams (team, crashouts) values (?, 1)");
+						$res->execute([$teamName]);
+					}
+				}
+				
+				$pdo->commit();
+				break;
+				
+			} catch (Exception $e) {
+				$pdo->rollback();
+				if ($r==$maxRetries) handlePDOError($e);
+				else handlePDOError0("[retry $r of $maxRetries in cancelStalledTasks() / teams] ", $e);
 			}
 		}
 	}

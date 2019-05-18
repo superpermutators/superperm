@@ -23,7 +23,7 @@ CREATE TABLE `tasks` (
   `branch_bin` varbinary(3000) DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `n_waste` (`n`,`waste`) USING BTREE,
-  KEY `tsb` (`test`,`status`,`branch_bin`(500)) USING BTREE,
+  KEY `tsb` (`test`,`status`,`branch_bin`) USING BTREE,
   KEY `parent_id` (`parent_id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
 
@@ -108,6 +108,7 @@ CREATE TABLE `workers` (
 CREATE TABLE `teams` (
   `team` varchar(32) NOT NULL DEFAULT 'anonymous',
   `tasks_completed` int(10) unsigned NOT NULL DEFAULT '0',
+  `crashouts` int(10) unsigned NOT NULL DEFAULT '0',
   `nodeCount` bigint(20) NOT NULL DEFAULT '0',
   `visible` char(1) NOT NULL DEFAULT 'N',
   PRIMARY KEY (`team`)
