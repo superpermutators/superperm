@@ -404,7 +404,7 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 		try {
 			$pdo->beginTransaction();
 			
-			$res = $pdo->query("SELECT id,access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,HEX(branch_bin),client_id FROM tasks WHERE status='U' AND test='$stressTest' AND branch_bin = (SELECT MIN(branch_bin) FROM tasks WHERE status='U' AND test='$stressTest') FOR UPDATE");
+			$res = $pdo->query("SELECT id,access,n,waste,prefix,perm_to_exceed,prev_perm_ruled_out,HEX(branch_bin),client_id FROM tasks WHERE status='U' AND test='$stressTest' AND branch_bin = (SELECT MIN(branch_bin) FROM tasks WHERE status='U' AND test='$stressTest' FOR UPDATE) FOR UPDATE");
 			if ($res && ($row = $res->fetch(PDO::FETCH_NUM))) {
 				$id = $row[0];
 				$access = $row[1];
@@ -425,7 +425,7 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 				
 			} else {
 
-				//	Verify the absence of unassigned tasks, to check that tasks are not being missed by LIMIT 1
+				//	Verify the absence of unassigned tasks
 				
 				$noTasks=FALSE;
 				$ntasks=-1;
@@ -439,7 +439,11 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 					}
 				}
 				if (!$noTasks) {
-				logError("SELECT MIN failed to find tasks", "SELECT MIN in getTask() failed to find $ntasks tasks");
+					if ($r>5) logError("SELECT MIN failed to find tasks", "SELECT MIN in getTask() failed to find $ntasks tasks");
+					else {
+						$pdo->rollback();
+						continue;
+					}
 				}
 			};
 		$pdo->commit();
