@@ -52,6 +52,7 @@ tr.active {background-color: #ddffdd;}
 Team Reykjavik <a href="http://ada.mscsnet.mu.edu/ChaffinMethodResults/">recently found</a> an optimal string for <i>w</i>=116, but it would be nice to independently confirm their result
 before moving on to the next stage. So if you have some spare CPU cores, join in the search!</p>
 <ul>
+<li>What is a <a href="https://www.gregegan.net/SCIENCE/Superpermutations/Superpermutations.html">superpermutation</a>?</li>
 <li>What is the <a href="https://github.com/superpermutators/superperm/wiki/Chaffin-method">Chaffin method</a>?</li>
 <li><a href="https://github.com/nagegerg/superperm/tree/master/DistributedChaffinMethod">GitHub repository</a> with the software you need to join this search. Please read the README!</li>
 <li>Sign up to the <a href="https://groups.google.com/forum/#!forum/superpermutators">Superpermutators</a> Google group to get the latest news and discuss the results.</li>
