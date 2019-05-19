@@ -10,10 +10,10 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10 - 12.0
+Version: 10 - 12.0.1
 
-Current version: 12.0
-Last Updated: 15 May 2019
+Current version: 12.0.1
+Last Updated: 20 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -980,14 +980,22 @@ for (int j0=0;j0<currentTask.prefixLen;j0++)
 	tperm0 = (tperm0>>DBITS) | (d << nmbits);
 	if (valid[tperm0])
 		{
-		if (unvisited[tperm0]) pf++;
-		unvisited[tperm0] = FALSE;
-		
-		int prevC, oc;
-		oc=oneCycleIndices[tperm0];
-		prevC = oneCycleCounts[oc]--;
-		oneCycleBins[prevC]--;
-		oneCycleBins[prevC-1]++;
+		if (unvisited[tperm0])
+			{
+			pf++;
+			unvisited[tperm0] = FALSE;
+			
+			int prevC, oc;
+			oc=oneCycleIndices[tperm0];
+			prevC = oneCycleCounts[oc]--;
+			if (prevC-1<0 || prevC >n)
+				{
+				printf("oneCycleBins index is out of range (prevC=%d)\n",prevC);
+				exit(EXIT_FAILURE);
+				};
+			oneCycleBins[prevC]--;
+			oneCycleBins[prevC-1]++;
+			};
 		};
 	};
 int partNum0 = tperm0>>DBITS;
