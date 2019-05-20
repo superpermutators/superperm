@@ -20,7 +20,7 @@ CREATE TABLE `tasks` (
   `parent_id` int(10) unsigned NOT NULL DEFAULT '0',
   `parent_pl` int(10) unsigned NOT NULL DEFAULT '0',
   `test` char(1) NOT NULL DEFAULT 'N',
-  `branch_bin` varbinary(3000) DEFAULT NULL,
+  `branch_bin` varbinary(450) DEFAULT NULL,
   PRIMARY KEY (`id`) USING BTREE,
   KEY `n_waste` (`n`,`waste`) USING BTREE,
   KEY `tsb` (`test`,`status`,`branch_bin`) USING BTREE,
@@ -58,14 +58,17 @@ CREATE TABLE `finished_tasks` (
 CREATE TABLE `num_finished_tasks` (
   `num_finished` int(10) unsigned NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+INSERT INTO `num_finished_tasks` (`num_finished`) VALUES ('0');
 
 CREATE TABLE `num_redundant_tasks` (
   `num_redundant` int(10) unsigned NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+INSERT INTO `num_redundant_tasks` (`num_redundant`) VALUES ('0');
 
 CREATE TABLE `total_nodeCount` (
   `nodeCount` bigint(20) unsigned NOT NULL DEFAULT '0'
 ) ENGINE=InnoDB DEFAULT CHARSET=latin1;
+INSERT INTO `total_nodeCount` (`nodeCount`) VALUES ('0');
 
 CREATE TABLE `witness_strings` (
   `id` int(10) unsigned NOT NULL AUTO_INCREMENT,

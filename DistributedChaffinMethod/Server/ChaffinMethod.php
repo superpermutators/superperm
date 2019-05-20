@@ -471,7 +471,6 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 			}
 		break;
 		} catch (Exception $e) {
-			$pdo->rollback();
 			if ($r==$maxRetries) handlePDOError($e);
 			else handlePDOError0("[retry $r of $maxRetries in getTask() / idle clients count] ", $e);
 		}
@@ -842,7 +841,7 @@ function maybeFinishedAllTasks() {
 		}
 	}
 	
-	echo "For (n,w,iter)=($n,$w,$iter), MAX(perm_ruled_out)=$pro\n";
+	echo "OK\nFor (n,w,iter)=($n,$w,$iter), MAX(perm_ruled_out)=$pro\n";
 	
 	//	Transaction #3: 'witness_strings'
 	
