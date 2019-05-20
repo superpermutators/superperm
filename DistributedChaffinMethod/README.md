@@ -2,13 +2,28 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			15 May 2019
+Date:			20 May 2019
 
-NB:  These notes include some features that are only present from version 11.0 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 12.0 onwards. Please always install the latest
 version of the program.
 
+## Java client
 
-## Building and testing
+A Java client is available in the repository. This consists of the file `DCM.jar` , and it requires Java release 8, which can be downloaded
+from <http://java.com>. 
+
+`DCM.jar` can be run simply by double-clicking it on the desktop for most operating systems, or by typing `java -jar DCM.jar` into a
+command line (assuming the jar file has been placed in the current directory).
+
+Once you run the Java client, simply type in your team name and hit the `Register` button. You can quit the program in either of two ways:
+`Finish task & quit`, which continues with the current task until it is completed, or `Give up task & quit` which stops work on the task
+immediately and tells the server to assign it to someone else, before quitting.
+
+The Java client does not read or write any files at all, though a log of its interactions with the server is available in a scrolling text box at the top
+of the application's window.
+
+
+## Building and testing the C client
 
 **DistributedChaffinMethod.c** is a single, standalone file for a command-line C program. It is intended to compile and run
 under MacOS, Linux and some versions of Windows.
@@ -20,7 +35,8 @@ In order to run correctly, the program needs:
 3. The presence of the "curl" command line tool, and the ability for the program to run it via the system() call
 in the C standard library. These are standard in MacOS/Linux, but for Windows will depend on your precise environment.
 
-Note that the program uses functions in `math.h`, so with some compilers it will require the switch `-lm` to link with the mathematical functions library.
+Note that the program uses functions in `math.h`, so with some compilers it will require the switch `-lm` to link with the mathematical
+functions library.
 
 If the program compiles correctly, running it with the option "test" will simply test whether or not it can connect to
 the server and read back the expected response:
