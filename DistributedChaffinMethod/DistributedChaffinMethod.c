@@ -10,9 +10,9 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10 - 12.0.2
+Version: 10 - 12.0.3
 
-Current version: 12.0.2
+Current version: 12.0.3
 Last Updated: 20 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -301,6 +301,7 @@ int64_t nodesToProbe0, nodesToProbe, nodesLeft;
 time_t startedRunning;				//	Time program started running
 time_t startedCurrentTask=0;		//	Time we started current task
 time_t timeOfLastTimeCheck;			//	Time we last checked the time
+time_t timeOfLastTimeReport;		//	Time we last reported elapsed time to the user
 time_t timeOfLastServerCheckin;		//	Time we last contacted the server
 
 int timeBeforeSplit = DEFAULT_TIME_BEFORE_SPLIT;
@@ -1014,7 +1015,7 @@ totalNodeCount = 0;
 subTreesSplit = 0;
 subTreesCompleted = 0;
 time(&startedCurrentTask);
-timeOfLastTimeCheck = startedCurrentTask;
+timeOfLastTimeReport = timeOfLastTimeCheck = startedCurrentTask;
 
 timeBeforeSplit = currentTask.timeBeforeSplit;
 maxTimeInSubtree = currentTask.maxTimeInSubtree;
@@ -1090,18 +1091,23 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	time(&timeNow);
 	double timeSpentOnTask = difftime(timeNow, startedCurrentTask);
 	double timeSinceLastTimeCheck = difftime(timeNow, timeOfLastTimeCheck);
+	double timeSinceLastTimeReport= difftime(timeNow, timeOfLastTimeReport);
 	double timeSinceLastServerCheckin = difftime(timeNow, timeOfLastServerCheckin);
 	
 
-	int tskTime = (int)timeSpentOnTask;
-	int tskMin = tskTime / 60;
-	int tskSec = tskTime % 60;
+	if (timeSinceLastTimeReport > MINUTE)
+		{
+		int tskTime = (int)timeSpentOnTask;
+		int tskMin = tskTime / 60;
+		int tskSec = tskTime % 60;
 
-	printf("Time spent on task so far = ");
-	if (tskMin==0) printf("       ");
-	else printf(" %2d min",tskMin);
-	printf(" %2d sec.",tskSec);
-	printf("  Nodes searched per second = %"PRId64"\n",(int64_t)((double)nodesBeforeTimeCheck/(timeSinceLastTimeCheck)));
+		printf("Time spent on task so far = ");
+		if (tskMin==0) printf("       ");
+		else printf(" %2d min",tskMin);
+		printf(" %2d sec.",tskSec);
+		printf("  Nodes searched per second = %"PRId64"\n",(int64_t)((double)nodesBeforeTimeCheck/(timeSinceLastTimeCheck)));
+		timeOfLastTimeReport = timeNow;
+		};
 
 	//	Adjust the number of nodes we check before doing a time check, to bring the elapsed
 	//	time closer to the target
