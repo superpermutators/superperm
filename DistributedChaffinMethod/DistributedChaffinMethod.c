@@ -10,9 +10,9 @@ Secondary Author: Jay Pantone
 Version: 9
 
 Author: Greg Egan
-Version: 10 - 12.0.1
+Version: 10 - 12.0.2
 
-Current version: 12.0.1
+Current version: 12.0.2
 Last Updated: 20 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
@@ -162,7 +162,7 @@ For more details, see the accompanying README.
 //	Time we AIM to spend between system calls to check on the time;
 //	we count nodes between these checks
 
-#define TIME_BETWEEN_TIME_CHECKS (1*MINUTE)
+#define TIME_BETWEEN_TIME_CHECKS (5)
 
 //	Time for (short) delays when the server wants us to wait
 
@@ -192,13 +192,13 @@ For more details, see the accompanying README.
 //	Initial number of nodes to check before we bother to check elapsed time;
 //	we rescale the actual value (in nodesBeforeTimeCheck) if it is too large or too small
 
-#define NODES_BEFORE_TIME_CHECK 1000000000
+#define NODES_BEFORE_TIME_CHECK 20000000L
 
 //	Set a floor and ceiling so we can't waste an absurd amount of time doing time checks,
 //	or take too long between them.
 
-#define MIN_NODES_BEFORE_TIME_CHECK 100000000
-#define MAX_NODES_BEFORE_TIME_CHECK 10000000000
+#define MIN_NODES_BEFORE_TIME_CHECK 10000000L
+#define MAX_NODES_BEFORE_TIME_CHECK 1000000000L
 
 //	Size of general-purpose buffer for messages from server, log, etc.
 
