@@ -1,6 +1,6 @@
 <?php
-//	Version 12.1
-//	Last updated: 17 May 2019
+//	Version 13.0
+//	Last updated: 21 May 2019
 //	Authors: Greg Egan, Jay Pantone
 
 include '../inc/dbinfo.inc';
@@ -8,6 +8,36 @@ include '../inc/dbinfo.inc';
 //	Directory where scripts have permission to write
 
 define('PHP_FILES', 'phpFiles/');
+
+//	**********************************
+//	*** Emergency slowdown lever 1 ***
+
+//	1 in X requests to getTask() will be told there are no tasks
+//	If X is 0, the default, EVERY request is honoured (if tasks are available)
+
+define('ONE_IN_X', 0);		//	Default
+//define('ONE_IN_X', 2);	//	Extreme slowdown
+
+//	*** Emergency slowdown lever 2 ***
+
+//	Time in seconds between client checking in with the server
+//	The default is 3 minutes, i.e. 180 seconds
+
+define('CLIENT_CHECKIN', 180);		//	Default
+//define('CLIENT_CHECKIN', 300);	//	Extreme slowdown
+
+//	*** Emergency slowdown lever 3 ***
+
+//	Time in seconds clients should spend exploring subtrees
+//	Normally the client uses a default value of 2 minutes, which the server shrinks to 30 seconds when many clients are idle
+//	If the value here is 0, the default behaviour will continue
+//	If the value here is positive, it is sent to the clients (whether many clients are idle or not), overriding both
+//	the client default and the server behaviour for idle times.
+
+define('MAX_TIME_IN_SUBTREE', 0);		//	Default (not actual time, just means usual values)
+//define('MAX_TIME_IN_SUBTREE', 300);	//	Extreme slowdown
+
+//	**********************************
 
 //	Main or fork repo to send people to for upgrade
 
@@ -20,13 +50,13 @@ define('CODE_REPO','https://github.com/nagegerg/superperm/blob/master/Distribute
 //	with a call to cancelStalledTasks, and the disrupted clients will need to be unregistered
 //	with a call to cancelStalledClients.
 
-$versionAbsolutelyRequired = 11;
+$versionAbsolutelyRequired = 13;
 
 //	Version of the client required for new registrations and new tasks to be allocated.
 //	If this is changed while clients are running tasks, the task will continue uninterrupted;
 //	the client will be unregistered and will exit cleanly the next time it asks for a new task.
 
-$versionForNewTasks = 12;
+$versionForNewTasks = 13;
 
 //	Maximum number of clients to register
 
@@ -399,6 +429,16 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 	
 	$id = 0;
 	$result = "No tasks\n";
+	if (CLIENT_CHECKIN) {
+		$result = "timeBetweenServerCheckins: ".(CLIENT_CHECKIN)."\n" . $result;
+	}
+	
+	//	Maybe reject a proportion of task requests, if administrator has set ONE_IN_X to a non-zero value
+	
+	if (ONE_IN_X) {
+		$rnum = mt_rand(1,ONE_IN_X);
+		if ($rnum == 1) return $result;
+	}
 	
 	for ($r=1;$r<=$maxRetries;$r++) {
 		try {
@@ -509,8 +549,16 @@ function getTask($cid,$ip,$pi,$version,$teamName,$stressTest) {
 				
 				//	If a large fraction of clients are idle, split early and spend less time in trees
 				
-				if ($manyIdle) {
+				if ($manyIdle && (!MAX_TIME_IN_SUBTREE)) {
 					$result = $result . "timeBeforeSplit: 300\nmaxTimeInSubtree: 30\n";
+				}
+				
+				if (MAX_TIME_IN_SUBTREE) {
+					$result = $result . "maxTimeInSubtree: ".(MAX_TIME_IN_SUBTREE)."\n";
+				}
+				
+				if (CLIENT_CHECKIN) {
+					$result = $result . "timeBetweenServerCheckins: ".(CLIENT_CHECKIN)."\n";
 				}
 				
 				while ($row = $res->fetch(PDO::FETCH_NUM)) {
