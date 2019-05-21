@@ -1624,8 +1624,13 @@ $queryOK = FALSE;
 $err = 'Invalid query';
 $qs = $_SERVER['QUERY_STRING'];
 
+try {
 $pdo = new PDO('mysql:host='.DB_SERVER.';dbname='.DB_DATABASE,DB_USERNAME, DB_PASSWORD);
 $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+} catch (Exception $e) {
+    print "Error opening PDO connection\n";
+    die();
+}
 
 //	Currently not using instanceCount
 
