@@ -1,7 +1,7 @@
 <?php
-//	Version 12.1
-//	Last updated: 17 May 2019
-//	Author: Greg Egan
+//	Version 13.0
+//	Last updated: 21 May 2019
+//	Authors: Greg Egan, Jay Pantone
 
 include '../inc/dbinfo.inc';
 
@@ -459,11 +459,10 @@ for ($n = $max_n; $n >= $min_n; $n--)
 	
 $pdo=NULL;
 
-} catch (PDOException $e) {
-    print "Error: " . $e->getMessage() . "<br/>";
+} catch (Exception $e) {
+    print "Error opening PDO connection\n";
     die();
 }
-
 
 ?>
 </body>
