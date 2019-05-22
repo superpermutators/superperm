@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			20 May 2019
+Date:			22 May 2019
 
-NB:  These notes include some features that are only present from version 12.0 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 13.0 onwards. Please always install the latest
 version of the program.
 
 ## Java client
@@ -127,10 +127,9 @@ DistributedChaffinMethod team permutators
 DistributedChaffinMethod team "spaces work"
 ```
 
-
 ## Time-limited run
 
-You can tell the program to run for a specified number of minutes, then wait to finish the current task before quitting.
+You can tell the program to run for a specified number of minutes, after which it will **wait to finish the current task** before quitting.
 
 The time limit is specified on the command line:
 
@@ -138,8 +137,15 @@ The time limit is specified on the command line:
 DistributedChaffinMethod timeLimit 120
 ```
 
-would tell the program to run for 120 minutes before quitting (after it has finished its current task).
+would tell the program to run for 120 minutes and then quit, **after it has finished its current task**.
 
+You can also enforce a stricter time limit, using the option `timeLimitHard`.  If you specify:
+
+```sh
+DistributedChaffinMethod timeLimitHard 120
+```
+
+then the program will run for 120 minutes and quit, within about 5 minutes of that quota, **even if** it is in the middle of a task.
 
 ## Multiple arguments
 
