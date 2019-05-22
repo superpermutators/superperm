@@ -436,8 +436,8 @@ for ($n = $max_n; $n >= $min_n; $n--)
 			//	Identify the lowest non-finalised waste
 			
 			$res0 = $pdo->query("SELECT MIN(waste) FROM witness_strings WHERE n=$n AND final='N'");
-			if ($res0 && ($row0=$res0->fetch(PDO::FETCH_NUM))) $wSearch=$row0[0];
-			else $wSearch=-1;
+			if ($res0 && ($row0=$res0->fetch(PDO::FETCH_NUM)) && is_string($row0[0])) $wSearch=intval($row0[0]);
+			else $wSearch=1000000;
 			
 			fwrite($fp,"<table class='strings'><caption><b>Results for <i>n</i> = $n</b> as of $rtime</caption><tr>\n");
 			for ($i = 0; $i < $nFields; $i++)
