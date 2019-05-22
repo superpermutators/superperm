@@ -2,13 +2,28 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			10 May 2019
+Date:			22 May 2019
 
-NB:  These notes include some features that are only present from version 9 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 13.0 onwards. Please always install the latest
 version of the program.
 
+## Java client
 
-## Building and testing
+A Java client is available in the repository. This consists of the file `DCM.jar` , and it requires Java release 8, which can be downloaded
+from <http://java.com>. 
+
+`DCM.jar` can be run simply by double-clicking it on the desktop for most operating systems, or by typing `java -jar DCM.jar` into a
+command line (assuming the jar file has been placed in the current directory).
+
+Once you run the Java client, simply type in your team name and hit the `Register` button. You can quit the program in either of two ways:
+`Finish task & quit`, which continues with the current task until it is completed, or `Give up task & quit` which stops work on the task
+immediately and tells the server to assign it to someone else, before quitting.
+
+The Java client does not read or write any files at all, though a log of its interactions with the server is available in a scrolling text box at the top
+of the application's window.
+
+
+## Building and testing the C client
 
 **DistributedChaffinMethod.c** is a single, standalone file for a command-line C program. It is intended to compile and run
 under MacOS, Linux and some versions of Windows.
@@ -19,6 +34,9 @@ In order to run correctly, the program needs:
 2. Permission to make outgoing connections to the internet.
 3. The presence of the "curl" command line tool, and the ability for the program to run it via the system() call
 in the C standard library. These are standard in MacOS/Linux, but for Windows will depend on your precise environment.
+
+Note that the program uses functions in `math.h`, so with some compilers it will require the switch `-lm` to link with the mathematical
+functions library.
 
 If the program compiles correctly, running it with the option "test" will simply test whether or not it can connect to
 the server and read back the expected response:
@@ -33,15 +51,17 @@ Fri May 10 07:39:29 2019 Server: Hello world.
 ```
 
 If you wish to commit to running the program to assist in the distributed search, simply run it with no arguments and it will
-loop indefinitely, waiting for available tasks to execute.
+loop indefinitely, waiting for available tasks to execute. Note that:
+
+* To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet; if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
+computations.
+* If a task completes in less than a certain amount of time, your program might sleep for the remainder of the time, to avoid bombarding the server with too much traffic.
+* If you wish to quit the program, there are several choices, discussed in the section **Shutting down the program**. It is much better if you can follow one of these methods, rather than killing the program while it is working on a task.
 
 You can monitor the ongoing results of the search at:
 
-<http://ada.mscsnet.mu.edu/ChaffinMethodResults/>
+<http://www.supermutations.net/ChaffinMethodResults.php>
 
-To make an effective contribution, the program needs to have (more or less) uninterrupted access to the internet;
-if it can't make a connection, it will loop, sleeping for a few minutes then trying again, rather than performing any useful
-computations.
 
 ## Building under Windows
 
@@ -79,7 +99,10 @@ STOP_ALL.txt
 
 then any instance of the program using that directory will treat that as a signal to shut down.
 
-If you are running under MacOS/Linux, you can type CTRL-C to tell the program to quit when it has finished with the current task.
+If you are running under MacOS/Linux, you can:
+* Type CTRL-C once to tell the program to quit when it has finished with the current task;
+* Type CTRL-C between three and six times, to tell the program to *relinquish* the current task (tell the server it has abandoned it) and quit.
+* If the program is unable to make contact with the server at all, hitting CTRL-C repeatedly will eventually force it to quit.
 
 Under Windows, CTRL-C will kill the program immediately, so we would prefer that you shut it down by creating a STOP file.
 Any text editor can be used to create a file with the required name, and it doesn't matter what text the
@@ -104,10 +127,9 @@ DistributedChaffinMethod team permutators
 DistributedChaffinMethod team "spaces work"
 ```
 
-
 ## Time-limited run
 
-You can tell the program to run for a specified number of minutes, then wait to finish the current task before quitting.
+You can tell the program to run for a specified number of minutes, after which it will **wait to finish the current task** before quitting.
 
 The time limit is specified on the command line:
 
@@ -115,8 +137,15 @@ The time limit is specified on the command line:
 DistributedChaffinMethod timeLimit 120
 ```
 
-would tell the program to run for 120 minutes before quitting (after it has finished its current task).
+would tell the program to run for 120 minutes and then quit, **after it has finished its current task**.
 
+You can also enforce a stricter time limit, using the option `timeLimitHard`.  If you specify:
+
+```sh
+DistributedChaffinMethod timeLimitHard 120
+```
+
+then the program will run for 120 minutes and quit, within about 5 minutes of that quota, **even if** it is in the middle of a task.
 
 ## Multiple arguments
 
