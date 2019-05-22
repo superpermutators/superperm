@@ -31,6 +31,7 @@ table.strings caption {padding: 10px; background-color: #eeeeee;
 table.strings tr.search {background-color: #ddffdd;}
 table.strings tr.prov {background-color: #fbe7b1;}
 span.waste {color: #cc3333; font-weight: bold;}
+span.waste2P {color: #3333cc; font-weight: bold; text-decoration: underline;}
 p.fp:first-letter, p.fp::first-letter {font-size: 130%;}
 div.status {background-color: #ddffdd; border-style: solid; border-color: black;
 	border-width: 2px; padding: 1ex; margin: 1ex; margin-bottom: 20px;}
@@ -90,17 +91,16 @@ if (is_string($str))
 		if ($strmin == 1 && $strmax == $n)
 			{
 			$perms = array();
+			$waste = array();
+			for ($i=0; $i < $n-1; $i++) $waste[] = 0;
 			
-			//	Loop over all length-n substrings
+			//	Loop over all length-n substrings, determining which characters are wasted
 			
-			$res=substr($str,0,$n-1);
-			$prevWaste=0;
 			for ($i=0; $i <= $slen - $n; $i++)
 				{
-				$c = substr($str,$n-1+$i,1);
 				$s = array_slice($stri,$i,$n);
 				$u = array_unique($s);
-				$waste=1;
+				$w=1;
 				if (count($u) == $n)
 					{
 					$pval = 0;
@@ -113,16 +113,27 @@ if (is_string($str))
 					if (!in_array($pval, $perms))
 						{
 						$perms[] = $pval;
-						$waste=0;
+						$w=0;
 						};
 					};
-				if ($waste!=$prevWaste)
-					{
-					if ($waste) $res = $res . '<span class="waste">';
-					else $res = $res . '</span>';
-					$prevWaste=$waste;
-					};
-				$res = $res . $c;
+				$waste[] = $w;
+				};
+				
+			$res=substr($str,0,$n-1);
+			$i = $n-1;
+			while ($i < $slen)
+				{
+				$j = $i;
+				$wi = $waste[$i];
+				while ($j < $slen && $waste[$j]==$wi) $j++;
+				$runLength = $j-$i;
+				$run = substr($str,$i,$runLength);
+
+				if ($wi==0) $res = $res . $run;
+				else if ($runLength==1) $res = $res ."<span class='waste'>" .$run."</span>";
+				else $res = $res ."<span class='waste2P'>" .$run."</span>";
+				
+				$i=$j;
 				};
 			return $res;
 			};
