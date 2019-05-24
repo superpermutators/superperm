@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			22 May 2019
+Date:			24 May 2019
 
-NB:  These notes include some features that are only present from version 13.0 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 13.1 onwards. Please always install the latest
 version of the program.
 
 ## Java client
@@ -89,7 +89,7 @@ find an alternative set of C tools in order to proceed.
 It is best if the program can be left running continuously, but if you do kill the program or shut down the computer it is
 running on, then (eventually) the task it was assigned will be reassigned to another instance of the program.
 
-You can tell the program to shut down cleanly, between tasks, by placing a file in its working directory with the name:
+You can tell the program to shut down cleanly, **after it has finished with the current task**, by placing a file in its working directory with the name:
 
 STOP_NNNNNNNNNN.txt
 
@@ -97,16 +97,28 @@ where NNNNNNN is the same program instance number as used to distinguish the log
 
 STOP_ALL.txt
 
-then any instance of the program using that directory will treat that as a signal to shut down.
+then *any* instance of the program using that directory will treat that as a signal to shut down. Note that a task might take more
+than an hour to complete, so the signal from a STOP file might not come into effect for some time.
 
-If you are running under MacOS/Linux, you can:
-* Type CTRL-C once to tell the program to quit when it has finished with the current task;
-* Type CTRL-C between three and six times, to tell the program to *relinquish* the current task (tell the server it has abandoned it) and quit.
+You can also tell the program to **give up on its current task**, by placing a file in its working directory with the name:
+
+QUIT_NNNNNNNNNN.txt
+
+or:
+
+QUIT_ALL.txt
+
+When it sees one of these QUIT files, the program will tell the server to reassign its task to another client, and then quit. This should happen
+in less than a minute.
+
+If you are running under MacOS/Linux, you can also:
+* Type CTRL-C once to tell the program to quit **after it has finished with the current task**.
+* Type CTRL-C between three and six times, to tell the program to **give up on the current task and quit**.
 * If the program is unable to make contact with the server at all, hitting CTRL-C repeatedly will eventually force it to quit.
 
-Under Windows, CTRL-C will kill the program immediately, so we would prefer that you shut it down by creating a STOP file.
+Under Windows, CTRL-C will kill the program immediately, so we would prefer that you shut it down by creating a STOP or QUIT file.
 Any text editor can be used to create a file with the required name, and it doesn't matter what text the
-file contains. Just remember to delete the STOP file if you want to start running the program again (e.g. after an upgrade).
+file contains. Just remember to delete the STOP/QUIT file if you want to start running the program again (e.g. after an upgrade).
 
 
 ## Team name

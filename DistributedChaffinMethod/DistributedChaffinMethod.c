@@ -9,8 +9,8 @@ Version: 1 to 8, 10 - 13
 Secondary Author: Jay Pantone
 Version: 9
 
-Current version: 13.0
-Last Updated: 21 May 2019
+Current version: 13.1
+Last Updated: 24 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -147,6 +147,8 @@ For more details, see the accompanying README.
 
 #define STOP_FILE_NAME_TEMPLATE "STOP_%u.txt"
 #define STOP_FILE_ALL "STOP_ALL.txt"
+#define QUIT_FILE_NAME_TEMPLATE "QUIT_%u.txt"
+#define QUIT_FILE_ALL "QUIT_ALL.txt"
 
 //	Max size of file names
 
@@ -327,6 +329,9 @@ int serverLockFD;
 static char SERVER_RESPONSE_FILE_NAME[FILE_NAME_SIZE];
 static char LOG_FILE_NAME[FILE_NAME_SIZE];
 static char STOP_FILE_NAME[FILE_NAME_SIZE];
+static char QUIT_FILE_NAME[FILE_NAME_SIZE];
+
+static char *sqFiles[]={STOP_FILE_NAME,STOP_FILE_ALL,QUIT_FILE_NAME,QUIT_FILE_ALL};
 
 //	Time quota, in minutes
 //	The default is for the "timeLimit" / "timeLimitHard "option with no argument;
@@ -424,6 +429,7 @@ while(TRUE)
 	sprintf(SERVER_RESPONSE_FILE_NAME,SERVER_RESPONSE_FILE_NAME_TEMPLATE,programInstance);
 	sprintf(LOG_FILE_NAME,LOG_FILE_NAME_TEMPLATE,programInstance);
 	sprintf(STOP_FILE_NAME,STOP_FILE_NAME_TEMPLATE,programInstance);
+	sprintf(QUIT_FILE_NAME,QUIT_FILE_NAME_TEMPLATE,programInstance);
 	
 	//	Check for pre-existing files to avoid any collisions
 	
@@ -549,8 +555,13 @@ if (justTest) exit(0);
 registerClient();
 
 sprintf(buffer,
-	"To stop the program automatically between tasks, create a file %s or %s in the working directory\n",
+	"To stop the program automatically BETWEEN tasks, create a file %s or %s in the working directory",
 	STOP_FILE_NAME,STOP_FILE_ALL);
+logString(buffer);
+
+sprintf(buffer,
+	"To stop the program automatically EVEN DURING tasks, create a file %s or %s in the working directory\n",
+	QUIT_FILE_NAME,QUIT_FILE_ALL);
 logString(buffer);
 
 //	Set up handler for SIGINT (e.g. from CTRL-C)
@@ -593,26 +604,20 @@ while (TRUE)
 	
 	#endif
 	
-	//	Check for STOP files
+	//	Check for STOP/QUIT files
 	
-	fp = fopen(STOP_FILE_NAME,"r");
-	if (fp!=NULL)
+	for (int k=0;k<4;k++)
 		{
-		sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",STOP_FILE_NAME);
-		logString(buffer);
-		unregisterClient();
-		exit(0);
+		fp = fopen(sqFiles[k],"r");
+		if (fp!=NULL)
+			{
+			sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
+			logString(buffer);
+			unregisterClient();
+			exit(0);
+			};
 		};
 	
-	fp = fopen(STOP_FILE_ALL,"r");
-	if (fp!=NULL)
-		{
-		sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",STOP_FILE_ALL);
-		logString(buffer);
-		unregisterClient();
-		exit(0);
-		};
-		
 	//	Check to see if we exceed time quota
 	
 	if (timeQuotaEitherMins > 0)
@@ -1110,13 +1115,27 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	double timeSinceLastTimeReport= difftime(timeNow, timeOfLastTimeReport);
 	double timeSinceLastServerCheckin = difftime(timeNow, timeOfLastServerCheckin);
 	
+	//	Check for QUIT files
+	
+	for (int k=2;k<4;k++)
+		{
+		FILE *fp = fopen(sqFiles[k],"r");
+		if (fp!=NULL)
+			{
+			sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
+			logString(buffer);
+			unregisterClient();
+			exit(0);
+			};
+		};
+
 	if (timeQuotaHardMins > 0)
 		{
 		double elapsedTime = difftime(timeNow, startedRunning);
 		if (elapsedTime / 60 > timeQuotaHardMins)
 			{
 			logString("A 'timeLimitHard' quota has been reached, so the program will relinquish the current task with the server then quit.\n");
-			if (currentTask.task_id != 0) unregisterClient();
+			unregisterClient();
 			exit(0);
 			};
 		};
