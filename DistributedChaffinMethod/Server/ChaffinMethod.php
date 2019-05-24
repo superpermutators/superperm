@@ -39,10 +39,9 @@ define('MAX_TIME_IN_SUBTREE', 0);		//	Default (not actual time, just means usual
 
 //	**********************************
 
-//	Main or fork repo to send people to for upgrade
+//	Repo to send people to for upgrade
 
-//define('CODE_REPO','https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c');
-define('CODE_REPO','https://github.com/nagegerg/superperm/blob/master/DistributedChaffinMethod/DistributedChaffinMethod.c [Note this is still just a test fork of the main project.]');
+define('CODE_REPO','https://github.com/superpermutators/superperm/blob/master/DistributedChaffinMethod');
 
 //	Version of the client ABSOLUTELY required.
 //  Note that if this is changed while clients are running tasks,
@@ -60,7 +59,7 @@ $versionForNewTasks = 13;
 
 //	Maximum number of clients to register
 
-$maxClients = 5000;
+$maxClients = 10000;
 
 //	Maximum number of times to retry a transaction
 
@@ -282,13 +281,19 @@ function maybeUpdateWitnessStrings($n, $w, $p, $str, $pro, $teamName) {
 				
 					if ($pro > 0 && $pro < $pexcl) {
 						$final = ($pro == $p+1) ? "Y" : "N";
-						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
-						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
+//						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,excl_perms,final,team) VALUES(?, ?, ?, ?, ?, ?, ?)");
+//						$res->execute([$n, $w, $p, $str, $pro, $final, $teamName]);
+
+						$res = $pdo->prepare("UPDATE witness_strings SET perms=?, str=?, excl_perms=?, final=?, team=? WHERE n=? AND waste=?");
+						$res->execute([$p, $str, $pro, $final, $teamName, $n, $w]);
 						$result = "($n, $w, $p)\n";
 						$pexcl = $pro;
 					} else {
-						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
-						$res->execute([$n, $w, $p, $str, $teamName]);
+//						$res = $pdo->prepare("REPLACE INTO witness_strings (n,waste,perms,str,team) VALUES(?, ?, ?, ?, ?)");
+//						$res->execute([$n, $w, $p, $str, $teamName]);
+
+						$res = $pdo->prepare("UPDATE witness_strings SET perms=?, str=?, team=? WHERE n=? AND waste=?");
+						$res->execute([$p, $str, $teamName, $n, $w]);
 						$result = "($n, $w, $p)\n";
 					}
 				} else {

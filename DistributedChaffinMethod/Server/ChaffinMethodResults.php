@@ -49,9 +49,6 @@ tr.active {background-color: #ddffdd;}
 </head>
 <body>
 <h1>Distributed Chaffin Method Results</h1>
-<p>The results shown below are from a <b>test server</b> that is trying out new software, which will soon be installed on the main server.
-Team Reykjavik <a href="http://ada.mscsnet.mu.edu/ChaffinMethodResults/">recently found</a> an optimal string for <i>w</i>=116, but it would be nice to independently confirm their result
-before moving on to the next stage. So if you have some spare CPU cores, join in the search!</p>
 <ul>
 <li>What is a <a href="https://www.gregegan.net/SCIENCE/Superpermutations/Superpermutations.html">superpermutation</a>?</li>
 <li>What is the <a href="https://github.com/superpermutators/superperm/wiki/Chaffin-method">Chaffin method</a>?</li>
@@ -153,7 +150,8 @@ global $rtime, $noStatusShown;
 
 $noStatusShown=FALSE;
 
-if ($pwit > $pte) $pte=$pwit;
+$gotBetterWitness = $pwit > $pte;
+if ($gotBetterWitness) $pte=$pwit;
 
 $passNames = array("first","second","third","fourth","fifth");
 $rlens=array(0,0,0,9,33,153,872,5906);
@@ -171,7 +169,7 @@ else $edisc = $edisc . " thanks to the result for <i>w</i>=".($w-1).", which can
 if ($pwit>0)
 {
 $edisc = $edisc . "So far, we have found a string with $pwit permutations";
-if ($iter==0 && $pwit <= $pte) $edisc = $edisc . ", which was discovered as a by-product of an earlier search.";
+if ($iter==0 && !$gotBetterWitness) $edisc = $edisc . ", which was discovered as a by-product of an earlier search.";
 else $edisc = $edisc . ".";
 }
 else
