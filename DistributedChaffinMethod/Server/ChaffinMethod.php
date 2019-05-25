@@ -37,6 +37,14 @@ define('CLIENT_CHECKIN', 180);		//	Default
 define('MAX_TIME_IN_SUBTREE', 0);		//	Default (not actual time, just means usual values)
 //define('MAX_TIME_IN_SUBTREE', 300);	//	Extreme slowdown
 
+//	*** Emergency slowdown lever 4 ***
+
+//	If a file ServerPressure.txt exists in the PHP_FILES directory, we tell the client the server is under pressure and to slow down
+
+function getServerPressure() {
+	return 'Pressure: ' . (file_exists(PHP_FILES . 'ServerPressure.txt') ? '1' : '0') . "\n";
+}
+
 //	**********************************
 
 //	Repo to send people to for upgrade
@@ -1038,6 +1046,8 @@ function maybeFinishedAllTasks() {
 function finishTask($id, $access, $pro, $str, $teamName, $nodeCount, $stressTest) {
 	global $pdo, $maxRetries, $stage;
 	
+	$sp = getServerPressure();
+	
 	//	Transaction #1: 'tasks' / 'finished_tasks' / 'num_redundant_tasks'
 
 	$ok=FALSE;
@@ -1143,7 +1153,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount, $stressTest
 		}
 	}
 	
-	if (!$ok) return $result;
+	if (!$ok) return $result . $sp;
 	
 	if ($redun) {
 	
@@ -1317,7 +1327,7 @@ function finishTask($id, $access, $pro, $str, $teamName, $nodeCount, $stressTest
 	
 	if ($n==5 || ($n==6 && $w < 100)) maybeFinishedAllTasks();
 
-	return "OK\n";
+	return "OK\n" . $sp;
 }
 
 //	Function to check-in a task
