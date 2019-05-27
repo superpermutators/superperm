@@ -2,9 +2,9 @@
 
 Author:			Greg Egan  
   (minor updates by Jay Pantone)  
-Date:			24 May 2019
+Date:			27 May 2019
 
-NB:  These notes include some features that are only present from version 13.1 onwards. Please always install the latest
+NB:  These notes include some features that are only present from version 13.2 onwards. Please always install the latest
 version of the program.
 
 ## Java client
@@ -19,9 +19,28 @@ Once you run the Java client, simply type in your team name and hit the `Registe
 `Finish task & quit`, which continues with the current task until it is completed, or `Give up task & quit` which stops work on the task
 immediately and tells the server to assign it to someone else, before quitting.
 
-The Java client does not read or write any files at all, though a log of its interactions with the server is available in a scrolling text box at the top
+The Java client does not read or write any files at all.  A log of its interactions with the server is available in a scrolling text box at the top
 of the application's window.
 
+### Java security
+
+Depending on your operating system and security settings, you might receive warnings against running a file downloaded from the internet.
+To override these, you might need to open the jar file the first time by right-clicking it once and choosing `Open`, rather than double-clicking.
+
+If you have any concerns yourself about the security of the program, you can verify that it will run in "sandbox" mode by typing the
+following into a command line (assuming the jar file has been placed in the current directory):
+
+`jar xf DCM.jar META-INF/MANIFEST.MF`
+
+This will extract the manifest file from the jar and place it in the file `META-INF/MANIFEST.MF`. If you examine this file with a text editor,
+you can check that the `Permissions` property listed in the manifest is `sandbox`, which means the Java application will be run **without**
+the permission to read or write any files on your computer.
+
+## Windows ready-to-run client and scripts
+
+A precompiled client for 64-bit versions of Windows is available in the Windows64 folder of the repository. Follow the instructions in the
+`README` file inside that folder to install and use this client, along with scripts that automate the process of starting and stopping or quitting
+the program.
 
 ## Building and testing the C client
 
@@ -62,7 +81,6 @@ You can monitor the ongoing results of the search at:
 
 <http://www.supermutations.net/ChaffinMethodResults.php>
 
-
 ## Building under Windows
 
 There are a wide variety of C compilers, IDEs and runtime environments for Windows, and it is impossible for us to test them all in
@@ -82,7 +100,6 @@ then the computation was completed successfully, and you can go ahead and build 
 
 However, if the calculation is *not* completed, and **WindowsBugTest** crashes before printing the final line shown above, you will need to
 find an alternative set of C tools in order to proceed.
-
 
 ## Shutting down the program
 
@@ -119,7 +136,6 @@ If you are running under MacOS/Linux, you can also:
 Under Windows, CTRL-C will kill the program immediately, so we would prefer that you shut it down by creating a STOP or QUIT file.
 Any text editor can be used to create a file with the required name, and it doesn't matter what text the
 file contains. Just remember to delete the STOP/QUIT file if you want to start running the program again (e.g. after an upgrade).
-
 
 ## Team name
 
@@ -169,7 +185,6 @@ Example:
 DistributedChaffinMethod timeLimit 120 team "golden eagles"
 ```
 
-
 ## Files written
 
 The program writes files:
@@ -178,5 +193,3 @@ The program writes files:
 2. A temporary file, "DCMServerResponse_NNNNNNNNNN.txt"
 
 where NNNNNNNNNN is a random integer chosen by each instance of the program.
-
-

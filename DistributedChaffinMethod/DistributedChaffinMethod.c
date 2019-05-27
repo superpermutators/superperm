@@ -9,8 +9,8 @@ Version: 1 to 8, 10 - 13
 Secondary Author: Jay Pantone
 Version: 9
 
-Current version: 13.1
-Last Updated: 24 May 2019
+Current version: 13.2
+Last Updated: 27 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -308,6 +308,8 @@ int timeBetweenServerCheckins = DEFAULT_TIME_BETWEEN_SERVER_CHECKINS;
 int timeBeforeSplit = DEFAULT_TIME_BEFORE_SPLIT;
 int maxTimeInSubtree = DEFAULT_MAX_TIME_IN_SUBTREE;
 
+int serverPressure = 0;				//	Set greater than 0 if server is facing heavy traffic
+
 #if UNIX_LIKE
 
 //	Signal action structure
@@ -371,7 +373,6 @@ void registerClient(void);
 void unregisterClient(void);
 void relinquishTask(void);
 int getTask(struct task *tsk);
-int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi);
 void doTask(void);
 int checkIn(void);
 int splitTask(int pos);
@@ -636,7 +637,7 @@ while (TRUE)
 		
 	//	If we did a very quick task, maybe sleep
 	
-	if (startedCurrentTask>0)
+	if (serverPressure>0 && startedCurrentTask>0)
 		{
 		time_t timeNow;
 		time(&timeNow);
@@ -1965,7 +1966,14 @@ while (!feof(fp))
 	lineNumber++;
 		
 	if (strncmp(buffer,"Error",5)==0) error=TRUE;
+	
 	if (strncmp(buffer,"Wait",4)==0) wait=TRUE;
+	
+	if (strncmp(buffer,"Pressure: ",10)==0)
+		{
+		if (sscanf(buffer+10, "%d", &serverPressure) !=1) serverPressure=0;
+		};
+	
 	if (lineNumber==1 && responseList!=NULL)
 		{
 		for (int q=0;q<nrl;q++)
@@ -2225,60 +2233,6 @@ while (TRUE)
 	logString(buffer);
 	sleepForSecs(sleepTime);
 	};
-#endif
-}
-
-int getMax(int nval, int wval, int oldMax, unsigned int tid, unsigned int acc, unsigned int cid, char *ip, unsigned int pi)
-{
-#if NO_SERVER
-
-return oldMax;
-
-#else
-
-static char buffer[BUFFER_SIZE];
-sprintf(buffer,
-	"action=checkMax&n=%d&w=%d&id=%u&access=%u&clientID=%u&IP=%s&programInstance=%u",
-		nval, wval, tid, acc, cid, ip, pi);
-sendServerCommandAndLog(buffer,NULL,0);
-
-FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
-if (fp==NULL)
-	{
-	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
-	exit(EXIT_FAILURE);
-	};
-
-int max = oldMax;
-while (!feof(fp))
-	{
-	//	Get a line from the server response, ensure it is null-terminated without a newline
-	
-	char *f=fgets(buffer,BUFFER_SIZE,fp);
-	if (f==NULL) break;
-	size_t blen = strlen(buffer);
-	if (buffer[blen-1]=='\n')
-		{
-		buffer[blen-1]='\0';
-		blen--;
-		};
-	
-	if (buffer[0]=='(')
-		{
-		int n0, w0, p0;
-		sscanf(buffer+1,"%d,%d,%d",&n0,&w0,&p0);
-		if (n0==nval && w0==wval && p0 > oldMax)
-			{
-			max = p0;
-			sprintf(buffer,"Updated max_perm to %d",max);
-			logString(buffer);
-			};
-		break;
-		};
-	};
-fclose(fp);
-
-return max;
 #endif
 }
 
