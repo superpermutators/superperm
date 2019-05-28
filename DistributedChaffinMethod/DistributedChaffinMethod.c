@@ -206,7 +206,6 @@ For more details, see the accompanying README.
 //	Macros
 //	------
 
-#define MFREE(p) if ((p)!=NULL) free(p); 
 #define CHECK_MEM(p) if ((p)==NULL) {printf("Insufficient memory\n"); exit(EXIT_FAILURE);};
 
 //	Structure definitions
@@ -705,26 +704,26 @@ fn = fac(n);
 
 //	Storage for current string
 
-MFREE(curstr)
+free(curstr)
 CHECK_MEM( curstr = (char *)malloc(2*fn*sizeof(char)) )
-MFREE(curi)
+free(curi)
 CHECK_MEM( curi = (char *)malloc(2*fn*sizeof(char)) )
-MFREE(asciiString)
+free(asciiString)
 CHECK_MEM( asciiString = (char *)malloc(2*fn*sizeof(char)) )
-MFREE(asciiString2)
+free(asciiString2)
 CHECK_MEM( asciiString2 = (char *)malloc(2*fn*sizeof(char)) )
-MFREE(bestSeen)
+free(bestSeen)
 CHECK_MEM( bestSeen = (char *)malloc(2*fn*sizeof(char)) )
 
 //	Storage for things associated with different numbers of wasted characters
 
 maxW = fn;
 
-MFREE(mperm_res)
+free(mperm_res)
 CHECK_MEM( mperm_res = (int *)malloc(maxW*sizeof(int)) )
-MFREE(klbLen)
+free(klbLen)
 CHECK_MEM( klbLen = (int *)malloc(maxW*sizeof(int)) )
-MFREE(klbStrings)
+free(klbStrings)
 CHECK_MEM( klbStrings = (char **)malloc(maxW*sizeof(char *)) )
 
 //	Storage for known-lower-bound strings
@@ -786,13 +785,13 @@ int *p0 = permTab[n-1];
 //	Set up flags that say whether each number is a valid permutation or not,
 //	and whether we have visited a given permutation.
 
-MFREE(valid)
+free(valid)
 CHECK_MEM( valid = (char *)malloc(maxInt*sizeof(char)) )
-MFREE(unvisited)
+free(unvisited)
 CHECK_MEM( unvisited = (char *)malloc(maxInt*sizeof(char)) )
-MFREE(successor1)
+free(successor1)
 CHECK_MEM( successor1 = (int *)malloc(maxInt*sizeof(int)) )
-MFREE(successor2)
+free(successor2)
 CHECK_MEM( successor2 = (int *)malloc(maxInt*sizeof(int)) )
 
 
@@ -830,14 +829,14 @@ free(permTab);
 
 //	Also, record which 1-cycle each permutation belongs to
 
-MFREE(ldd)
+free(ldd)
 CHECK_MEM( ldd = (int *)malloc(maxInt*sizeof(int)) )
 
 noc = fac(n-1);
 nocThresh = noc/2;
-MFREE(oneCycleCounts)
+free(oneCycleCounts)
 CHECK_MEM( oneCycleCounts = (int *)malloc(maxInt*sizeof(int)) )
-MFREE(oneCycleIndices)
+free(oneCycleIndices)
 CHECK_MEM( oneCycleIndices = (int *)malloc(maxInt*sizeof(int)) )
 
 //	Loop through all n-digit sequences
@@ -905,7 +904,7 @@ while (more)
 	
 //	Set up a table of the next digits to follow from a given (n-1)-digit sequence
 
-MFREE(nextDigits)
+free(nextDigits)
 CHECK_MEM( nextDigits = (struct digitScore *)malloc(maxIntM*(n-1)*sizeof(struct digitScore)) )
 int dsum = n*(n+1)/2;
 
