@@ -9,8 +9,8 @@ Version: 1 to 8, 10 - 13
 Secondary Author: Jay Pantone
 Version: 9
 
-Current version: 13.2
-Last Updated: 27 May 2019
+Current version: 13.3
+Last Updated: 29 May 2019
 
 This program implements Benjamin Chaffin's algorithm for finding minimal superpermutations with a branch-and-bound
 search.  It is based in part on Nathaniel Johnston's 2014 version of Chaffin's algorithm; see:
@@ -54,6 +54,7 @@ For more details, see the accompanying README.
 #include <sys/stat.h>
 #include <ctype.h>
 #include <errno.h>
+
 
 #ifdef _WIN32
 
@@ -343,6 +344,10 @@ static char *sqFiles[]={STOP_FILE_NAME,STOP_FILE_ALL,QUIT_FILE_NAME,QUIT_FILE_AL
 #define DEFAULT_TIME_LIMIT 120
 int timeQuotaMins=0, timeQuotaHardMins=0, timeQuotaEitherMins=0;
 
+//	When "longRunner" option is chosen, task never decides it is taking too long and shrinks sub-tree depth
+
+int longRunner=FALSE;
+
 //  Default team name
 #define DEFAULT_TEAM_NAME "anonymous"
 #define MAX_TEAM_NAME_LENGTH 32
@@ -405,6 +410,7 @@ FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
 timeQuotaHardMins=0;
+longRunner=FALSE;
 teamName = DEFAULT_TEAM_NAME;
 currentTask.task_id = 0;
 
@@ -459,6 +465,7 @@ logString(buffer);
 for (int i=1;i<argc;i++)
 	{
 	if (strcmp(argv[i],"test")==0) justTest=TRUE;
+	else if (strcmp(argv[i],"longRunner")==0) longRunner=TRUE;
 	else if (strcmp(argv[i],"timeLimit")==0)
 		{
 		if (i+1<argc)
@@ -1192,7 +1199,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	
 	//	Taper off nodesToProbe if we have been running too long
 
-	if (timeSpentOnTask > TAPER_THRESHOLD)
+	if ((!longRunner) && timeSpentOnTask > TAPER_THRESHOLD)
 		{
 		nodesToProbe = (int64_t)(nodesToProbe0 * exp(-(timeSpentOnTask-TAPER_THRESHOLD)/TAPER_DECAY));
 		sprintf(buffer,"Task taking too long, will only examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
@@ -1819,7 +1826,7 @@ int getServerInstanceCount()
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
 if (fp==NULL)
 	{
-	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Error: Unable to write to server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 fclose(fp);
@@ -1838,7 +1845,7 @@ if (res!=0) return 1;
 fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
-	printf("Error: Unable to read server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Error: Unable to read server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 if (fscanf(fp,"%d",&res)!=1) res=1;
@@ -1883,7 +1890,7 @@ while (TRUE)
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"wt");
 if (fp==NULL)
 	{
-	printf("Error: Unable to write to server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Error: Unable to write to server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 fclose(fp);
@@ -1904,7 +1911,7 @@ free(cmd);
 fp = fopen(SERVER_RESPONSE_FILE_NAME,"r");
 if (fp==NULL)
 	{
-	printf("Error: Unable to open server response file %s to read\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Error: Unable to open server response file %s to read (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 fseek(fp,0,SEEK_END);
@@ -1947,7 +1954,7 @@ int error=FALSE, wait=FALSE, response=0;
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
-	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Unable to read from server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 
@@ -2119,7 +2126,7 @@ sendServerCommandAndLog(buffer,NULL,0);
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
-	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Unable to read from server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 
@@ -2319,7 +2326,7 @@ while (TRUE)
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
 	{
-	printf("Unable to read from server response file %s\n",SERVER_RESPONSE_FILE_NAME);
+	printf("Unable to read from server response file %s (%s)\n",SERVER_RESPONSE_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 
