@@ -1,7 +1,10 @@
 CC=gcc
-CFLAGS = -O3 -std=c99 -D_XOPEN_SOURCE
+CFLAGS = -O3 -std=c99 -D_XOPEN_SOURCE -Wall
 LDLIBS = -lm
 
 all: DistributedChaffinMethod
 
-.PHONY: all
+clean:
+	rm -f DistributedChaffinMethod
+
+.PHONY: all clean
