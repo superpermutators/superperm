@@ -368,7 +368,7 @@ void logString(const char *fmt, ...);
 void sleepForSecs(int secs);
 void setupForN(int nval);
 int sendServerCommand(const char *command);
-int sendServerCommandAndLog(const char *s, const char **responseList, int nrl);
+int sendServerCommandAndLog(const char **responseList, int nrl, const char *fmt, ...);
 int logServerResponse(const char **responseList, int nrl);
 void registerClient(void);
 void unregisterClient(void);
@@ -538,7 +538,7 @@ for (int i=1;i<argc;i++)
 
 logString("Team name: %s",teamName);
 const char *hwRL[]={"Hello world."};
-if (sendServerCommandAndLog("action=hello",hwRL,sizeof(hwRL)/sizeof(hwRL[0])) != 1)
+if (sendServerCommandAndLog(hwRL,sizeof(hwRL)/sizeof(hwRL[0]), "action=hello") != 1)
 	{
 	printf("Did not obtained expected response from server\n");
 	exit(EXIT_FAILURE);
@@ -965,8 +965,6 @@ mperm_res[0] = n;		//	With no wasted characters, we can visit n permutations
 
 void doTask()
 {
-static char buffer[BUFFER_SIZE];
-
 tot_bl = currentTask.w_value;
 
 //	Initialise all permutations as unvisited
@@ -1055,10 +1053,14 @@ asciiString[bestSeenLen] = '\0';
 if (!cancelledTask)
 while (TRUE)
 	{
-	sprintf(buffer,"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s&nodeCount=%"PRId64,
-		currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName, totalNodeCount);
 	const char *ftRL[]={"OK","Cancelled"};
-	if (sendServerCommandAndLog(buffer,ftRL,sizeof(ftRL)/sizeof(ftRL[0]))>0) break;
+	int ret;
+
+	ret = sendServerCommandAndLog(ftRL,sizeof(ftRL)/sizeof(ftRL[0]),
+		"action=finishTask&id=%u&access=%u&str=%s&pro=%u&team=%s&nodeCount=%"PRId64,
+		currentTask.task_id, currentTask.access_code, asciiString, max_perm+1, teamName, totalNodeCount);
+
+	if (ret > 0) break;
 	
 	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
@@ -1600,8 +1602,6 @@ else
 
 void witnessCurrentString(int size)
 {
-static char buffer[BUFFER_SIZE];
-
 //	Convert current digit string to null-terminated ASCII string
 
 for (int k=0;k<size;k++) asciiString[k] = '0'+curstr[k];
@@ -1617,9 +1617,13 @@ logString("Found %d permutations in string %s", max_perm, asciiString);
 
 while (TRUE)
 	{
-	sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,tot_bl,asciiString,teamName);
 	const char *wsRL[]={"Valid string"};
-	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
+	int ret;
+
+	ret = sendServerCommandAndLog(wsRL,sizeof(wsRL)/sizeof(wsRL[0]),
+		"action=witnessString&n=%u&w=%u&str=%s&team=%s",
+		n,tot_bl,asciiString,teamName);
+	if (ret == 1) break;
 	
 	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
@@ -1630,8 +1634,6 @@ while (TRUE)
 
 void witnessLowerBound(char *s, int size, int w, int p)
 {
-static char buffer[BUFFER_SIZE];
-
 //	Convert digit string to null-terminated ASCII string
 
 for (int k=0;k<size;k++) asciiString[k] = '0'+s[k];
@@ -1647,9 +1649,14 @@ logString("Found new lower bound string for w=%d with %d permutations in string 
 
 while (TRUE)
 	{
-	sprintf(buffer,"action=witnessString&n=%u&w=%u&str=%s&team=%s",n,w,asciiString,teamName);
 	const char *wsRL[]={"Valid string"};
-	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
+	int ret;
+
+	ret = sendServerCommandAndLog(wsRL,sizeof(wsRL)/sizeof(wsRL[0]),
+		"action=witnessString&n=%u&w=%u&str=%s&team=%s",
+		n,w,asciiString,teamName);
+
+	if (ret == 1) break;
 	
 	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
@@ -2100,8 +2107,9 @@ return tsk->n_value;
 int getTask(struct task *tsk)
 {
 static char buffer[BUFFER_SIZE];
-sprintf(buffer,"action=getTask&clientID=%u&IP=%s&programInstance=%u&team=%s",clientID,ipAddress,programInstance,teamName);
-sendServerCommandAndLog(buffer,NULL,0);
+sendServerCommandAndLog(NULL,0,
+	"action=getTask&clientID=%u&IP=%s&programInstance=%u&team=%s",
+	clientID,ipAddress,programInstance,teamName);
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
 if (fp==NULL)
@@ -2187,17 +2195,31 @@ return 0;
 
 #endif
 
-int sendServerCommandAndLog(const char *s, const char **responseList, int nrl)
+int sendServerCommandAndLog(const char **responseList, int nrl, const char *fmt, ...)
 {
 #if !NO_SERVER
-logString("To server: %s",s);
+char cmd[BUFFER_SIZE];
+va_list va;
+int count;
+
+va_start(va, fmt);
+count = vsnprintf(cmd, BUFFER_SIZE, fmt, va);
+va_end(va);
+
+if (count >= BUFFER_SIZE)
+	{
+	logString("BUFFER_SIZE too small for command.\n");
+	exit(EXIT_FAILURE);
+	}
+
+logString("To server: %s",cmd);
 
 time(&timeOfLastServerCheckin);
 
 while (TRUE)
 	{
 	int sleepTime = 0;
-	int srep=sendServerCommand(s);
+	int srep=sendServerCommand(cmd);
 	if (srep==0)
 		{
 		int sr = logServerResponse(responseList, nrl);
@@ -2226,7 +2248,6 @@ while (TRUE)
 int splitTask(int pos)
 {
 int res=0;
-static char buffer[BUFFER_SIZE];
 
 for (int i=0;i<pos;i++) asciiString[i]='0'+curstr[i];
 asciiString[pos]='\0';
@@ -2236,10 +2257,10 @@ asciiString2[pos]='\0';
 
 while (TRUE)
 	{
-	sprintf(buffer,"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
-		currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
 	const char *stRL[]={"OK","Done","Cancelled"};
-	res = sendServerCommandAndLog(buffer,stRL,sizeof(stRL)/sizeof(stRL[0]));
+	res = sendServerCommandAndLog(stRL,sizeof(stRL)/sizeof(stRL[0]),
+		"action=splitTask&id=%u&access=%u&newPrefix=%s&branchOrder=%s",
+		currentTask.task_id, currentTask.access_code,asciiString,asciiString2);
 	if (res>0) break;
 	
 	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
@@ -2255,14 +2276,13 @@ return res;
 int checkIn()
 {
 int res=0;
-static char buffer[128];
 
 while (TRUE)
 	{
-	sprintf(buffer,"action=checkIn&id=%u&access=%u",
-		currentTask.task_id, currentTask.access_code);
 	const char *chkRL[]={"OK","Done","Cancelled"};
-	res = sendServerCommandAndLog(buffer,chkRL,sizeof(chkRL)/sizeof(chkRL[0]));
+	res = sendServerCommandAndLog(chkRL,sizeof(chkRL)/sizeof(chkRL[0]),
+		"action=checkIn&id=%u&access=%u",
+		currentTask.task_id, currentTask.access_code);
 	if (res>0) break;
 	
 	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
@@ -2287,9 +2307,10 @@ static char buffer[BUFFER_SIZE];
 
 while (TRUE)
 	{
-	sprintf(buffer,"action=register&programInstance=%u&team=%s",programInstance,teamName);
 	const char *regRL[]={"Registered"};
-	int sr = sendServerCommandAndLog(buffer,regRL,sizeof(regRL)/sizeof(regRL[0]));
+	int sr = sendServerCommandAndLog(regRL,sizeof(regRL)/sizeof(regRL[0]),
+		"action=register&programInstance=%u&team=%s",
+		    programInstance,teamName);
 	if (sr==1) break;
 	
 	logString("Will retry after %d seconds",timeBetweenServerCheckins);
@@ -2376,12 +2397,9 @@ return;
 
 void unregisterClient()
 {
-char buffer[256];
-
-sprintf(buffer,
+sendServerCommandAndLog(NULL,0,
 	"action=unregister&clientID=%u&IP=%s&programInstance=%u",
-		clientID, ipAddress, programInstance);
-sendServerCommandAndLog(buffer,NULL,0);
+	clientID, ipAddress, programInstance);
 }
 
 #endif
@@ -2397,12 +2415,9 @@ return;
 
 void relinquishTask()
 {
-char buffer[128];
-
-sprintf(buffer,
+sendServerCommandAndLog(NULL,0,
 	"action=relinquishTask&id=%u&access=%u&clientID=%u",
-		currentTask.task_id,currentTask.access_code,clientID);
-sendServerCommandAndLog(buffer,NULL,0);
+	currentTask.task_id,currentTask.access_code,clientID);
 }
 
 #endif
@@ -2441,7 +2456,6 @@ else
 
 void sleepUntilSiblingsFreeServer()
 {
-static char buffer[128];
 if (useServerLock)
 	{
 	int serverLockIsOurs = FALSE;
