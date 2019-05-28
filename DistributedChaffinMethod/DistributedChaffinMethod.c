@@ -53,6 +53,7 @@ For more details, see the accompanying README.
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <ctype.h>
+#include <errno.h>
 
 #ifdef _WIN32
 
@@ -1792,7 +1793,7 @@ printf("%s %s\n",tsb, s);
 FILE *fp = fopen(LOG_FILE_NAME,"at");
 if (fp==NULL)
 	{
-	printf("Error: Unable to open log file %s to append\n",LOG_FILE_NAME);
+	printf("Error: Unable to open log file %s to append (%s)\n",LOG_FILE_NAME, strerror(errno));
 	exit(EXIT_FAILURE);
 	};
 fprintf(fp,"%s %s\n",tsb, s);
