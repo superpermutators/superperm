@@ -42,6 +42,7 @@ For more details, see the accompanying README.
 
 */
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <math.h>
 #include <string.h>
@@ -363,7 +364,7 @@ int numKnownW=0;
 //	Function definitions
 //	--------------------
 
-void logString(const char *s);
+void logString(const char *fmt, ...);
 void sleepForSecs(int secs);
 void setupForN(int nval);
 int sendServerCommand(const char *command);
@@ -399,7 +400,6 @@ void nodesAndTime(void);
 
 int main(int argc, const char * argv[])
 {
-static char buffer[BUFFER_SIZE];
 FILE *fp;
 int justTest=FALSE;
 timeQuotaMins=0;
@@ -450,8 +450,7 @@ while(TRUE)
 	break;
 	};
 	
-sprintf(buffer,"Program instance number: %u",programInstance);
-logString(buffer);
+logString("Program instance number: %u",programInstance);
 
 //	Process command line arguments
 
@@ -467,8 +466,7 @@ for (int i=1;i<argc;i++)
 			}
 		else timeQuotaMins = DEFAULT_TIME_LIMIT;
 		
-		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
-		logString(buffer);
+		logString("After the program has run for a time limit of %d minutes, it will wait to finish the current task, then quit.\n",timeQuotaMins);
 		if (timeQuotaEitherMins==0 || (timeQuotaMins < timeQuotaEitherMins)) timeQuotaEitherMins = timeQuotaMins;
 		}
 	else if (strcmp(argv[i],"timeLimitHard")==0)
@@ -480,8 +478,7 @@ for (int i=1;i<argc;i++)
 			}
 		else timeQuotaHardMins = DEFAULT_TIME_LIMIT;
 		
-		sprintf(buffer,"After the program has run for a time limit of %d minutes, it will quit within no more than 5 minutes, even if it is in the middle of a task.\n",timeQuotaHardMins);
-		logString(buffer);
+		logString("After the program has run for a time limit of %d minutes, it will quit within no more than 5 minutes, even if it is in the middle of a task.\n",timeQuotaHardMins);
 		if (timeQuotaEitherMins==0 || (timeQuotaHardMins < timeQuotaEitherMins)) timeQuotaEitherMins = timeQuotaHardMins;
 		}
 	else if (strcmp(argv[i],"team")==0)
@@ -528,8 +525,7 @@ for (int i=1;i<argc;i++)
 		}
 		else teamName = DEFAULT_TEAM_NAME;
 		
-		sprintf(buffer,"Team name set to %s.\n",teamName);
-		logString(buffer);
+		logString("Team name set to %s.\n",teamName);
 		}
 	else
 		{
@@ -540,8 +536,7 @@ for (int i=1;i<argc;i++)
 
 //	First, just check we can establish contact with the server
 
-sprintf(buffer,"Team name: %s",teamName);
-logString(buffer);
+logString("Team name: %s",teamName);
 const char *hwRL[]={"Hello world."};
 if (sendServerCommandAndLog("action=hello",hwRL,sizeof(hwRL)/sizeof(hwRL[0])) != 1)
 	{
@@ -555,15 +550,13 @@ if (justTest) exit(0);
 
 registerClient();
 
-sprintf(buffer,
+logString(
 	"To stop the program automatically BETWEEN tasks, create a file %s or %s in the working directory",
 	STOP_FILE_NAME,STOP_FILE_ALL);
-logString(buffer);
 
-sprintf(buffer,
+logString(
 	"To stop the program automatically EVEN DURING tasks, create a file %s or %s in the working directory\n",
 	QUIT_FILE_NAME,QUIT_FILE_ALL);
-logString(buffer);
 
 //	Set up handler for SIGINT (e.g. from CTRL-C)
 
@@ -612,8 +605,7 @@ while (TRUE)
 		fp = fopen(sqFiles[k],"r");
 		if (fp!=NULL)
 			{
-			sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
-			logString(buffer);
+			logString("Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
 			unregisterClient();
 			exit(0);
 			};
@@ -628,8 +620,7 @@ while (TRUE)
 		double elapsedTime = difftime(currentTime, startedRunning);
 		if (elapsedTime / 60 > timeQuotaEitherMins)
 			{
-			sprintf(buffer,"Program has exceeded the time quota of %d minutes, so stopping.\n",timeQuotaEitherMins);
-			logString(buffer);
+			logString("Program has exceeded the time quota of %d minutes, so stopping.\n",timeQuotaEitherMins);
 			unregisterClient();
 			exit(0);
 			};
@@ -668,7 +659,7 @@ while (TRUE)
 		}
 	else
 		{
-		sprintf(buffer,
+		logString(
 			"Assigned new task (id=%u, access=%u, n=%u, w=%u, prefix=%s, perm_to_exceed=%u, prev_perm_ruled_out=%u, timeBeforeSplit=%u seconds, maxTimeInSubtree=%u seconds, timeBetweenServerCheckins=%u seconds)",
 			currentTask.task_id,
 			currentTask.access_code,
@@ -680,7 +671,6 @@ while (TRUE)
 			currentTask.timeBeforeSplit,
 			currentTask.maxTimeInSubtree,
 			currentTask.timeBetweenServerCheckins);
-		logString(buffer);
 		
 		doTask();
 		
@@ -1070,8 +1060,7 @@ while (TRUE)
 	const char *ftRL[]={"OK","Cancelled"};
 	if (sendServerCommandAndLog(buffer,ftRL,sizeof(ftRL)/sizeof(ftRL[0]))>0) break;
 	
-	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -1088,22 +1077,17 @@ int tskTime = (int)difftime(timeNow, startedCurrentTask);
 int tskMin = tskTime / 60;
 int tskSec = tskTime % 60;
 
-sprintf(buffer,"Finished current search, bestSeenP=%d, nodes visited=%"PRId64", time taken=%d min %d sec",
+logString("Finished current search, bestSeenP=%d, nodes visited=%"PRId64", time taken=%d min %d sec",
 	bestSeenP,totalNodeCount,tskMin,tskSec);
-logString(buffer);
 if (splitMode)
 	{
-	sprintf(buffer,"Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
-	logString(buffer);
+	logString("Delegated %"PRId64" sub-trees, completed %"PRId64" locally",subTreesSplit,subTreesCompleted);
 	};
-sprintf(buffer,"--------------------------------------------------------\n");
-logString(buffer);
+logString("--------------------------------------------------------\n");
 }
 
 void nodesAndTime()
 {
-static char buffer[BUFFER_SIZE];
-
 totalNodeCount++;
 if (++nodesChecked >= nodesBeforeTimeCheck)
 	{
@@ -1123,8 +1107,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 		FILE *fp = fopen(sqFiles[k],"r");
 		if (fp!=NULL)
 			{
-			sprintf(buffer,"Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
-			logString(buffer);
+			logString("Detected the presence of the file %s, so stopping.\n",sqFiles[k]);
 			unregisterClient();
 			exit(0);
 			};
@@ -1183,8 +1166,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 			//	We have hit a threshold for elapsed time since we started this task, so split the task
 			
 			nodesToProbe0 = nodesToProbe = (int64_t) (nodesBeforeTimeCheck * maxTimeInSubtree) / (TIME_BETWEEN_TIME_CHECKS); 
-			sprintf(buffer,"Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
-			logString(buffer);
+			logString("Splitting current task, will examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 			splitMode=TRUE;
 			};
 		};
@@ -1194,8 +1176,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 	if (timeSpentOnTask > TAPER_THRESHOLD)
 		{
 		nodesToProbe = (int64_t)(nodesToProbe0 * exp(-(timeSpentOnTask-TAPER_THRESHOLD)/TAPER_DECAY));
-		sprintf(buffer,"Task taking too long, will only examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
-		logString(buffer);
+		logString("Task taking too long, will only examine up to %"PRId64" nodes in each subtree ...",nodesToProbe);
 		};
 	};
 }
@@ -1628,8 +1609,7 @@ asciiString[size] = '\0';
 
 //	Log the new best string locally
 
-sprintf(buffer, "Found %d permutations in string %s", max_perm, asciiString);
-logString(buffer);
+logString("Found %d permutations in string %s", max_perm, asciiString);
 
 #if !NO_SERVER
 
@@ -1641,8 +1621,7 @@ while (TRUE)
 	const char *wsRL[]={"Valid string"};
 	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
 	
-	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -1660,8 +1639,7 @@ asciiString[size] = '\0';
 
 //	Log the string locally
 
-sprintf(buffer, "Found new lower bound string for w=%d with %d permutations in string %s", w, p, asciiString);
-logString(buffer);
+logString("Found new lower bound string for w=%d with %d permutations in string %s", w, p, asciiString);
 
 #if !NO_SERVER
 
@@ -1673,8 +1651,7 @@ while (TRUE)
 	const char *wsRL[]={"Valid string"};
 	if (sendServerCommandAndLog(buffer,wsRL,sizeof(wsRL)/sizeof(wsRL[0]))==1) break;
 	
-	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -1771,7 +1748,7 @@ sleep(secs);
 
 //	Log a string, accompanied by a time stamp, to both the console and the log file
 
-void logString(const char *s)
+void logString(const char *fmt, ...)
 {
 //	Prepare time stamp
 
@@ -1785,9 +1762,15 @@ strcpy(tsb,ts);
 size_t tlen = strlen(tsb);
 if (tsb[tlen-1]=='\n') tsb[tlen-1]='\0';
 
+va_list va;
+
 //	Output string with time stamps
 
-printf("%s %s\n",tsb, s);
+printf("%s ",tsb);
+va_start(va, fmt);
+vprintf(fmt, va);
+va_end(va);
+printf("\n");
 
 FILE *fp = fopen(LOG_FILE_NAME,"at");
 if (fp==NULL)
@@ -1795,7 +1778,13 @@ if (fp==NULL)
 	printf("Error: Unable to open log file %s to append\n",LOG_FILE_NAME);
 	exit(EXIT_FAILURE);
 	};
-fprintf(fp,"%s %s\n",tsb, s);
+
+fprintf(fp,"%s",tsb);
+va_start(va, fmt);
+vfprintf(fp, fmt, va);
+va_end(va);
+fprintf(fp,"\n");
+
 fclose(fp);
 }
 
@@ -1940,7 +1929,7 @@ return 0;
 
 int logServerResponse(const char **responseList, int nrl)
 {
-static char buffer[BUFFER_SIZE], lbuffer[BUFFER_SIZE];
+static char buffer[BUFFER_SIZE];
 int error=FALSE, wait=FALSE, response=0;
 
 FILE *fp = fopen(SERVER_RESPONSE_FILE_NAME,"rt");
@@ -1986,8 +1975,7 @@ while (!feof(fp))
 			};
 		};
 	
-	sprintf(lbuffer,"Server: %s",buffer);
-	logString(lbuffer);
+	logString("Server: %s",buffer);
 	};
 fclose(fp);
 	
@@ -2188,9 +2176,8 @@ fclose(fp);
 if (quit) return -1;
 if (tsk->branchOrderLen != tsk->prefixLen)
 	{
-	sprintf(buffer,
+	logString(
 		"Error: branchOrder and prefix have different lengths (%d, %d respectively)\n",tsk->branchOrderLen,tsk->prefixLen);
-	logString(buffer);
 	exit(EXIT_FAILURE);
 	};
 
@@ -2203,9 +2190,7 @@ return 0;
 int sendServerCommandAndLog(const char *s, const char **responseList, int nrl)
 {
 #if !NO_SERVER
-static char buffer[BUFFER_SIZE];
-sprintf(buffer,"To server: %s",s);
-logString(buffer);
+logString("To server: %s",s);
 
 time(&timeOfLastServerCheckin);
 
@@ -2229,8 +2214,7 @@ while (TRUE)
 		
 	else sleepTime = timeBetweenServerCheckins;
 	
-	sprintf(buffer,"Unable to send command to server, will retry after %d seconds",sleepTime);
-	logString(buffer);
+	logString("Unable to send command to server, will retry after %d seconds",sleepTime);
 	sleepForSecs(sleepTime);
 	};
 #endif
@@ -2258,8 +2242,7 @@ while (TRUE)
 	res = sendServerCommandAndLog(buffer,stRL,sizeof(stRL)/sizeof(stRL[0]));
 	if (res>0) break;
 	
-	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -2282,8 +2265,7 @@ while (TRUE)
 	res = sendServerCommandAndLog(buffer,chkRL,sizeof(chkRL)/sizeof(chkRL[0]));
 	if (res>0) break;
 	
-	sprintf(buffer,"Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Did not obtained expected response from server, will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -2310,8 +2292,7 @@ while (TRUE)
 	int sr = sendServerCommandAndLog(buffer,regRL,sizeof(regRL)/sizeof(regRL[0]));
 	if (sr==1) break;
 	
-	sprintf(buffer,"Will retry after %d seconds",timeBetweenServerCheckins);
-	logString(buffer);
+	logString("Will retry after %d seconds",timeBetweenServerCheckins);
 	sleepForSecs(timeBetweenServerCheckins);
 	};
 
@@ -2470,8 +2451,7 @@ if (useServerLock)
 		if (serverLockFD<0)
 			{
 			int sleepTime = MIN_SERVER_WAIT + rand() % VAR_SERVER_WAIT;
-			sprintf(buffer,"Sibling program has lock on server, sleeping for %d seconds",sleepTime);
-			logString(buffer);
+			logString("Sibling program has lock on server, sleeping for %d seconds",sleepTime);
 			sleepForSecs(sleepTime);
 			}
 		else
@@ -2484,9 +2464,8 @@ if (useServerLock)
 		
 	if (!serverLockIsOurs)
 		{
-		sprintf(buffer,"Unable to lock file %s after %d attempts, so giving up on locking",
+		logString("Unable to lock file %s after %d attempts, so giving up on locking",
 			SERVER_LOCK_FILE_NAME,MAX_SLEEP_WAITING_ON_SIBS);
-		logString(buffer);
 		useServerLock=FALSE;
 		};
 	};
