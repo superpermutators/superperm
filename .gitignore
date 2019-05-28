@@ -16,3 +16,8 @@
 
 # Ignore compiled binaries
 /demutator/demutator
+DistributedChaffinMethod/DistributedChaffinMethod
+
+# Ignore DistributedChaffinMethod generated files
+DCMLog_*.txt
+DCMServerResponse_*.txt
