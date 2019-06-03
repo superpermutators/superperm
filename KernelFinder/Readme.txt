@@ -10,7 +10,7 @@ Building and testing
 This file describes the program KernelFinder.c, which searches for non-standard kernels for superpermutations,
 as described by Robin Houston here:
 
-	https://groups.google.com/d/msg/superpermutators/KNhmzQy99ic/obl6pCt5HwAJ
+	https://groups.google.com/forum/#!msg/superpermutators/VRwU2OIuRhM/fofaUWqrBgAJ
 
 KernelFinder.c is a single, standalone file for a command-line C program, which should compile, link and run in
 any command-line environment.
