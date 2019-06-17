@@ -13,6 +13,7 @@ parser.add_option("-n", "--no-cyclic", action="store_true", help="no edges betwe
 parser.add_option("-s", "--simple", action="store_true", help="only include edges from a.b -> b.a^r")
 parser.add_option("--necklace", action="store_true", help="consider permutations equivalent under rotation")
 parser.add_option("--bracelet", action="store_true", help="consider permutations equivalent under rotation and reflection")
+parser.add_option("--alternating", action="store_true", help="show weights and 1-cycles in the alternating graph")
 
 (options, args) = parser.parse_args()
 if len(args) != 1: parser.error("Wrong number of arguments")
@@ -30,6 +31,18 @@ perms = list(permutations(range(N)))
 n_perms = len(perms)
 ordered = tuple(range(N))
 
+def cyclically_equivalent(p, q):
+    sp = "".join([ SYMBOLS[i] for i in p ])
+    sq = "".join([ SYMBOLS[i] for i in q ])
+    return sp in sq+sq
+
+def alternating_distance(p, q):
+    if p == q:
+        return 0
+    if cyclically_equivalent(p, q):
+        return INF
+    return max(distance((p[-1],) + p[:-1], q) - 1, 0)
+
 def distance(p, q):
     if q == ordered: return 0
     
@@ -45,10 +58,8 @@ def distance(p, q):
                 weight = n
                 break
     
-    if weight > 1 and options.no_cyclic:
-        sp = "".join([ SYMBOLS[i] for i in p ])
-        sq = "".join([ SYMBOLS[i] for i in q ])
-        if sp in sq+sq: return INF
+    if weight > 1 and options.no_cyclic and cyclically_equivalent(p, q):
+        return INF
     
     return weight
 
@@ -84,6 +95,9 @@ if options.necklace:
 elif options.bracelet:
     print "NAME: superbracelet %d" % (N,)
     print "TYPE: AGTSP"
+elif options.alternating:
+    print "NAME: alternating %d" % (N,)
+    print "TYPE: AGTSP"
 else:
     print "NAME : superperm %d" % (N,)
     print "TYPE : ATSP"
@@ -95,10 +109,14 @@ print "DISPLAY_DATA_TYPE : NO_DISPLAY"
 
 print "EDGE_WEIGHT_SECTION :"
 
-for p in perms:
-    print " ".join([ str(distance(p, q)) for q in perms ])
+if options.alternating:
+    for p in perms:
+        print " ".join([ str(alternating_distance(p, q)) for q in perms ])
+else:
+    for p in perms:
+        print " ".join([ str(distance(p, q)) for q in perms ])
 
-if options.necklace:
+if options.necklace or options.alternating:
     print_classes(normalise_necklace)
 if options.bracelet:
     print_classes(normalise_bracelet)
