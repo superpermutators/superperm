@@ -13,3 +13,6 @@ necklace/%.gtsp:
 
 bracelet/%.gtsp:
 	bin/mkatsp.py --bracelet $* > "$@"
+
+alternating/%.gtsp:
+	bin/mkatsp.py --alternating $* > "$@"
