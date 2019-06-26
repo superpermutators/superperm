@@ -2,8 +2,8 @@
 //  FastDCMTest.c
 //
 //  Author:		Greg Egan
-//	Version:	4.0
-//	Date:		26 June 2019
+//	Version:	4.1
+//	Date:		27 June 2019
 //
 //	This is a TEST version of the DistributedChaffinMethod client that uses
 //	OpenCL to run a parallel version of the search on a GPU.
@@ -14,11 +14,6 @@
 #include <string.h>
 #include <inttypes.h>
 #include <errno.h>
-#ifdef __linux__
-#include <CL/opencl.h>
-#else
-#include <OpenCL/opencl.h>
-#endif
 
 #include "Headers/NInfo.h"
 #include "Headers/Structures.h"
@@ -31,6 +26,8 @@
 #include <windows.h>
 #include <process.h>
 #include <io.h>
+#include <CL/opencl.h>
+
 #define UNIX_LIKE FALSE
 
 #else
@@ -39,6 +36,13 @@
 
 #include <unistd.h>
 #include <signal.h>
+
+#ifdef __linux__
+#include <CL/opencl.h>
+#else
+#include <OpenCL/opencl.h>
+#endif
+
 #define UNIX_LIKE TRUE
 
 #endif
@@ -50,10 +54,6 @@
 
 #define Kb 1024
 #define Mb (1024*Kb)
-
-//	Run on either a test prefix for large waste, or a sequence of increasing waste values
-
-#define TEST_PREFIX TRUE
 
 #define VERBOSE FALSE
 
@@ -1306,14 +1306,14 @@ initForN();
 
 initOpenCL();
 
-printf("Starting test calculations\n");
-#if TEST_PREFIX
-	searchPrefix("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532",
-	strlen("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532"),118,118,
-		VERBOSE);
-#else
-	searchPrefix("123456",N,1,80,VERBOSE);
-#endif
+printf("Starting validation checks\n");
+searchPrefix("123456",N,1,80,VERBOSE);
+printf("\n");
+
+printf("Starting benchmarking calculations\n");
+searchPrefix("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532",
+strlen("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532"),118,118,
+	VERBOSE);
 
 cleanupOpenCL();
 
