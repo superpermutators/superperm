@@ -40,6 +40,7 @@
 #ifdef __linux__
 #include <CL/opencl.h>
 #else
+#define CL_SILENCE_DEPRECATION 1
 #include <OpenCL/opencl.h>
 #endif
 
