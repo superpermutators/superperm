@@ -50,10 +50,6 @@ mpLocal[lidP].perms = 0;
 
 int doUndo=1;
 
-//	Previous digit
-
-unsigned int pdigit = cs.digits[cs.pos-1] & DIGIT_BITS;
-
 //	Nodes explored in this search
 
 unsigned long nodeCount = 0;
@@ -133,8 +129,6 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		{
 		//	We are extending the string.
 		
-		pdigit = digit;
-				
 		//	Count the permutation visits
 		
 		cs.digits[pNum] += pmip;
@@ -149,10 +143,9 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		
 		//	If we came full circle in the digit range, fall back along the string.
 		
-		if (digitP == pdigit)
+		if (digitP == (cs.digits[cs.pos-1] & DIGIT_BITS))
 			{
 			cs.pos--;
-			pdigit = cs.digits[cs.pos-1] & DIGIT_BITS;
 			doUndo = -1;
 			cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
 			};

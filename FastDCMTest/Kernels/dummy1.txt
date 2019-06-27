@@ -1,0 +1,6 @@
+__kernel void dummy1(__global char *tab1, __global char *tab2)
+{
+char a[MM];
+for (int z=0;z<MM;z++) a[z]=tab1[z];
+for (int z=0;z<MM;z++) tab2[z]=a[z]*a[z];
+}

@@ -129,7 +129,22 @@ char **headerSourceCode=NULL;
 const char *kernelFiles[][3] = {
 	{"Kernels/searchKernel.txt", "search", ""},
 	{"Kernels/orderIndexKernel.txt", "orderIndex", ""},
-	{"Kernels/splitKernel.txt", "split", ""}
+	{"Kernels/splitKernel.txt", "split", ""},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 10"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 20"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 30"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 40"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 50"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 100"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 200"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 300"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 400"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 500"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 1000"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 2000"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 3000"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 4000"},
+	{"Kernels/dummy1.txt", "dummy1", "#define MM 5000"}
 };
 
 int nKernels=0;
