@@ -26,13 +26,11 @@ To build the program under Linux:
 
 To run the program, it must be in the same directory as the original source code, with `Headers` and `Kernels` as subdirectories.  You can run it from the comand line with:
 
-```.\FastDCMTest
-```
+`.\FastDCMTest`
 
 If your computer has multiple GPUs, you can tell the program which one to use with the `gpuName` command line argument, e.g.:
 
-```.\FastDCMTest gpuName "AMD Radeon"
-```
+`.\FastDCMTest gpuName "AMD Radeon"`
 
 In this case, only a GPU whose device name starts with "AMD Radeon" will be selected. You don't need to specify the full device name, just enough to distinguish between
 the different ones on your system.
