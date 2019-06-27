@@ -943,7 +943,7 @@ if (context) clReleaseContext(context);
 //	Do a search on the GPU starting from a single string, for a fixed total waste, and an initial pte;
 //	we report back the number of nodes searched and the maximum permutation count seen.
 
-void searchString(struct string *br, cl_short totalWaste, cl_ushort pte, cl_ushort pro, cl_ushort *maxPermsSeen, cl_ulong *totalNodesSearched, int verbose)
+void searchString(struct string *br, cl_int totalWaste, cl_uint pte, cl_uint pro, cl_uint *maxPermsSeen, cl_ulong *totalNodesSearched, int verbose)
 {
 struct string bestString;
 *maxPermsSeen = 0;
@@ -971,7 +971,7 @@ RECORD_TIME(writeToGPUTime)
 
 //	Initialise perms-to-exceed
 
-cl_ushort pte0 = pte;
+cl_uint pte0 = pte;
 
 cl_ulong tsp = 0;
 cl_ulong nsp = 0;
@@ -1003,9 +1003,9 @@ while (TRUE)		//	Loop for repeated runs of nodeQuota
 __kernel void search(
 	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
 	__constant unsigned short *mperm_res0,		//	1: Table of maximum number of permutations for each waste
-	short totalWaste,							//	2: Total waste we are allowing in each string		
-	unsigned short pte,							//	3: Permutations to exceed
-	unsigned short maxPermsSeen,				//	4: Maximum permutations seen in any string (not just this search)
+	int totalWaste,								//	2: Total waste we are allowing in each string		
+	unsigned int pte,							//	3: Permutations to exceed
+	unsigned int maxPermsSeen,					//	4: Maximum permutations seen in any string (not just this search)
 	unsigned long nodeQuota,					//	5: Maximum number of nodes to check before we quit
 	__global struct string *inputs,				//	6: String each thread starts from
 	__global unsigned int *inputIndices,		//	7: Indices used to select strings from inputs[]
@@ -1282,13 +1282,13 @@ print_string_data(stdout, &br, prefix, prefixLen, TRUE, FALSE, TRUE);
 printf("\n");
 */
 
-cl_ushort maxPermsSeen=0;
+cl_uint maxPermsSeen=0;
 totalNodesSearched=0;
-cl_short totalWaste=(cl_ushort)waste1;
-cl_ushort pte=mperm_res[totalWaste-1]+2*(NVAL-4);
+cl_int totalWaste=waste1;
+cl_uint pte=mperm_res[totalWaste-1]+2*(NVAL-4);
 while (totalWaste <= waste2)							//	Loop for values of waste
 	{
-	cl_ushort pro = mperm_res[totalWaste-1]+NVAL+1;	//	Permutations previously ruled out for this waste
+	cl_uint pro = mperm_res[totalWaste-1]+NVAL+1;	//	Permutations previously ruled out for this waste
 	if (pro > FN+1) pro = FN+1;
 	
 	while (TRUE)									//	Loop for values of pte, which might include backtracking if we aim too high

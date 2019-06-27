@@ -1,9 +1,9 @@
 __kernel void search(
 	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
 	__constant unsigned short *mperm_res0,		//	1: Table of maximum number of permutations for each waste
-	short totalWaste,							//	2: Total waste we are allowing in each string		
-	unsigned short pte,							//	3: Permutations to exceed
-	unsigned short maxPermsSeen,				//	4: Maximum permutations seen in any string (not just this search)
+	int totalWaste,								//	2: Total waste we are allowing in each string		
+	unsigned int pte,							//	3: Permutations to exceed
+	unsigned int maxPermsSeen,					//	4: Maximum permutations seen in any string (not just this search)
 	unsigned long nodeQuota,					//	5: Maximum number of nodes to check before we quit
 	__global struct string *inputs,				//	6: String each thread starts from
 	__global unsigned int *inputIndices,		//	7: Indices used to select strings from inputs[]
@@ -52,7 +52,7 @@ int doUndo=1;
 
 //	Previous digit
 
-unsigned short pdigit = cs.digits[cs.pos-1] & DIGIT_BITS;
+unsigned int pdigit = cs.digits[cs.pos-1] & DIGIT_BITS;
 
 //	Nodes explored in this search
 
@@ -62,18 +62,18 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 	{
 	//	Get the last digit in the current string
 	
-	unsigned short digit = cs.digits[cs.pos] & DIGIT_BITS;
+	unsigned int digit = cs.digits[cs.pos] & DIGIT_BITS;
 	
 	//	Compute the integer encoding the last N digits of the current string
 	
-	unsigned short lastN = cs.lastN1 + NN1 * digit;
+	unsigned int lastN = cs.lastN1 + NN1 * digit;
 	
 	//	From the perms[] table entry, see if these N digits are a permutation.
 	//	If so, compute its index number 0 ... (N!-1).
 	//	If not, the entry is >= FNM [= (N-1)!] and we get the "not-a-permutation" flag, number FN [= N!], which is always set in the
 	//	flags.
 	
-	unsigned char P = perms[lastN];
+	unsigned int P = perms[lastN];
 	int mnp = -(P>=FNM), mip = ~mnp, pmip = PERMUTATION_LSB & mip;
 	int pNum = (mnp & FN) | (mip & (digit*FNM+P));
 	int doMask = -(doUndo>0), undoMask = ~doMask;
@@ -100,7 +100,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 	
 	//	Least number of digits we would need to add to child before we could reach a new permutation
 	
-	unsigned short pAdd = (mnp & (P-FNM)) | (mip & oneMinusPInc);
+	unsigned int pAdd = (mnp & (P-FNM)) | (mip & oneMinusPInc);
 
 	//	The maximum amount of spare waste that could still be left after any descendant string reaches a permutation.
 	
@@ -108,7 +108,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 	
 	//	Maximum number of permutations this child's descendants could achieve
 	
-	unsigned short mpd = cs.perms + mperm_res[spareW];
+	unsigned int mpd = cs.perms + mperm_res[spareW];
 	
 	//	Do we follow this branch or not?
 	
@@ -126,7 +126,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		
 	//	We either advance current digit, or place successor of current digit as our start for next position
 	
-	unsigned short digitP = (digit+1)%NVAL;
+	unsigned int digitP = (digit+1)%NVAL;
 	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
 	
 	if (ki)

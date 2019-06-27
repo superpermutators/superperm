@@ -47,7 +47,7 @@ if (id < nInputTarget-totalUnfinished)
 	
 	//	In the other copy, fall back to that depth.
 
-	unsigned short digit, digitP;
+	unsigned int digit, digitP;
 	while (cs.pos >= cs.rootDepth)
 		{
 		cs.pos--;
@@ -60,14 +60,14 @@ if (id < nInputTarget-totalUnfinished)
 		
 		//	Compute the integer encoding the last N digits of the current string
 		
-		unsigned short lastN = cs.lastN1 + NN1 * digit;
+		unsigned int lastN = cs.lastN1 + NN1 * digit;
 		
 		//	From the perms[] table entry, see if these N digits are a permutation.
 		//	If so, compute its index number 0 ... (N!-1).
 		//	If not, the entry is >= FNM [= (N-1)!] and we get the "not-a-permutation" flag, number FN [= N!], which is always set in the
 		//	flags.
 		
-		unsigned char P = perms[lastN];
+		unsigned int P = perms[lastN];
 		int mnp = -(P>=FNM), mip = ~mnp, pmip = PERMUTATION_LSB & mip;
 		int pNum = (mnp & FN) | (mip & (digit*FNM+P));
 		
