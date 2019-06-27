@@ -2,7 +2,7 @@
 //  FastDCMTest.c
 //
 //  Author:		Greg Egan
-//	Version:	4.1
+//	Version:	4.2
 //	Date:		27 June 2019
 //
 //	This is a TEST version of the DistributedChaffinMethod client that uses
@@ -38,10 +38,18 @@
 #include <signal.h>
 
 #ifdef __linux__
+
+//	For Linux
+
 #include <CL/opencl.h>
+
 #else
+
+//	For MacOS
+
 #define CL_SILENCE_DEPRECATION 1
 #include <OpenCL/opencl.h>
+
 #endif
 
 #define UNIX_LIKE TRUE
@@ -441,7 +449,7 @@ if (check)
 }
 
 
-int initOpenCL()
+int initOpenCL(const char *gpuChoice)
 {
 for (int i=0;i<NUM_GPU_HEAPS;i++) gpu_heaps[i]=NULL;
 
@@ -623,6 +631,8 @@ for (int i=0;i<num_platforms;i++)
 		{
 		printf("\tDevice %d:\n",j+1);
 		
+		int gpuOK = TRUE, gpuDeviceNameOK = TRUE;
+		
 		//	Details of GPU
 
 		cl_ulong gms;				//	Global memory size
@@ -635,9 +645,15 @@ for (int i=0;i<num_platforms;i++)
 
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_NAME, MAX_CL_INFO, openCL_info, NULL) );
 		printf("\tDevice name: %s\n",openCL_info);
+
+		if (gpuChoice)
+			{
+			gpuDeviceNameOK = (strncmp(gpuChoice,openCL_info,strlen(gpuChoice))==0);
+			};
+
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_VENDOR, MAX_CL_INFO, openCL_info, NULL) );
 		printf("\tDevice vendor: %s\n",openCL_info);
-
+		
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_COMPILER_AVAILABLE, sizeof(ca), &ca, NULL) );
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_LINKER_AVAILABLE, sizeof(la), &la, NULL) );
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_GLOBAL_MEM_SIZE, sizeof(gms), &gms, NULL) );
@@ -655,25 +671,47 @@ for (int i=0;i<num_platforms;i++)
 		printf("\tCompute units = %u\n", (unsigned int)cu);
 		printf("\tMaximum workgroup size = %u\n", (unsigned int)mws);
 		
-		if (ca != CL_TRUE && la != CL_TRUE) printf("\t[This device does not have a compiler/linker available]\n");
-		else if (cbs >= cbNeeded && cu > gpu_cu)
+		if (!gpuDeviceNameOK)
 			{
-			gpu_gms = gms;
-			gpu_mma = mma;
-			gpu_lms = lms;
-			gpu_cbs = cbs;
-			gpu_cu = cu;
-			gpu_mws = mws;
+			printf("\t[This device name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuChoice);
+			gpuOK = FALSE;
+			};
+		
+		if (ca != CL_TRUE && la != CL_TRUE)
+			{
+			printf("\t[This device does not have a compiler/linker available]\n");
+			gpuOK = FALSE;
+			};
 			
-			printf("\t[This GPU meets all the requirements to run the program]\n");
-			foundPlatformAndGPU = TRUE;
-			gpu_platform = platforms[i];
-			gpu_device = devices[i][j];
-			}
-		else
+		if (cbs < cbNeeded)
 			{
 			printf("\t[The program needs %"PRIu64" bytes of constant memory buffer (%u Kb), but the GPU only permits %u Kb]\n",
 				cbNeeded, (unsigned int)cbNeeded/Kb, (unsigned int)cbs/Kb);
+			gpuOK = FALSE;
+			};
+			
+		if (gpuOK)
+			{
+			printf("\t[This GPU meets all the requirements to run the program]\n");
+			foundPlatformAndGPU = TRUE;
+			
+			//	If we had multiple GPUs we could use, pick the "best" one
+			
+			if (mws*cu > gpu_mws*gpu_cu)
+				{
+				gpu_platform = platforms[i];
+				gpu_device = devices[i][j];
+				gpu_gms = gms;
+				gpu_mma = mma;
+				gpu_lms = lms;
+				gpu_cbs = cbs;
+				gpu_cu = cu;
+				gpu_mws = mws;
+				}
+			else
+				{
+				printf("\t[But a previously listed GPU would run at least as many threads, so it will be used instead.]\n");
+				};
 			};
 		};
 	};
@@ -1306,7 +1344,16 @@ int main (int argc, const char * argv[])
 {
 initForN();
 
-initOpenCL();
+//	Check for a choice of GPU
+
+const char *gpuChoice = NULL;
+
+for (int i=1;i<argc;i++)
+	{
+	if (strcmp(argv[i],"gpuName")==0 && i+1<argc) gpuChoice = argv[i+1];
+	};
+
+initOpenCL(gpuChoice);
 
 printf("Starting validation checks\n");
 searchPrefix("123456",NVAL,1,80,VERBOSE);

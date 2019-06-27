@@ -1,0 +1,98 @@
+__kernel void split(
+	__constant unsigned char *perms,			//	Table of permutation info for N-digit strings
+	__global unsigned int *inputIndices,		//	Indices that will point to slots in outputs[] for next pass.
+	__global struct string *outputs,			//	Heap of unfinished strings / slots we can reuse.
+	unsigned int nInputTarget,					//	Number of inputs we want in next pass.
+	unsigned int totalUnfinished,				//	Number of unfinished searches from last pass.
+	unsigned int nPreviousInputs				//	Number of inputs in previous pass.
+	)
+{
+//	We start with totalUnfinished strings with unfinished searches, and we want to increase the number of
+//	input strings for the next pass to nInputTarget, by splitting nInputTarget-totalUnfinished of the original strings.
+//
+//	The orderIndex() kernel has aready set inputIndices[] so that the first totalUnfinished indices point to unfinished
+//	strings in outputs[] (the outputs of the last pass), and the remainder of its indices, up to nPreviousInputs, point
+//	to slots containing finished strings that we can re-use.  Beyond nPreviousInputs, all slots in the heap are currently
+//	unused, and we can just point to them by setting inputIndices[x]=x.
+//
+//	This kernel is called by (at least, but possibly more than) nInputTarget-totalUnfinished threads, which split
+//	past outputs.
+
+unsigned int id = get_global_id(0);
+
+if (id < nInputTarget-totalUnfinished)
+	{
+	unsigned int inp = inputIndices[id];
+	unsigned int outp = totalUnfinished + id;
+	if (outp < nPreviousInputs) outp = inputIndices[outp];
+	else inputIndices[outp] = outp;
+	
+	//	Take a copy of the string we will split.
+
+	struct string cs = outputs[inp];
+	
+	//	We split an string with an unfinished search as follows:
+	//
+	//	(a) We pick a depth D between the original rootDepth and the current position in the string
+	//	(b)	We set one copy of the string to a new rootDepth of D, so its search will terminate as soon as
+	//	it falls back that far
+	//	(c) In the other copy, we fall straight back to that depth (without changing the root depth), and
+	//	prepare to continue from there.
+	
+	unsigned int D = (int)sqrt((float)cs.rootDepth*(float)cs.pos);
+	
+	//	Alter the root depth in the original.
+
+	outputs[inp].rootDepth = D;
+	
+	//	In the other copy, fall back to that depth.
+
+	unsigned short digit, digitP;
+	while (cs.pos >= cs.rootDepth)
+		{
+		cs.pos--;
+		cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
+		
+		//	Get the last digit in the current string
+		
+		digit = cs.digits[cs.pos] & DIGIT_BITS;
+		digitP = (digit+1)%NVAL;
+		
+		//	Compute the integer encoding the last N digits of the current string
+		
+		unsigned short lastN = cs.lastN1 + NN1 * digit;
+		
+		//	From the perms[] table entry, see if these N digits are a permutation.
+		//	If so, compute its index number 0 ... (N!-1).
+		//	If not, the entry is >= FNM [= (N-1)!] and we get the "not-a-permutation" flag, number FN [= N!], which is always set in the
+		//	flags.
+		
+		unsigned char P = perms[lastN];
+		int mnp = -(P>=FNM), mip = ~mnp, pmip = PERMUTATION_LSB & mip;
+		int pNum = (mnp & FN) | (mip & (digit*FNM+P));
+		
+		//	Reduce count for specific permutation
+		
+		cs.digits[pNum] -= pmip;
+		
+		//	If this fell back to zero, we reduce total permutations count;
+		//	otherwise, we reduce waste.
+		
+		int pInc = (cs.digits[pNum] & PERMUTATION_BITS) == 0; 
+		int oneMinusPInc = 1 ^ pInc;
+
+		cs.waste -= oneMinusPInc;
+		cs.perms -= pInc;
+		
+		//	Continue until we have moved outside the search that will be covered by the other half of the split.
+		
+		if ((cs.pos < D) && (digitP != (cs.digits[cs.pos-1] & DIGIT_BITS))) break;
+		};
+		
+	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
+		
+	//	Write the modified string.
+	
+	outputs[outp] = cs;
+	}
+}
