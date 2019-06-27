@@ -129,7 +129,8 @@ size_t *kernelLengths=NULL;
 char **kernelSourceCode=NULL, **kernelFullSource=NULL;
 cl_program *kernelPrograms=NULL;
 cl_kernel *kernels=NULL;
-size_t *kernelWGS=NULL, *kernelLMS=NULL, *kernelPMS=NULL, *kernelPWM=NULL, min_kernel_ws;
+size_t *kernelWGS=NULL, *kernelPWM=NULL, min_kernel_ws;
+cl_ulong *kernelPMS=NULL, *kernelLMS=NULL;
 int log_min_kernel_ws;
 
 //	Information about N-digit strings
@@ -742,8 +743,8 @@ printf("\n");
 CHECK_MEM ( kernelPrograms = (cl_program *)calloc(nKernels, sizeof(cl_program)) )
 CHECK_MEM ( kernels = (cl_kernel *)calloc(nKernels, sizeof(cl_kernel)) )
 CHECK_MEM ( kernelWGS = (size_t *)calloc(nKernels, sizeof(size_t)) )
-CHECK_MEM ( kernelLMS = (size_t *)calloc(nKernels, sizeof(size_t)) )
-CHECK_MEM ( kernelPMS = (size_t *)calloc(nKernels, sizeof(size_t)) )
+CHECK_MEM ( kernelLMS = (cl_ulong *)calloc(nKernels, sizeof(size_t)) )
+CHECK_MEM ( kernelPMS = (cl_ulong *)calloc(nKernels, sizeof(size_t)) )
 CHECK_MEM ( kernelPWM = (size_t *)calloc(nKernels, sizeof(size_t)) )
 
 min_kernel_ws = gpu_mws;
@@ -773,7 +774,7 @@ for (int i=0;i<nKernels;i++)
 	openCL( clGetKernelWorkGroupInfo(kernels[i], gpu_device,CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(kernelPMS[i]), &kernelPMS[i],NULL) );
 	openCL( clGetKernelWorkGroupInfo(kernels[i], gpu_device,CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(kernelPWM[i]), &kernelPWM[i],NULL) );
 	
-	printf("Successfully compiled kernel \"%s()\", work group size=%lu, local memory size=%lu, private memory size=%lu, preferred work group size multiple=%lu\n",
+	printf("Successfully compiled kernel \"%s()\", work group size=%lu, local memory size=%llu, private memory size=%llu, preferred work group size multiple=%lu\n",
 		kernelFiles[i][1],kernelWGS[i],kernelLMS[i],kernelPMS[i],kernelPWM[i]);
 	
 	if (kernelWGS[i] < min_kernel_ws) min_kernel_ws = kernelWGS[i];
