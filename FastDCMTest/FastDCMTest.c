@@ -92,7 +92,7 @@ void cleanupOpenCL(void);
 
 //	Table of strings corresponding to each permutation number
 
-char pstrings[FN+N][N+1];
+char pstrings[FN+NVAL][NVAL+1];
 
 //	Details of GPU
 
@@ -350,7 +350,7 @@ int pc=0;
 for (int k=0;k<ns;k++)
 	{
 	unsigned char d=s[k];
-	lastN = (lastN/N) + NN1*d;
+	lastN = (lastN/NVAL) + NN1*d;
 	unsigned char P = perms[lastN];
 	unsigned short pNum = (P>=FNM) ? FN : (d*FNM+P);
 	
@@ -369,21 +369,21 @@ return pc;
 
 void print_string_data(FILE *fp, struct string *nd, char *prefix, size_t prefixLen, int verbose, int minimal, int check)
 {
-static char lastN1D[N];
+static char lastN1D[NVAL];
 static unsigned char fullString[2*FN];
 int ok=TRUE;
 
 if (verbose) fprintf(fp,"String root depth: %d\n",nd->rootDepth);
 
-lastN1D[N-1]=0;
+lastN1D[NVAL-1]=0;
 if (!minimal) fprintf(fp,"waste = %u\n",nd->waste);
 if (!minimal) fprintf(fp,"perms = %u\n",nd->perms);
 unsigned short int s0=nd->lastN1;
-for (int k=0;k<N-1;k++)
+for (int k=0;k<NVAL-1;k++)
 	{
-	unsigned short d = s0 % N;
+	unsigned short d = s0 % NVAL;
 	lastN1D[k] = '1'+d;
-	s0 = s0 / N;
+	s0 = s0 / NVAL;
 	};
 if (verbose) fprintf(fp,"lastN1 = %s\n",lastN1D);
 if (verbose) fprintf(fp,"pFlags: ");
@@ -406,7 +406,7 @@ for (int k=0;k<prefixLen;k++)
 	fullString[fsc++] = prefix[k]-'1';
 	};
 
-for (int k=N;k<nd->pos;k++)
+for (int k=NVAL;k<nd->pos;k++)
 	{
 	char d = nd->digits[k] & DIGIT_BITS;
 	fprintf(fp,"%c",'1'+d);
@@ -423,7 +423,7 @@ if (check)
 		ok=FALSE;
 		};
 		
-	int waste = fsc - (N-1) - cp;
+	int waste = fsc - (NVAL-1) - cp;
 	if (waste != nd->waste)
 		{
 		printf("String/perms mismatch in data: counted %d wasted digits in string, but waste = %u\n",waste,nd->waste);
@@ -480,7 +480,7 @@ uint64_t cbNeeded = 0;
 //	Compute N^N, the number of digit strings
 
 int nn = 1;
-for (int k=0;k<N;k++) nn*=N;
+for (int k=0;k<NVAL;k++) nn*=NVAL;
 
 //	Storage for the permutation info for each string
 
@@ -490,41 +490,41 @@ cbNeeded += permsSizeBytes;
 
 //	Compute the permutation info
 
-static unsigned char digits[N], dcount[N], pcount[N];
-for (int k=0;k<N;k++) pcount[k]=0;
+static unsigned char digits[NVAL], dcount[NVAL], pcount[NVAL];
+for (int k=0;k<NVAL;k++) pcount[k]=0;
 for (int s=0;s<nn;s++)
 	{
 	int s0=s;
-	for (int k=0;k<N;k++) dcount[k]=0;
+	for (int k=0;k<NVAL;k++) dcount[k]=0;
 	int isPerm=TRUE;
-	for (int k=0;k<N;k++)
+	for (int k=0;k<NVAL;k++)
 		{
-		int d = digits[k] = s0 % N;
-		s0 = s0 / N;
+		int d = digits[k] = s0 % NVAL;
+		s0 = s0 / NVAL;
 		if (dcount[d]++ != 0) isPerm=FALSE;
 		};
 	
 	if (isPerm)
 		{
-		perms[s] = pcount[digits[N-1]]++;
+		perms[s] = pcount[digits[NVAL-1]]++;
 		
 		//	Create string version of permutation
 		
-		unsigned short pNum = digits[N-1]*FNM+perms[s];
-		for (int k=0;k<N;k++) pstrings[pNum][k]='1'+digits[k];
-		pstrings[pNum][N]='\0';
+		unsigned short pNum = digits[NVAL-1]*FNM+perms[s];
+		for (int k=0;k<NVAL;k++) pstrings[pNum][k]='1'+digits[k];
+		pstrings[pNum][NVAL]='\0';
 		}
 	else
 		{
 		//	Not a permutation, so find longest run of repetition-free digits at the end
 		
 		int repFree=TRUE;
-		for (int l=2;l<=N;l++)
+		for (int l=2;l<=NVAL;l++)
 			{
 			for (int i=0;i<l && repFree;i++)
 			for (int j=i+1;j<l;j++)
 				{
-				if (digits[N-1-i]==digits[N-1-j])
+				if (digits[NVAL-1-i]==digits[NVAL-1-j])
 					{
 					repFree=FALSE;
 					break;
@@ -535,7 +535,7 @@ for (int s=0;s<nn;s++)
 			
 			if (!repFree)
 				{
-				perms[s] = FNM+N-(l-1);
+				perms[s] = FNM+NVAL-(l-1);
 				break;
 				};
 			};
@@ -552,7 +552,7 @@ strcpy(&pstrings[FN][0],"NPERM");
 	
 //	Check that we ended up with sensible results
 
-for (int k=0;k<N;k++)
+for (int k=0;k<NVAL;k++)
 	{
 	if (pcount[k]!=FNM)
 		{
@@ -569,7 +569,7 @@ cbNeeded += mpermSizeBytes;
 
 for (int k=0;k<MPERM_OFFSET;k++) mperm_res0[k]=0;
 mperm_res = mperm_res0+MPERM_OFFSET;
-mperm_res[0]=N;
+mperm_res[0]=NVAL;
 if (knownN)
 	for (int k=0;k<numKnownW;k++)
 		mperm_res[k] = knownN[2*k+1];
@@ -656,7 +656,7 @@ for (int i=0;i<num_platforms;i++)
 		printf("\tMaximum workgroup size = %u\n", (unsigned int)mws);
 		
 		if (ca != CL_TRUE && la != CL_TRUE) printf("\t[This device does not have a compiler/linker available]\n");
-		else if (cbs >= cbNeeded && mma > gpu_mma)
+		else if (cbs >= cbNeeded && cu > gpu_cu)
 			{
 			gpu_gms = gms;
 			gpu_mma = mma;
@@ -1205,7 +1205,7 @@ unsigned char d=0;
 for (int k=0;k<prefixLen;k++)
 	{
 	d = prefix[k]-'1';
-	lastN = (lastN/N) + NN1*d;
+	lastN = (lastN/NVAL) + NN1*d;
 	unsigned char P = perms[lastN];
 	unsigned short pNum = (P>=FNM) ? FN : (d*FNM+P);
 	
@@ -1222,21 +1222,21 @@ for (int k=0;k<prefixLen;k++)
 	
 	//	Store the last N digits in the string.
 	
-	int j = k + N - prefixLen;
+	int j = k + NVAL - prefixLen;
 	if (j >= 0)
 		{
 		br.digits[j] |= d;
 		};
 	};
 
-br.lastN1 = lastN / N;
-br.waste=prefixLen - (N-1) - br.perms;
+br.lastN1 = lastN / NVAL;
+br.waste=prefixLen - (NVAL-1) - br.perms;
 
 //	Initialise first character after the N from the prefix to be the cyclic successor to the last digit of the prefix.
 
-br.digits[N] |= (d+1)%N;
-br.pos = N;
-br.rootDepth = N;
+br.digits[NVAL] |= (d+1)%NVAL;
+br.pos = NVAL;
+br.rootDepth = NVAL;
 
 /*
 printf("Input string: \n");
@@ -1247,10 +1247,10 @@ printf("\n");
 cl_ushort maxPermsSeen=0;
 totalNodesSearched=0;
 cl_short totalWaste=(cl_ushort)waste1;
-cl_ushort pte=mperm_res[totalWaste-1]+2*(N-4);
+cl_ushort pte=mperm_res[totalWaste-1]+2*(NVAL-4);
 while (totalWaste <= waste2)							//	Loop for values of waste
 	{
-	cl_ushort pro = mperm_res[totalWaste-1]+N+1;	//	Permutations previously ruled out for this waste
+	cl_ushort pro = mperm_res[totalWaste-1]+NVAL+1;	//	Permutations previously ruled out for this waste
 	if (pro > FN+1) pro = FN+1;
 	
 	while (TRUE)									//	Loop for values of pte, which might include backtracking if we aim too high
@@ -1285,7 +1285,7 @@ while (totalWaste <= waste2)							//	Loop for values of waste
 		
 	if (maxPermsSeen==FN) break;
 	
-	pte = maxPermsSeen + 2*(N-4);
+	pte = maxPermsSeen + 2*(NVAL-4);
 	if (pte >= FN) pte = FN-1;
 	totalWaste++;
 	};
@@ -1295,10 +1295,10 @@ printf("Total nodes searched = %"PRIu64"\n",totalNodesSearched);
 
 void initForN()
 {
-if (N==3) {knownN = &known3[0][0]; numKnownW=sizeof(known3)/(sizeof(int))/2;}
-else if (N==4) {knownN = &known4[0][0]; numKnownW=sizeof(known4)/(sizeof(int))/2;}
-else if (N==5) {knownN = &known5[0][0]; numKnownW=sizeof(known5)/(sizeof(int))/2;}
-else if (N==6) {knownN = &known6[0][0]; numKnownW=sizeof(known6)/(sizeof(int))/2;}
+if (NVAL==3) {knownN = &known3[0][0]; numKnownW=sizeof(known3)/(sizeof(int))/2;}
+else if (NVAL==4) {knownN = &known4[0][0]; numKnownW=sizeof(known4)/(sizeof(int))/2;}
+else if (NVAL==5) {knownN = &known5[0][0]; numKnownW=sizeof(known5)/(sizeof(int))/2;}
+else if (NVAL==6) {knownN = &known6[0][0]; numKnownW=sizeof(known6)/(sizeof(int))/2;}
 else knownN = NULL;
 }
 
@@ -1309,7 +1309,7 @@ initForN();
 initOpenCL();
 
 printf("Starting validation checks\n");
-searchPrefix("123456",N,1,80,VERBOSE);
+searchPrefix("123456",NVAL,1,80,VERBOSE);
 printf("\n");
 
 printf("Starting benchmarking calculations\n");

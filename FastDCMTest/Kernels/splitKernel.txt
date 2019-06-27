@@ -51,12 +51,12 @@ if (id < nInputTarget-totalUnfinished)
 	while (cs.pos >= cs.rootDepth)
 		{
 		cs.pos--;
-		cs.lastN1 = N*(cs.lastN1 % (NN1/N)) + (cs.digits[cs.pos-(N-1)] & DIGIT_BITS);
+		cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
 		
 		//	Get the last digit in the current string
 		
 		digit = cs.digits[cs.pos] & DIGIT_BITS;
-		digitP = (digit+1)%N;
+		digitP = (digit+1)%NVAL;
 		
 		//	Compute the integer encoding the last N digits of the current string
 		

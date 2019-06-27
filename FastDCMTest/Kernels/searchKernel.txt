@@ -126,7 +126,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		
 	//	We either advance current digit, or place successor of current digit as our start for next position
 	
-	unsigned short digitP = (digit+1)%N;
+	unsigned short digitP = (digit+1)%NVAL;
 	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
 	
 	if (ki)
@@ -141,7 +141,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		
 		//	Update lastN1
 		
-		cs.lastN1 = lastN/N;
+		cs.lastN1 = lastN/NVAL;
 		}
 	else
 		{
@@ -154,7 +154,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 			cs.pos--;
 			pdigit = cs.digits[cs.pos-1] & DIGIT_BITS;
 			doUndo = -1;
-			cs.lastN1 = N*(cs.lastN1 % (NN1/N)) + (cs.digits[cs.pos-(N-1)] & DIGIT_BITS);
+			cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
 			};
 		};
 	};
