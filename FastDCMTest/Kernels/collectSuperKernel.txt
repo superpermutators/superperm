@@ -1,0 +1,17 @@
+__kernel void collectSuper(
+	__global struct stringStatus *SpsGlobal,		//	Cumulative sum of 0|1 for superpermutations (summed only within each block)
+	__global unsigned int *SblockSum,			//	Block totals for prefix sums
+	__global struct string *superIn,
+	__global struct string *superOut,
+	unsigned int nLocalThreads					//	Number of threads in each local workgroup
+	)
+{
+unsigned int id = get_global_id(0);				//	Identify string in global list
+unsigned int blk = id / nLocalThreads;			//	Identify block it belongs to
+struct stringStatus s = SpsGlobal[id];			//	Get its status and prefix sum
+
+if (s.keep)
+	{
+	superOut[s.prefixSum + SblockSum[blk]] = superIn[id];
+	};
+}

@@ -1,0 +1,91 @@
+	__kernel void delegate(
+	__global unsigned int *inputIndices,		//	Indices used to select strings from inputs[]
+	__global struct string *outputs,			//	Final state of each thread's string
+	__local struct stringStatus *psLocal,		//	Local buffer for prefix sum
+	__global struct stringStatus *psGlobal,		//	Prefix sum
+	__global unsigned int *blockSum,			//	Block totals for prefix sums
+	unsigned int nLocalThreads,					//	Number of local threads in each workgroup
+	unsigned int totalUnfinished				//	Number of true inputs; threads will be padded out to a power of 2
+	)
+{
+unsigned int id = get_global_id(0);
+unsigned int lid = get_local_id(0);
+unsigned int lidP = lid + CONFLICT_FREE_OFFSET(lid);
+unsigned int blk = id / nLocalThreads;
+
+struct string cs;
+
+if (id < totalUnfinished)
+	{
+	int ii = inputIndices[id];
+	cs = outputs[ii];
+	int retain = (cs.lowestDepthVisited < cs.depthSnapshot);
+	if (retain)
+		{
+		outputs[ii].depthSnapshot = cs.lowestDepthVisited;
+		};
+		
+//	Put 0|1 for retain|delegate into local buffer, ready for prefix sum computation 
+
+	psLocal[lidP].keep = psLocal[lidP].prefixSum = retain;
+	}
+else
+	{
+	psLocal[lidP].keep = psLocal[lidP].prefixSum = 0;
+	};
+	
+//	Compute the cumulative sum (aka prefix sum) of these quantities.
+//	Adapted from: https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch39.html
+
+int ci = (lid << 1) + 1;
+int di = ci+1;
+int qi = nLocalThreads-1;
+qi += CONFLICT_FREE_OFFSET(qi);
+
+for (unsigned int d = nLocalThreads>>1; d > 0; d >>= 1)
+	{ 
+	barrier(CLK_LOCAL_MEM_FENCE);
+	if (lid < d)
+		{
+		int Ci = ci-1;
+		int Di = di-1;
+		Ci += CONFLICT_FREE_OFFSET(Ci);
+		Di += CONFLICT_FREE_OFFSET(Di);
+		
+		psLocal[Di].prefixSum += psLocal[Ci].prefixSum;
+		}
+	ci <<= 1;
+	di <<= 1;
+	}
+	
+//	Use a single thread to extract and store the block sum before zeroing it,
+//	and store the details of the maximum permutation in this block.
+
+if (lid == 0)
+	{
+	blockSum[blk] = psLocal[qi].prefixSum;
+	psLocal[qi].prefixSum = 0;
+	}
+	
+for (unsigned int d = 1; d < nLocalThreads; d <<= 1)
+	{
+	ci >>= 1;
+	di >>= 1;
+	if (lid < d)                     
+		{
+		int Ci = ci-1;
+		int Di = di-1;
+		Ci += CONFLICT_FREE_OFFSET(Ci);
+		Di += CONFLICT_FREE_OFFSET(Di);
+		
+		unsigned int t = psLocal[Ci].prefixSum;
+		psLocal[Ci].prefixSum = psLocal[Di].prefixSum;
+		psLocal[Di].prefixSum += t;
+		}
+	barrier(CLK_LOCAL_MEM_FENCE);
+	}
+
+//	Copy prefix sums into global array.
+
+psGlobal[id] = psLocal[lidP];
+}

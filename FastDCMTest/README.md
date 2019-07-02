@@ -1,8 +1,8 @@
 # Readme
 
 Author:		Greg Egan  
-Date:		27 June 2019
-Version:		4.2
+Date:		2 July 2019
+Version:		4.3
 
 `FastDCMTest` is a C program that will test whether your computer can run the Chaffin Method calculations correctly and efficiently using its GPU, instead of
 (or in addition to) the CPU.

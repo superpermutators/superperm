@@ -1,4 +1,10 @@
-__kernel void search(
+#if SEARCH==1
+	__kernel void search(
+#elif SEARCH==2
+	__kernel void search2(
+#elif SEARCH==3
+	__kernel void search3(
+#endif
 	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
 	__constant unsigned short *mperm_res0,		//	1: Table of maximum number of permutations for each waste
 	int totalWaste,								//	2: Total waste we are allowing in each string		
@@ -18,6 +24,13 @@ __kernel void search(
 	__global struct maxPermsLoc *mpGlobal,		//	16: Info about best string in each block
 	unsigned int nLocalThreads,					//	17: Number of local threads in each workgroup
 	unsigned int nTrueInputs					//	18: Number of true inputs; threads will be padded out to a power of 2
+#if SUPER
+	,
+	__global struct string *superperms,			//	19: Any superpermutations found
+	__local struct stringStatus *SpsLocal,		//	20: Local buffer used for prefix sums
+	__global struct stringStatus *SpsGlobal,	//	21: Cumulative sum of 0|1 for finished|unfinished searches
+	__global unsigned int *SblockSum			//	22: Block totals for prefix sums
+#endif
 	)
 {
 unsigned int id = get_global_id(0);
@@ -54,8 +67,20 @@ int doUndo=1;
 
 unsigned long nodeCount = 0;
 
+#if SEARCH==2
+	cs.lowestDepthVisited = cs.depthSnapshot = cs.pos;
+#endif
+
+#if SUPER
+	SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 0;
+#endif
+
 while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 	{
+	#if (SEARCH==2||SEARCH==3)
+		cs.lowestDepthVisited = min(cs.lowestDepthVisited,cs.pos);
+	#endif
+	
 	//	Get the last digit in the current string
 	
 	unsigned int digit = cs.digits[cs.pos] & DIGIT_BITS;
@@ -79,9 +104,10 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 	int pInc = (cs.digits[pNum] & PERMUTATION_BITS) == 0; 
 	int oneMinusPInc = 1 ^ pInc;
 
-	cs.perms += doUndo*pInc;
-	cs.waste -= oneMinusPInc & undoMask;
+	cs.waste -= oneMinusPInc & undoMask;		//	Only for undoing
 	
+	cs.perms += doUndo*pInc;
+
 	//	Copy current string if it sets a new maximum for permutations
 	//	(Note that what we write out has cs.pos one less than length of full string, and has not
 	//	had latest permutation flagged.)
@@ -93,33 +119,99 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		mpLocal[lidP].perms = cs.perms;
 		pte = max(pte,maxPermsSeen);
 		};
-	
-	//	Least number of digits we would need to add to child before we could reach a new permutation
-	
-	unsigned int pAdd = (mnp & (P-FNM)) | (mip & oneMinusPInc);
+		
+	#if SUPER
+		if (cs.perms==FN)
+			{
+			superperms[id] = cs;
+			SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 1;
+			pte = FN-1;
+			nodeQuota = nodeCount;
+			};
+	#endif
 
-	//	The maximum amount of spare waste that could still be left after any descendant string reaches a permutation.
+	//	Maybe track unvisited permutations in 1-cycles
+		
+	#if OCP
+		int prevC = cs.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+		cs.digits[OCP_OFFSET+P] += pmip & (-pInc) & undoMask;
+		cs.oneCycleBins[prevC] -= mip & pInc & undoMask;
+		cs.oneCycleBins[prevC+1] += mip & pInc & undoMask;
+	#endif
+
+	//	Least number of digits we would need to add to string (after latest digit at cs.pos) before we could reach a new permutation.
 	
-	int spareW = totalWaste - cs.waste - pAdd;
+	unsigned int pAdd = (mnp & (P-FNM)) | (mip & (oneMinusPInc));
+
+	//	The maximum amount of spare waste that could still be left after any descendant string reaches a permutation:
 	
+		int spareW = totalWaste - (cs.waste + pAdd);
+
+	//	Note that cs.waste has NOT YET been updated to include the addition of the latest digit.
+	//
+	//	* If current string (including latest digit at cs.pos) DOES NOT end with a permutation, then current cs.waste is still ONE LESS than
+	//	true waste for current string, but pAdd is ONE MORE than the waste added if we add pAdd digits and get a permutation.  So overall,
+	//	waste will end up as cs.waste+pAdd if we add those pAdd digits and reach a permutation, and mperm_res[spareW] will give us
+	//	the maximum number of new permutations we can add to cs.perms without exceeding totalWaste.
+	//
+	//	* If current string (including latest digit at cs.pos) ends with a PREVIOUSLY VISITED permutation, then cs.waste is still ONE LESS than
+	//	true waste for current string, but pAdd = oneMinusPInc = 1, so cs.waste+pAdd is minimum waste we end up with after counting the
+	//	current wasted digit, and in the best-case scenario one more digit after that could give us a permutation with no more waste.
+	//	So again, we can add mperm_res[spareW] permutations.
+	//
+	//	* If current string (including latest digit at cs.pos) ends with an UNVISITED permutation, then waste is unchanged.
+	//	So if pInc=1 we always continue adding digits, unless we have reached N!.
+	
+
 	//	Maximum number of permutations this child's descendants could achieve
 	
-	unsigned int mpd = cs.perms + mperm_res[spareW];
+	#if OCP
+		unsigned short res0 = 0;
+		int w = (spareW+1) & (-(spareW>=0));
+		for (int b=NVAL;b>0;b--)
+			{
+			int ocb = cs.oneCycleBins[b];
+			if (w <= ocb)
+				{
+				res0 += w*b;
+				break;
+				}
+			else
+				{
+				res0 += ocb*b;
+				w -= ocb;
+				};
+			};
+		unsigned int mpd = cs.perms + min(res0, mperm_res[spareW]);
+	#else
+		unsigned int mpd = cs.perms + mperm_res[spareW];
+	#endif
 	
 	//	Do we follow this branch or not?
 	
 	int ki = ((mpd > pte) | pInc) & doMask;
-	doUndo = 1;
-	
-	//	Maybe increment position
 
-	cs.pos += ki;
-	nodeCount += ki;
+	#if SUPER
+		if (cs.perms==FN)
+			{
+			//	Do not try to extend a superpermutation, just backtrack on added perm and continue
+			
+			cs.perms--;
+			ki=0;
+			};
+	#endif
+	
+	doUndo = 1;
 	
 	//	Update waste
 	
 	cs.waste += oneMinusPInc & ki;
 		
+	//	Maybe increment position
+
+	cs.pos += ki;
+	nodeCount += ki;
+	
 	//	We either advance current digit, or place successor of current digit as our start for next position
 	
 	unsigned int digitP = (digit+1)%NVAL;
@@ -133,6 +225,15 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 		
 		cs.digits[pNum] += pmip;
 		
+		//	Maybe track unvisited permutations in 1-cycles
+		
+		#if OCP
+			int prevC = cs.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+			cs.digits[OCP_OFFSET+P] -= pmip & (-pInc);
+			cs.oneCycleBins[prevC] -= mip & pInc;
+			cs.oneCycleBins[prevC-1] += mip & pInc;
+		#endif
+
 		//	Update lastN1
 		
 		cs.lastN1 = lastN/NVAL;
@@ -162,7 +263,7 @@ nsLocal[lidP] = nodeCount;
 
 //	Put 0|1 for finished|unfinished search into local buffer, ready for prefix sum computation 
 
-psLocal[lidP].unfinished = psLocal[lidP].prefixSum = (cs.pos >= cs.rootDepth);
+psLocal[lidP].keep = psLocal[lidP].prefixSum = (cs.pos >= cs.rootDepth);
 
 //	Compute the cumulative sum (aka prefix sum) of these quantities.
 //	Adapted from: https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch39.html
@@ -185,6 +286,10 @@ for (unsigned int d = nLocalThreads>>1; d > 0; d >>= 1)
 		psLocal[Di].prefixSum += psLocal[Ci].prefixSum;
 		nsLocal[Di] += nsLocal[Ci];
 		
+		#if SUPER
+			SpsLocal[Di].prefixSum += SpsLocal[Ci].prefixSum;
+		#endif
+		
 		//	Track the maximum permutation count along the same tree as we use for the prefix sum
 		
 		int museC = -((int)(mpLocal[Ci].perms > mpLocal[Di].perms)), museD = ~museC;
@@ -202,6 +307,11 @@ if (lid == 0)
 	{
 	blockSum[blk] = psLocal[qi].prefixSum;
 	psLocal[qi].prefixSum = 0;
+	
+	#if SUPER
+		SblockSum[blk] = SpsLocal[qi].prefixSum;
+		SpsLocal[qi].prefixSum = 0;
+	#endif
 	
 	nsGlobal[blk] = nsLocal[qi];
 
@@ -224,6 +334,11 @@ for (unsigned int d = 1; d < nLocalThreads; d <<= 1)
 		psLocal[Ci].prefixSum = psLocal[Di].prefixSum;
 		psLocal[Di].prefixSum += t;
 		
+		#if SUPER
+			t = SpsLocal[Ci].prefixSum;
+			SpsLocal[Ci].prefixSum = SpsLocal[Di].prefixSum;
+			SpsLocal[Di].prefixSum += t;
+		#endif
 		}
 	barrier(CLK_LOCAL_MEM_FENCE);
 	}
@@ -231,4 +346,8 @@ for (unsigned int d = 1; d < nLocalThreads; d <<= 1)
 //	Copy prefix sums into global array.
 
 psGlobal[id] = psLocal[lidP];
+
+#if SUPER
+	SpsGlobal[id] = SpsLocal[lidP];
+#endif
 }

@@ -1,7 +1,8 @@
-__kernel void orderIndex(
+__kernel void orderIndex2(
 	__global struct stringStatus *psGlobal,		//	Cumulative sum of 0|1 for finished|unfinished searches (summed only within each block)
 	__global unsigned int *blockSum,			//	Block totals for prefix sums
 	__global unsigned int *inputIndices,		//	Indices used to select strings from input heap
+	__global unsigned int *inputIndices2,		//	Indices used to select strings from input heap
 	unsigned int nLocalThreads,					//	Number of threads in each local workgroup
 	unsigned int totalUnfinished				//	Number of strings whose searches didn't finish on last pass
 	)
@@ -28,5 +29,5 @@ unsigned int p = s.prefixSum + blockSum[blk];	//	Add block total to blockwise pr
 
 if (!s.keep) p = totalUnfinished+id-p;
 
-inputIndices[p] = id;
+inputIndices2[p] = inputIndices[id];
 }

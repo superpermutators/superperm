@@ -2,8 +2,8 @@
 //  FastDCMTest.c
 //
 //  Author:		Greg Egan
-//	Version:	4.2
-//	Date:		27 June 2019
+//	Version:	4.3
+//	Date:		2 July 2019
 //
 //	This is a TEST version of the DistributedChaffinMethod client that uses
 //	OpenCL to run a parallel version of the search on a GPU.
@@ -76,7 +76,7 @@
 
 cl_event profilingEvent;
 cl_ulong commandStart, commandEnd;
-cl_ulong searchKernelTime = 0, indexKernelTime = 0, splitKernelTime, writeToGPUTime = 0, readFromGPUTime = 0;
+cl_ulong searchKernelTime = 0, indexKernelTime = 0, splitKernelTime = 0, delegateKernelTime = 0, writeToGPUTime = 0, readFromGPUTime = 0;
 cl_ulong totalNodesSearched=0;
 
 #define PE (&profilingEvent)
@@ -122,29 +122,44 @@ char **headerSourceCode=NULL;
 
 //	The kernels themselves
 
-#define SEARCH_KERNEL 0
-#define INDEX_KERNEL 1
-#define SPLIT_KERNEL 2
+#define INDEX_KERNEL 0
+#define INDEX2_KERNEL 1
+#define DELEGATE_KERNEL 2
+#define COLLECT_KERNEL 3
+
+#define SEARCH_KERNEL 4
+#define SEARCH2_KERNEL 5
+#define SEARCH3_KERNEL 6
+#define SPLIT_KERNEL 7
+
+#define OCP_KERNEL_OFFSET 4
+#define SUPER_KERNEL_OFFSET 8
 
 const char *kernelFiles[][3] = {
-	{"Kernels/searchKernel.txt", "search", ""},
 	{"Kernels/orderIndexKernel.txt", "orderIndex", ""},
-	{"Kernels/splitKernel.txt", "split", ""},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 10"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 20"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 30"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 40"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 50"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 100"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 200"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 300"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 400"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 500"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 1000"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 2000"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 3000"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 4000"},
-	{"Kernels/dummy1.txt", "dummy1", "#define MM 5000"}
+	{"Kernels/orderIndex2Kernel.txt", "orderIndex2", ""},
+	{"Kernels/delegateKernel.txt", "delegate", ""},
+	{"Kernels/collectSuperKernel.txt", "collectSuper", ""},
+
+	{"Kernels/searchKernel.txt", "search", "#define SEARCH 1\n#define OCP 0\n#define SUPER 0\n"},
+	{"Kernels/searchKernel.txt", "search2", "#define SEARCH 2\n#define OCP 0\n#define SUPER 0\n"},
+	{"Kernels/searchKernel.txt", "search3", "#define SEARCH 3\n#define OCP 0\n#define SUPER 0\n"},
+	{"Kernels/splitKernel.txt", "split", "#define OCP 0\n#define SUPER 0\n"},
+
+	{"Kernels/searchKernel.txt", "search", "#define SEARCH 1\n#define OCP 1\n#define SUPER 0\n"},
+	{"Kernels/searchKernel.txt", "search2", "#define SEARCH 2\n#define OCP 1\n#define SUPER 0\n"},
+	{"Kernels/searchKernel.txt", "search3", "#define SEARCH 3\n#define OCP 1\n#define SUPER 0\n"},
+	{"Kernels/splitKernel.txt", "split", "#define OCP 1\n#define SUPER 0\n"},
+
+	{"Kernels/searchKernel.txt", "search", "#define SEARCH 1\n#define OCP 0\n#define SUPER 1\n"},
+	{"Kernels/searchKernel.txt", "search2", "#define SEARCH 2\n#define OCP 0\n#define SUPER 1\n"},
+	{"Kernels/searchKernel.txt", "search3", "#define SEARCH 3\n#define OCP 0\n#define SUPER 1\n"},
+	{"Kernels/splitKernel.txt", "split", "#define OCP 0\n#define SUPER 1\n"},
+
+	{"Kernels/searchKernel.txt", "search", "#define SEARCH 1\n#define OCP 1\n#define SUPER 1\n"},
+	{"Kernels/searchKernel.txt", "search2", "#define SEARCH 2\n#define OCP 1\n#define SUPER 1\n"},
+	{"Kernels/searchKernel.txt", "search3", "#define SEARCH 3\n#define OCP 1\n#define SUPER 1\n"},
+	{"Kernels/splitKernel.txt", "split", "#define OCP 1\n#define SUPER 1\n"}
 };
 
 int nKernels=0;
@@ -177,6 +192,7 @@ int nStringsPerHeap = 0;
 
 //	Host memory
 
+struct string *host_heap = NULL;
 cl_uint *host_blockSum = NULL;
 cl_uint *host_inputIndices = NULL;
 struct maxPermsLoc *host_maxPerms = NULL;
@@ -184,19 +200,20 @@ cl_ulong *host_nodesSearched = NULL;
 
 //	GPU memory
 
-#define NUM_GPU_HEAPS 3
+#define NUM_GPU_HEAPS 5
+#define NUM_GPU_PS 2
 
 cl_mem gpu_perms=NULL, gpu_mperm_res0=NULL;
 cl_mem gpu_heaps[NUM_GPU_HEAPS];
-cl_mem gpu_inputIndices=NULL;
+cl_mem gpu_inputIndices[2];
 cl_mem gpu_nodesSearched=NULL;
-cl_mem gpu_prefixSum=NULL;
-cl_mem gpu_blockSum=NULL;
+cl_mem gpu_prefixSum[NUM_GPU_PS];
+cl_mem gpu_blockSum[NUM_GPU_PS];
 cl_mem gpu_maxPerms=NULL;
 
 //	Quota for nodes searched
 
-#define DEFAULT_NODE_QUOTA 1000
+#define DEFAULT_NODE_QUOTA 200
 
 cl_ulong nodeQuota = DEFAULT_NODE_QUOTA;
 
@@ -209,6 +226,10 @@ int known6[][2]={{0,6},{1,12},{2,18},{3,24},{4,30},{5,34},{6,40},{7,46},{8,52},{
 
 int *knownN=NULL;
 int numKnownW=0;
+
+//	Best string encountered in current search
+
+struct string bestString;
 
 //	Read a text file into memory
 //	Convert any carriage returns into linefeeds
@@ -365,7 +386,6 @@ exit(EXIT_FAILURE);
 int countPerms(unsigned char *s, int ns)
 {
 unsigned char pf[FN+1];
-
 for (int k=0;k<=FN;k++) pf[k]=0;
 
 unsigned short lastN = 0;
@@ -386,6 +406,20 @@ for (int k=0;k<ns;k++)
 	pf[pNum]=TRUE;
 	};
 return pc;
+}
+
+//	Expand a "string" structure into a complete digit string (integer digits 0 ...N-1, not ASCII)
+//
+//	Each string structure is related to a prefix; the string itself only contains the last N digits of the prefix
+//
+//	Return the total length of the expanded string
+
+int expandString(struct string *str, unsigned char *s, char *prefix, size_t prefixLen)
+{
+int fsc=0;
+for (int k=0;k<prefixLen;k++) s[fsc++] = prefix[k]-'1';
+for (int k=NVAL;k<str->pos;k++) s[fsc++]=str->digits[k] & DIGIT_BITS;
+return fsc;
 }
 
 //	Print string data
@@ -463,7 +497,6 @@ if (check)
 	};
 }
 
-
 int initOpenCL(const char *gpuChoice)
 {
 for (int i=0;i<NUM_GPU_HEAPS;i++) gpu_heaps[i]=NULL;
@@ -515,6 +548,7 @@ cbNeeded += permsSizeBytes;
 
 static unsigned char digits[NVAL], dcount[NVAL], pcount[NVAL];
 for (int k=0;k<NVAL;k++) pcount[k]=0;
+
 for (int s=0;s<nn;s++)
 	{
 	int s0=s;
@@ -529,13 +563,31 @@ for (int s=0;s<nn;s++)
 	
 	if (isPerm)
 		{
-		perms[s] = pcount[digits[NVAL-1]]++;
+		//	We have a permutation.
 		
-		//	Create string version of permutation
+		//	The number in perms[] needs to range from 0 to (N-1)-1!, and identify the 1-cyle
+		//	the permutation belongs to, so we reuse the same number for a full 1-cycle, and
+		//	only store it, for all the members of the 1-cycle, when when we have a permutation
+		//	ending in 0.
 		
-		unsigned short pNum = digits[NVAL-1]*FNM+perms[s];
-		for (int k=0;k<NVAL;k++) pstrings[pNum][k]='1'+digits[k];
-		pstrings[pNum][NVAL]='\0';
+		if (digits[NVAL-1]==0)
+			{
+			int pc = pcount[digits[NVAL-1]];
+			for (int y=0;y<NVAL;y++)
+				{
+				int s1 = 0;
+				for (int z=NVAL-1;z>=0;z--) s1=NVAL*s1+digits[(z+y)%NVAL];
+				perms[s1] = pc;
+
+				//	Create string version of permutation
+				
+				unsigned short pNum = digits[(NVAL-1+y)%NVAL]*FNM+perms[s1];
+				for (int k=0;k<NVAL;k++) pstrings[pNum][k]='1'+digits[(k+y)%NVAL];
+				pstrings[pNum][NVAL]='\0';
+				
+				pcount[y]++;
+				};
+			};
 		}
 	else
 		{
@@ -554,10 +606,12 @@ for (int s=0;s<nn;s++)
 					};
 				};
 
-			//	We've hit the first length, l, with a repetition, so l-1 is longest without
+			//	We've hit the first length, l, with a repetition, so l-1 is longest without repetition
 			
 			if (!repFree)
 				{
+				//	N-(longest no-rep length) is number of digits we need to add before we could get a permutation
+				
 				perms[s] = FNM+NVAL-(l-1);
 				break;
 				};
@@ -772,7 +826,7 @@ for (int i=0;i<nKernels;i++)
 	kernelSourceCode[i] = readTextFile(kernelFiles[i][0],kernelLengths+i);
 	printf("Read kernel file %s (%lu bytes)\n",kernelFiles[i][0],kernelLengths[i]);
 	
-	size_t klen = strlen(kernelFiles[i][2]) + headerLengthTotal + kernelLengths[i];
+	size_t klen = strlen(kernelFiles[i][2]+1) + headerLengthTotal + kernelLengths[i];
 	
 	CHECK_MEM( kernelFullSource[i] = (char *)malloc((klen+1) * sizeof(char)) )
 	
@@ -780,6 +834,7 @@ for (int i=0;i<nKernels;i++)
 	
 	strcpy(kernelFullSource[i]+ptr, kernelFiles[i][2]);
 	ptr += strlen(kernelFiles[i][2]);
+	*(kernelFullSource[i]+(ptr++)) = '\n';
 	
 	for (int j=0;j<nHeaders;j++)
 		{
@@ -878,6 +933,8 @@ nStringsPerHeap = max_global_ws;
 
 //	Host memory
 
+CHECK_MEM( host_heap = (struct string *)malloc(nStringsPerHeap*sizeof(struct string)) )
+
 CHECK_MEM( host_blockSum = (cl_uint *)malloc(max_groups*sizeof(cl_uint)) )
 
 CHECK_MEM( host_inputIndices = (cl_uint *)malloc(nStringsPerHeap*sizeof(cl_uint)) )
@@ -897,22 +954,28 @@ for (int i=0;i<NUM_GPU_HEAPS;i++)
 	openCL(clErr);
 	gpuAlloc += nStringsPerHeap*sizeof(struct string);
 	};
-	
-gpu_inputIndices = clCreateBuffer(context, CL_MEM_READ_WRITE, nStringsPerHeap*sizeof(cl_uint), NULL, &clErr);
-openCL(clErr);
-gpuAlloc += nStringsPerHeap*sizeof(cl_uint);
+
+for (int i=0;i<2;i++)
+	{
+	gpu_inputIndices[i] = clCreateBuffer(context, CL_MEM_READ_WRITE, nStringsPerHeap*sizeof(cl_uint), NULL, &clErr);
+	openCL(clErr);
+	gpuAlloc += nStringsPerHeap*sizeof(cl_uint);
+	};
 
 gpu_nodesSearched = clCreateBuffer(context, CL_MEM_READ_WRITE, max_groups*sizeof(cl_ulong), NULL, &clErr);
 openCL(clErr);
 gpuAlloc += max_groups*sizeof(cl_ulong);
 
-gpu_prefixSum = clCreateBuffer(context, CL_MEM_READ_WRITE, nStringsPerHeap*sizeof(struct stringStatus), NULL, &clErr);
-openCL(clErr);
-gpuAlloc += nStringsPerHeap*sizeof(struct stringStatus);
+for (int i=0;i<NUM_GPU_PS;i++)
+	{
+	gpu_prefixSum[i] = clCreateBuffer(context, CL_MEM_READ_WRITE, nStringsPerHeap*sizeof(struct stringStatus), NULL, &clErr);
+	openCL(clErr);
+	gpuAlloc += nStringsPerHeap*sizeof(struct stringStatus);
 
-gpu_blockSum = clCreateBuffer(context, CL_MEM_READ_WRITE, max_groups*sizeof(cl_uint), NULL, &clErr);
-openCL(clErr);
-gpuAlloc += max_groups*sizeof(cl_uint);
+	gpu_blockSum[i] = clCreateBuffer(context, CL_MEM_READ_WRITE, max_groups*sizeof(cl_uint), NULL, &clErr);
+	openCL(clErr);
+	gpuAlloc += max_groups*sizeof(cl_uint);
+	};
 
 gpu_maxPerms = clCreateBuffer(context, CL_MEM_READ_WRITE, max_groups*sizeof(struct maxPermsLoc), NULL, &clErr);
 openCL(clErr);
@@ -928,6 +991,7 @@ void cleanupOpenCL()
 {
 //	Free host memory
 
+if (host_heap) free(host_heap);
 if (host_blockSum) free(host_blockSum);
 if (host_inputIndices) free(host_inputIndices);
 if (host_maxPerms) free(host_maxPerms);
@@ -935,11 +999,15 @@ if (host_nodesSearched) free(host_nodesSearched);
 
 //	Free OpenCL resources
 
-if (gpu_prefixSum) clReleaseMemObject(gpu_prefixSum);
-if (gpu_blockSum) clReleaseMemObject(gpu_blockSum);
+for (int i=0;i<NUM_GPU_PS;i++)
+	{
+	if (gpu_prefixSum[i]) clReleaseMemObject(gpu_prefixSum[i]);
+	if (gpu_blockSum[i]) clReleaseMemObject(gpu_blockSum[i]);
+	};
+	
 if (gpu_maxPerms) clReleaseMemObject(gpu_maxPerms);
 if (gpu_nodesSearched) clReleaseMemObject(gpu_nodesSearched);
-if (gpu_inputIndices) clReleaseMemObject(gpu_inputIndices);
+for (int i=0;i<2;i++) if (gpu_inputIndices[i]) clReleaseMemObject(gpu_inputIndices[i]);
 for (int i=0;i<NUM_GPU_HEAPS;i++) if (gpu_heaps[i]) clReleaseMemObject(gpu_heaps[i]);
 if (gpu_mperm_res0) clReleaseMemObject(gpu_mperm_res0);
 if (gpu_perms) clReleaseMemObject(gpu_perms);
@@ -955,13 +1023,48 @@ if (commands) clReleaseCommandQueue(commands);
 if (context) clReleaseContext(context);
 }
 
+//	Comparison routines for delegated strings
+//
+//	Compare two strings, up to .depthSnapshot
+
+int dsCompare(const struct string *a, const struct string *b)
+{
+//	Different lengths
+
+if (a->depthSnapshot < b->depthSnapshot) return -1;
+if (a->depthSnapshot > b->depthSnapshot) return 1;
+
+//	Same lengths
+
+for (int z=0;z<a->depthSnapshot;z++)
+	{
+	unsigned char da = a->digits[z] & DIGIT_BITS;
+	unsigned char db = b->digits[z] & DIGIT_BITS;
+	if (da < db) return -1;
+	if (da > db) return 1;
+	};
+return 0;
+}
+
+//	Compares indices to strings in host_heap
+
+int dsIndexCompare(const void *pa, const void *pb)
+{
+cl_uint ia = *((cl_uint *)pa);
+cl_uint ib = *((cl_uint *)pb);
+return dsCompare(host_heap+ia, host_heap+ib);
+}
+
 //	Do a search on the GPU starting from a single string, for a fixed total waste, and an initial pte;
 //	we report back the number of nodes searched and the maximum permutation count seen.
 
-void searchString(struct string *br, cl_int totalWaste, cl_uint pte, cl_uint pro, cl_uint *maxPermsSeen, cl_ulong *totalNodesSearched, int verbose)
+void searchString(struct string *br, cl_int totalWaste, cl_uint pte, cl_uint pro, cl_uint *maxPermsSeen, cl_ulong *totalNodesSearched, int verbose,
+	char *prefix, int prefixLen)
 {
-struct string bestString;
 *maxPermsSeen = 0;
+
+cl_uint *host_HI=NULL;
+CHECK_MEM( host_HI = malloc(nStringsPerHeap*sizeof(cl_uint)) )
 
 //	Initialise workgroup sizes
 
@@ -972,17 +1075,20 @@ cl_uint nTrueInputs = 1;
 
 //	Initialise data in the heap with a single string
 
-int inputHeap = 0;
+int inputHeap = 0, inputIndices = 0;
 
 openCL( clEnqueueWriteBuffer(commands, gpu_heaps[inputHeap], CL_TRUE,
 			0, sizeof(struct string), br, 0, NULL, PE) );
 RECORD_TIME(writeToGPUTime)
 
 //	Initialise indices as the sequence 0,1,2,...
-			
-openCL( clEnqueueWriteBuffer(commands, gpu_inputIndices, CL_TRUE,
-			0, global_ws*sizeof(cl_uint), host_inputIndices, 0, NULL, PE) );
-RECORD_TIME(writeToGPUTime)
+
+for (int i=0;i<2;i++)
+	{
+	openCL( clEnqueueWriteBuffer(commands, gpu_inputIndices[i], CL_TRUE,
+			0, nStringsPerHeap*sizeof(cl_uint), host_inputIndices, 0, NULL, PE) );
+	RECORD_TIME(writeToGPUTime)
+	};
 
 //	Initialise perms-to-exceed
 
@@ -993,18 +1099,24 @@ cl_ulong nsp = 0;
 
 int threads=0;
 int runs=0;
+int totalRuns=0;
+int delegateRuns1=10000, delegateRunsCycle=10000;
 
 while (TRUE)		//	Loop for repeated runs of nodeQuota
 	{
-	cl_ulong t0 = searchKernelTime+indexKernelTime+splitKernelTime+writeToGPUTime+readFromGPUTime;
+	if (totalRuns==delegateRuns1) printf("Splitting current task\n");
+	int super = pte0+2 >= FN;
+	int ocp = totalWaste >= FNM;
 	
 	if (verbose) printf("--- totalWaste = %d, pte = %d, permutations ruled out = %d ----\n",totalWaste, pte0, pro);
-	if (pte0+1 >= pro)
+	if (pte0+1 >= pro && pte0<FN)
 		{
-		if (verbose) printf("  We can't exceed %d permutations (this has been ruled out) so we're done\n",pte0);
+		printf("  We can't exceed %d permutations so we're done\n",pte0);
 		break;				//	Can't exceed pte if next highest count has been ruled out
 		};
 		
+	cl_ulong t0 = searchKernelTime+indexKernelTime+splitKernelTime+delegateKernelTime+writeToGPUTime+readFromGPUTime;
+
 	cl_uint nLocalThreads = (cl_uint) local_ws;
 	cl_uint paddedBlockSize = nLocalThreads + CONFLICT_FREE_OFFSET(nLocalThreads-1);
 	
@@ -1013,7 +1125,22 @@ while (TRUE)		//	Loop for repeated runs of nodeQuota
 	
 	//	Do a node-limited search on all current input strings
 
-	cl_kernel sk = kernels[SEARCH_KERNEL];
+	int srchKI = totalRuns < delegateRuns1 ? SEARCH_KERNEL: (totalRuns==delegateRuns1 ? SEARCH2_KERNEL : SEARCH3_KERNEL);
+	int splitKI = SPLIT_KERNEL;
+	
+	if (ocp)
+		{
+		srchKI += OCP_KERNEL_OFFSET;
+		splitKI += OCP_KERNEL_OFFSET;
+		};
+	if (super)
+		{
+		srchKI += SUPER_KERNEL_OFFSET;
+		splitKI += SUPER_KERNEL_OFFSET;
+		};
+
+	cl_kernel sk = kernels[srchKI];
+
 /*
 __kernel void search(
 	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
@@ -1035,6 +1162,13 @@ __kernel void search(
 	__global struct maxPermsLoc *mpGlobal,		//	16: Info about best string in each block
 	unsigned int nLocalThreads,					//	17: Number of local threads in each workgroup
 	unsigned int nTrueInputs					//	18: Number of true inputs; threads will be padded out to a power of 2
+#if SUPER
+	,
+	__global struct string *superperms,			//	19: Any superpermutations found
+	__local struct stringStatus *SpsLocal,		//	20: Local buffer used for prefix sums
+	__global struct stringStatus *SpsGlobal,	//	21: Cumulative sum of 0|1 for finished|unfinished searches
+	__global unsigned int *SblockSum			//	22: Block totals for prefix sums
+#endif
 	)
 */
 	openCL( clSetKernelArg(sk, 0, sizeof(gpu_perms), &gpu_perms) );
@@ -1044,18 +1178,26 @@ __kernel void search(
 	openCL( clSetKernelArg(sk, 4, sizeof(*maxPermsSeen), maxPermsSeen) );
 	openCL( clSetKernelArg(sk, 5, sizeof(nodeQuota), &nodeQuota) );
 	openCL( clSetKernelArg(sk, 6, sizeof(gpu_heaps[inputHeap]), &gpu_heaps[inputHeap]) );
-	openCL( clSetKernelArg(sk, 7, sizeof(gpu_inputIndices), &gpu_inputIndices) );
+	openCL( clSetKernelArg(sk, 7, sizeof(gpu_inputIndices[inputIndices]), &gpu_inputIndices[inputIndices]) );
 	openCL( clSetKernelArg(sk, 8, sizeof(gpu_heaps[1-inputHeap]), &gpu_heaps[1-inputHeap]) );
 	openCL( clSetKernelArg(sk, 9, sizeof(gpu_heaps[2]), &gpu_heaps[2]) );
 	openCL( clSetKernelArg(sk, 10, sizeof(cl_ulong)*paddedBlockSize, NULL) );
 	openCL( clSetKernelArg(sk, 11, sizeof(gpu_nodesSearched), &gpu_nodesSearched) );
 	openCL( clSetKernelArg(sk, 12, sizeof(struct stringStatus)*paddedBlockSize, NULL) );
-	openCL( clSetKernelArg(sk, 13, sizeof(gpu_prefixSum), &gpu_prefixSum) );
-	openCL( clSetKernelArg(sk, 14, sizeof(gpu_blockSum), &gpu_blockSum) );
+	openCL( clSetKernelArg(sk, 13, sizeof(gpu_prefixSum[0]), &gpu_prefixSum[0]) );
+	openCL( clSetKernelArg(sk, 14, sizeof(gpu_blockSum[0]), &gpu_blockSum[0]) );
 	openCL( clSetKernelArg(sk, 15, sizeof(struct maxPermsLoc)*paddedBlockSize, NULL) );
 	openCL( clSetKernelArg(sk, 16, sizeof(gpu_maxPerms), &gpu_maxPerms) );
 	openCL( clSetKernelArg(sk, 17, sizeof(nLocalThreads), &nLocalThreads) );
 	openCL( clSetKernelArg(sk, 18, sizeof(nTrueInputs), &nTrueInputs) );
+	
+	if (super)
+		{
+		openCL( clSetKernelArg(sk, 19, sizeof(gpu_heaps[3]), &gpu_heaps[3]) );
+		openCL( clSetKernelArg(sk, 20, sizeof(struct stringStatus)*paddedBlockSize, NULL) );
+		openCL( clSetKernelArg(sk, 21, sizeof(gpu_prefixSum[1]), &gpu_prefixSum[1]) );
+		openCL( clSetKernelArg(sk, 22, sizeof(gpu_blockSum[1]), &gpu_blockSum[1]) );
+		};
 
 	openCL( clEnqueueNDRangeKernel(commands, sk, 1, NULL, &global_ws, &local_ws, 0, NULL, PE) );
 	openCL( clFinish(commands) );
@@ -1079,9 +1221,9 @@ __kernel void search(
 		0, sizeof(struct maxPermsLoc)*nWorkGroups, host_maxPerms, 0, NULL, PE) );
 	RECORD_TIME(readFromGPUTime)
 	
-	//	Number of unfininished searches (for each block / local workgroup)
+	//	Number of unfinished searches (for each block / local workgroup)
 
-	openCL( clEnqueueReadBuffer(commands, gpu_blockSum, CL_TRUE,
+	openCL( clEnqueueReadBuffer(commands, gpu_blockSum[0], CL_TRUE,
 		0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
 	RECORD_TIME(readFromGPUTime)
 
@@ -1107,7 +1249,7 @@ __kernel void search(
 	
 	//	Write the cumulative sums of the block sums back to GPU, where they'll be needed by orderIndex
 
-	openCL( clEnqueueWriteBuffer(commands, gpu_blockSum, CL_TRUE,
+	openCL( clEnqueueWriteBuffer(commands, gpu_blockSum[0], CL_TRUE,
 		0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
 	RECORD_TIME(writeToGPUTime)
 
@@ -1120,7 +1262,11 @@ __kernel void search(
 		{
 		*maxPermsSeen=mp;
 		if (verbose) printf("  Max permutations seen = %d\n",*maxPermsSeen);
-		if (*maxPermsSeen > pte0) pte0 = *maxPermsSeen;
+		if (*maxPermsSeen > pte0)
+			{
+			pte0 = *maxPermsSeen;
+			if (pte0 == FN) pte0 = FN-1;
+			};
 		
 		//	Read the new best string from GPU
 		
@@ -1131,13 +1277,94 @@ __kernel void search(
 		//	Need to adjust length to include final digit
 		
 		bestString.pos++;
+		
+		//	Validate string's waste and permutation counts
+		
+		static unsigned char fs[2*FN];
+		int fsc = expandString(&bestString, fs, prefix, prefixLen);
+		int pc = countPerms(fs, fsc);
+		if (pc != bestString.perms)
+			{
+			printf("Mismatch between claimed permutations bestString.perms=%d and actual count, %d\n",bestString.perms,pc);
+			print_string_data(stdout, &bestString, prefix, prefixLen, FALSE, TRUE, FALSE);
+			exit(EXIT_FAILURE);
+			};
+		int w = fsc - (NVAL-1) - pc;
+		if (w != bestString.waste)
+			{
+			printf("Mismatch between claimed waste bestString.waste=%d and actual waste, %d\n",bestString.waste,w);
+			print_string_data(stdout, &bestString, prefix, prefixLen, FALSE, TRUE, FALSE);
+			exit(EXIT_FAILURE);
+			};
 		};
 		
+	//	Number of superpermutations found (for each block / local workgroup)
+
+	if (super)
+		{
+		openCL( clEnqueueReadBuffer(commands, gpu_blockSum[1], CL_TRUE,
+			0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
+		RECORD_TIME(readFromGPUTime)
+
+		cl_uint superCount = 0;
+		for (int z=0;z<nWorkGroups;z++)
+			{
+			//	Convert block sums into cumulative sums, and compute overall total
+
+			cl_uint t = host_blockSum[z];
+			host_blockSum[z]=superCount;
+			superCount += t;
+			};
+		
+		//	Write the cumulative sums of the block sums back to GPU, where they'll be needed by orderIndex
+
+		openCL( clEnqueueWriteBuffer(commands, gpu_blockSum[1], CL_TRUE,
+			0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
+		RECORD_TIME(writeToGPUTime)
+		
+		if (superCount != 0)
+			{
+			printf("Found %d superpermutations\n",superCount);
+			
+			/*
+	__kernel void collectSuper(
+	__global struct stringStatus *SpsGlobal,		//	Cumulative sum of 0|1 for superpermutations (summed only within each block)
+	__global unsigned int *SblockSum,			//	Block totals for prefix sums
+	__global struct string *superIn,
+	__global struct string *superOut,
+	unsigned int nLocalThreads					//	Number of threads in each local workgroup
+	)
+			*/
+			
+			cl_kernel ck = kernels[COLLECT_KERNEL];
+			
+			openCL( clSetKernelArg(ck, 0, sizeof(gpu_prefixSum[1]), &gpu_prefixSum[1]) );
+			openCL( clSetKernelArg(ck, 1, sizeof(gpu_blockSum[1]), &gpu_blockSum[1]) );
+			openCL( clSetKernelArg(ck, 2, sizeof(gpu_heaps[3]), &gpu_heaps[3]) );
+			openCL( clSetKernelArg(ck, 3, sizeof(gpu_heaps[4]), &gpu_heaps[4]) );
+			openCL( clSetKernelArg(ck, 4, sizeof(nLocalThreads), &nLocalThreads) );
+
+			openCL( clEnqueueNDRangeKernel(commands, ck, 1, NULL, &global_ws, &local_ws, 0, NULL, PE) );
+			openCL( clFinish(commands) );
+			RECORD_TIME(indexKernelTime)
+				
+			openCL( clEnqueueReadBuffer(commands, gpu_heaps[4], CL_TRUE,
+				0, superCount*sizeof(struct string), host_heap, 0, NULL, PE) );
+			RECORD_TIME(readFromGPUTime)
+			
+			for (int z=0;z<superCount;z++)
+				{
+				host_heap[z].pos++;
+				print_string_data(stdout, &host_heap[z], prefix, prefixLen, FALSE, TRUE, FALSE);
+				};
+			};
+		};
+	
 	//	Quit if we have no unfinished searches
 	
 	if (totalUnfinished==0) break;
 	
-	//	Arrange for the first totalUnfinished indices in gpu_inputIndices to point
+	//	Arrange for the first totalUnfinished indices in gpu_inputIndices[inputIndices] to point
 	//	to the strings with unfinished searches, and the rest (up to global_ws) to point
 	//	to empty splots in the heap.
 
@@ -1152,15 +1379,135 @@ __kernel void orderIndex(
 	unsigned int totalUnfinished
 	)
 */
-	openCL( clSetKernelArg(ik, 0, sizeof(gpu_prefixSum), &gpu_prefixSum) );
-	openCL( clSetKernelArg(ik, 1, sizeof(gpu_blockSum), &gpu_blockSum) );
-	openCL( clSetKernelArg(ik, 2, sizeof(gpu_inputIndices), &gpu_inputIndices) );
+	openCL( clSetKernelArg(ik, 0, sizeof(gpu_prefixSum[0]), &gpu_prefixSum[0]) );
+	openCL( clSetKernelArg(ik, 1, sizeof(gpu_blockSum[0]), &gpu_blockSum[0]) );
+	openCL( clSetKernelArg(ik, 2, sizeof(gpu_inputIndices[inputIndices]), &gpu_inputIndices[inputIndices]) );
 	openCL( clSetKernelArg(ik, 3, sizeof(nLocalThreads), &nLocalThreads) );
 	openCL( clSetKernelArg(ik, 4, sizeof(totalUnfinished), &totalUnfinished) );
 
 	openCL( clEnqueueNDRangeKernel(commands, ik, 1, NULL, &global_ws, &local_ws, 0, NULL, PE) );
 	openCL( clFinish(commands) );
 	RECORD_TIME(indexKernelTime)
+	
+	//	If we have moved into delegation mode, we perform a cycle where we:
+	//
+	//	(1) Run search2() once in place of search(), and set .depthSnapshot to the current position in each string
+	//	(2) Run search3() repeatedly in place of search(), and track .lowestDepthVisited
+	//	(3) Run delegate(), which identifies all the strings whose searches need to be delegated because
+	//	.lowestDepthVisited remained >= .depthSnapshot for all subsequent searches.
+	
+	
+	if (totalRuns > delegateRuns1 && (totalRuns-delegateRuns1)%delegateRunsCycle == 0)
+		{
+		printf("Thinning out search\n");
+		
+/*
+	__kernel void delegate(
+	__global unsigned int *inputIndices,		//	Indices used to select strings from inputs[]
+	__global struct string *outputs,			//	Final state of each thread's string
+	__local struct stringStatus *psLocal,		//	Local buffer
+	__global struct stringStatus *psGlobal,		//	Cumulative sum of 0|1 for finished|unfinished searches
+	__global unsigned int *blockSum,			//	Block totals for prefix sums
+	unsigned int nLocalThreads,					//	Number of local threads in each workgroup
+	unsigned int totalUnfinished				//	Number of true inputs; threads will be padded out to a power of 2
+	)
+*/
+
+		cl_kernel dk = kernels[DELEGATE_KERNEL];
+		
+		openCL( clSetKernelArg(dk, 0, sizeof(gpu_inputIndices[inputIndices]), &gpu_inputIndices[inputIndices]) );
+		openCL( clSetKernelArg(dk, 1, sizeof(gpu_heaps[1-inputHeap]), &gpu_heaps[1-inputHeap]) );
+		openCL( clSetKernelArg(dk, 2, sizeof(struct stringStatus)*paddedBlockSize, NULL) );
+		openCL( clSetKernelArg(dk, 3, sizeof(gpu_prefixSum[0]), &gpu_prefixSum[0]) );
+		openCL( clSetKernelArg(dk, 4, sizeof(gpu_blockSum[0]), &gpu_blockSum[0]) );
+		openCL( clSetKernelArg(dk, 5, sizeof(nLocalThreads), &nLocalThreads) );
+		openCL( clSetKernelArg(dk, 6, sizeof(totalUnfinished), &totalUnfinished) );
+
+		openCL( clEnqueueNDRangeKernel(commands, dk, 1, NULL, &global_ws, &local_ws, 0, NULL, PE) );
+		openCL( clFinish(commands) );
+		RECORD_TIME(delegateKernelTime)
+		
+		//	delegate() will have put prefix sum info into psGlobal and blockSums, so we now need to reorganise inputIndices[]
+		
+		openCL( clEnqueueReadBuffer(commands, gpu_blockSum[0], CL_TRUE,
+			0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
+		RECORD_TIME(readFromGPUTime)
+
+		cl_uint oldTotalUnfinished = totalUnfinished;
+		totalUnfinished = 0;
+		
+		for (int z=0;z<nWorkGroups;z++)
+			{
+			//	Convert block sums into cumulative sums, and compute overall total
+
+			cl_uint t = host_blockSum[z];
+			host_blockSum[z]=totalUnfinished;
+			totalUnfinished += t;
+			};
+			
+		int delegatedStrings = oldTotalUnfinished - totalUnfinished;
+		
+		if (delegatedStrings==0) printf("No subtrees delegated\n");
+		else
+			{
+			
+			//	Write the cumulative sums of the block sums back to GPU, where they'll be needed by orderIndex2()
+
+			openCL( clEnqueueWriteBuffer(commands, gpu_blockSum[0], CL_TRUE,
+				0, sizeof(cl_uint)*nWorkGroups, host_blockSum, 0, NULL, PE) );
+			RECORD_TIME(writeToGPUTime)
+
+			printf("Unfinished strings remaining were reduced from %u to %u\n",oldTotalUnfinished,totalUnfinished);
+			
+			//	Reorganise gpu_inputIndices[]
+			
+			cl_kernel ik2 = kernels[INDEX2_KERNEL];
+		
+			openCL( clSetKernelArg(ik2, 0, sizeof(gpu_prefixSum[0]), &gpu_prefixSum[0]) );
+			openCL( clSetKernelArg(ik2, 1, sizeof(gpu_blockSum[0]), &gpu_blockSum[0]) );
+			openCL( clSetKernelArg(ik2, 2, sizeof(gpu_inputIndices[inputIndices]), &gpu_inputIndices[inputIndices]) );
+			openCL( clSetKernelArg(ik2, 3, sizeof(gpu_inputIndices[1-inputIndices]), &gpu_inputIndices[1-inputIndices]) );
+			openCL( clSetKernelArg(ik2, 4, sizeof(nLocalThreads), &nLocalThreads) );
+			openCL( clSetKernelArg(ik2, 5, sizeof(totalUnfinished), &totalUnfinished) );
+
+			openCL( clEnqueueNDRangeKernel(commands, ik2, 1, NULL, &global_ws, &local_ws, 0, NULL, PE) );
+			openCL( clFinish(commands) );
+			RECORD_TIME(indexKernelTime)
+			
+			inputIndices = 1-inputIndices;
+			
+			//	Extract out the delegated strings
+			
+			openCL( clEnqueueReadBuffer(commands, gpu_inputIndices[inputIndices], CL_TRUE,
+				totalUnfinished*sizeof(cl_uint), delegatedStrings*sizeof(cl_uint), host_HI, 0, NULL, PE) );
+			RECORD_TIME(readFromGPUTime)
+				
+			cl_uint loHI=nStringsPerHeap+1, hiHI = 0;
+			for (int z=0;z<delegatedStrings;z++)
+				{
+				if (host_HI[z] < loHI) loHI = host_HI[z];
+				if (host_HI[z] > hiHI) hiHI = host_HI[z];
+				};
+				
+			openCL( clEnqueueReadBuffer(commands, gpu_heaps[1-inputHeap], CL_TRUE,
+				loHI*sizeof(struct string), (hiHI-loHI+1)*sizeof(struct string), host_heap, 0, NULL, PE) );
+			RECORD_TIME(readFromGPUTime)
+				
+			//	Sort pointers to the delegated strings
+			
+			for (int z=0;z<delegatedStrings;z++) host_HI[z] = host_HI[z] - loHI;
+			qsort(host_HI,delegatedStrings,sizeof(cl_uint),dsIndexCompare);
+			
+			//	Reduce to unique prefixes
+			
+			int uds = 1;
+			for (int z=2;z<delegatedStrings;z++)
+				{
+				if (dsIndexCompare(&host_HI[z],&host_HI[uds-1])!=0) host_HI[uds++]=host_HI[z];
+				};
+			printf("%d subtrees delegated, encompassing %d delegated strings\n",uds,delegatedStrings);
+			};
+		};
 	
 	//	If we have any spare capacity, we split unfinished searches to make use of it.
 	
@@ -1170,7 +1517,7 @@ __kernel void orderIndex(
 	
 	if (nInputTarget>totalUnfinished)
 		{
-		cl_kernel spk = kernels[SPLIT_KERNEL];
+		cl_kernel spk = kernels[splitKI];
 /*
 __kernel void split(
 	__constant unsigned char *perms,			//	Table of permutation info for N-digit strings
@@ -1193,7 +1540,7 @@ __kernel void split(
 		else local_ws = max_local_ws;
 
 		openCL( clSetKernelArg(spk, 0, sizeof(gpu_perms), &gpu_perms));
-		openCL( clSetKernelArg(spk, 1, sizeof(gpu_inputIndices), &gpu_inputIndices) );
+		openCL( clSetKernelArg(spk, 1, sizeof(gpu_inputIndices[inputIndices]), &gpu_inputIndices[inputIndices]) );
 		openCL( clSetKernelArg(spk, 2, sizeof(gpu_heaps[1-inputHeap]), &gpu_heaps[1-inputHeap]) );
 		openCL( clSetKernelArg(spk, 3, sizeof(nInputTarget), &nInputTarget) );
 		openCL( clSetKernelArg(spk, 4, sizeof(totalUnfinished), &totalUnfinished) );
@@ -1225,7 +1572,7 @@ __kernel void split(
 		};
 		
 	nTrueInputs = (cl_uint) nInputTarget;
-	cl_ulong t1 = searchKernelTime+indexKernelTime+splitKernelTime+writeToGPUTime+readFromGPUTime;
+	cl_ulong t1 = searchKernelTime+indexKernelTime+splitKernelTime+delegateKernelTime+writeToGPUTime+readFromGPUTime;
 	cl_ulong dt = t1-t0;
 	
 	tsp+=dt;
@@ -1242,8 +1589,11 @@ __kernel void split(
 		threads = 0;
 		runs = 0;
 		};
-	};
 		
+	totalRuns++;
+	};
+	
+if (host_HI) free(host_HI);
 }
 
 void searchPrefix(char *prefix, int prefixLen, int waste1, int waste2, int verbose)
@@ -1252,6 +1602,10 @@ void searchPrefix(char *prefix, int prefixLen, int waste1, int waste2, int verbo
 
 struct string br;
 for (int k=0;k<MSL;k++) br.digits[k]=0;
+for (int k=0;k<NVAL;k++) br.oneCycleBins[k]=0;
+br.oneCycleBins[NVAL] = FNM;
+for (int k=0;k<=FNM+NVAL;k++) br.digits[OCP_OFFSET+k] = NVAL << PERMUTATION_SHIFT;
+
 br.perms=0;
 unsigned short lastN=0;
 unsigned char d=0;
@@ -1267,11 +1621,19 @@ for (int k=0;k<prefixLen;k++)
 	if (P<FNM && (br.digits[pNum] & PERMUTATION_BITS)==0)
 		{
 		br.perms++;
+		
+		//	Reduce the number of unvisited permutations in this 1-cycle, and adjust
+		//	counts in bins
+		
+		int prevC = br.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+		br.digits[OCP_OFFSET+P] -= PERMUTATION_LSB;
+		br.oneCycleBins[prevC]--;
+		br.oneCycleBins[prevC-1]++;
 		};
 	
 	//	Set the flag, either for permutation or "no permutation"
 	
-	br.digits[pNum] = PERMUTATION_LSB;
+	br.digits[pNum] |= PERMUTATION_LSB;
 	
 	//	Store the last N digits in the string.
 	
@@ -1290,25 +1652,22 @@ br.waste=prefixLen - (NVAL-1) - br.perms;
 br.digits[NVAL] |= (d+1)%NVAL;
 br.pos = NVAL;
 br.rootDepth = NVAL;
-
-/*
-printf("Input string: \n");
-print_string_data(stdout, &br, prefix, prefixLen, TRUE, FALSE, TRUE);
-printf("\n");
-*/
+br.lowestDepthVisited = NVAL;
+br.depthSnapshot = 0;
 
 cl_uint maxPermsSeen=0;
 totalNodesSearched=0;
 cl_int totalWaste=waste1;
 cl_uint pte=mperm_res[totalWaste-1]+2*(NVAL-4);
-while (totalWaste <= waste2)							//	Loop for values of waste
+while (totalWaste <= waste2)						//	Loop for values of waste
 	{
+	if (pte >= FN) pte = FN-1;
 	cl_uint pro = mperm_res[totalWaste-1]+NVAL+1;	//	Permutations previously ruled out for this waste
 	if (pro > FN+1) pro = FN+1;
 	
 	while (TRUE)									//	Loop for values of pte, which might include backtracking if we aim too high
 		{
-		searchString(&br, totalWaste, pte, pro, &maxPermsSeen, &totalNodesSearched, verbose);
+		searchString(&br, totalWaste, pte, pro, &maxPermsSeen, &totalNodesSearched, verbose, prefix, prefixLen);
 		
 		if (maxPermsSeen > pte) break;				//	We hit our target for perms to exceed
 		
@@ -1319,16 +1678,15 @@ while (totalWaste <= waste2)							//	Loop for values of waste
 	
 	//	Verify value against known results
 	
-	int matchOK = TRUE;
 	if (knownN && totalWaste < numKnownW && maxPermsSeen != knownN[2*totalWaste+1])
 		{
 		printf("Mismatch between maxPermsSeen=%d found by program and known result %d\n",maxPermsSeen,knownN[2*totalWaste+1]);
-		matchOK = FALSE;
-		}
-	else printf("For totalWaste=%d, maxPermsSeen=%d\n",totalWaste,maxPermsSeen);
+		exit(EXIT_FAILURE);
+		};
+		
+	printf("For totalWaste=%d, maxPermsSeen=%d\n",totalWaste,maxPermsSeen);
+	print_string_data(stdout, &bestString, prefix, prefixLen, FALSE, TRUE, FALSE);
 
-	if (!matchOK) exit(EXIT_FAILURE);
-	
 	//	Update mperm_res, both in host and in GPU
 	
 	mperm_res[totalWaste] = maxPermsSeen;
@@ -1339,7 +1697,6 @@ while (totalWaste <= waste2)							//	Loop for values of waste
 	if (maxPermsSeen==FN) break;
 	
 	pte = maxPermsSeen + 2*(NVAL-4);
-	if (pte >= FN) pte = FN-1;
 	totalWaste++;
 	};
 	
@@ -1374,10 +1731,12 @@ printf("Starting validation checks\n");
 searchPrefix("123456",NVAL,1,80,VERBOSE);
 printf("\n");
 
+#if (NVAL==6)
 printf("Starting benchmarking calculations\n");
-searchPrefix("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532",
-strlen("123456123451623451263451236451234651324651342651346251346521345621345261345216345213645231645236142536124536214532"),118,118,
+searchPrefix("123456123451623451263451236451234651324651342651346251346521436521463521465321465231462531462351462315462314562341562431562413562415362451362453162453612456",
+strlen("123456123451623451263451236451234651324651342651346251346521436521463521465321465231462531462351462315462314562341562431562413562415362451362453162453612456"),118,118,
 	VERBOSE);
+#endif
 
 cleanupOpenCL();
 
@@ -1392,6 +1751,7 @@ cl_ulong totalGPUTime = 0;
 PTIME(searchKernelTime)
 PTIME(indexKernelTime)
 PTIME(splitKernelTime)
+PTIME(delegateKernelTime)
 PTIME(writeToGPUTime)
 PTIME(readFromGPUTime)
 
@@ -1401,3 +1761,4 @@ printf("\nNodes searched per second overall = %lld\n",(totalNodesSearched*100000
 #endif
 return 0;
 }
+

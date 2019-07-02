@@ -31,7 +31,7 @@ if (id < nInputTarget-totalUnfinished)
 
 	struct string cs = outputs[inp];
 	
-	//	We split an string with an unfinished search as follows:
+	//	We split a string with an unfinished search as follows:
 	//
 	//	(a) We pick a depth D between the original rootDepth and the current position in the string
 	//	(b)	We set one copy of the string to a new rootDepth of D, so its search will terminate as soon as
@@ -39,7 +39,14 @@ if (id < nInputTarget-totalUnfinished)
 	//	(c) In the other copy, we fall straight back to that depth (without changing the root depth), and
 	//	prepare to continue from there.
 	
-	unsigned int D = (int)sqrt((float)cs.rootDepth*(float)cs.pos);
+	//	If we are in delegation mode, so that the strings have a non-zero depthSnapshot used to track how long
+	//	is spent searching subtrees, we avoid splitting above it, in order to keep resources concentrated on
+	//	the subtree below it.
+	
+	unsigned int D, rd;
+	if (cs.depthSnapshot > 0 && cs.depthSnapshot < cs.pos) rd = cs.depthSnapshot;
+	else rd = cs.rootDepth;
+	D = (int)sqrt((float)rd*(float)cs.pos);
 	
 	//	Alter the root depth in the original.
 
@@ -84,13 +91,27 @@ if (id < nInputTarget-totalUnfinished)
 		cs.waste -= oneMinusPInc;
 		cs.perms -= pInc;
 		
+		#if OCP
+			int prevC = cs.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+			cs.digits[OCP_OFFSET+P] += pmip & (-pInc);
+			cs.oneCycleBins[prevC] -= mip & pInc;
+			cs.oneCycleBins[prevC+1] += mip & pInc;
+		#endif
+
 		//	Continue until we have moved outside the search that will be covered by the other half of the split.
+		//	As well as moving back below depth D, we need to move back past any digits where the successor would
+		//	be a repeat of the previous digit.
 		
 		if ((cs.pos < D) && (digitP != (cs.digits[cs.pos-1] & DIGIT_BITS))) break;
 		};
 		
-	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
+	//	Having fallen back far enough, change the final digit to its successor, ready to continue searching
+	//	without any overlap with the other part of the split. 
 		
+	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
+	
+	if (cs.pos < cs.lowestDepthVisited) cs.lowestDepthVisited = cs.pos;
+	
 	//	Write the modified string.
 	
 	outputs[outp] = cs;
