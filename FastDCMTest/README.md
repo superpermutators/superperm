@@ -14,11 +14,11 @@ You will need to download the **entire directory** containing the main source co
 
 To build the program under MacOS, make that downloaded directory your current directory, then type:
 
-`gcc FastDCMTest.c -o3 -framework OpenCL -o FastDCMTest`
+`gcc FastDCMTest.c -O3 -framework OpenCL -o FastDCMTest`
 
 To build the program under Linux:
 
-`gcc FastDCMTest.c -o3 -lOpenCL -o FastDCMTest`
+`gcc FastDCMTest.c -O3 -lm -lOpenCL -o FastDCMTest`
 
 ## Running
 
