@@ -356,7 +356,7 @@ char pstrings[FN+NVAL][NVAL+1];
 
 #define MAX_CL_INFO 2048
 
-const char *gpuChoice = NULL;
+const char *gpuName = NULL, *gpuPlatform = NULL;
 static char chosenGPU[MAX_CL_INFO];
 cl_platform_id gpu_platform;
 cl_device_id gpu_device;
@@ -792,7 +792,7 @@ if (check)
 	};
 }
 
-int initOpenCL(const char *gpuChoice, int verbose, int host)
+int initOpenCL(const char *gpuName, const char *gpuPlatform, int verbose, int host)
 {
 for (int i=0;i<NUM_GPU_HEAPS;i++) gpu_heaps[i]=NULL;
 
@@ -973,6 +973,8 @@ if (num_platforms == 0) exit(EXIT_FAILURE);
 
 for (int i=0;i<num_platforms;i++)
 	{
+	int gpuPlatformOK = TRUE;
+	
 	if (verbose) printf("Platform %d:\n",i+1);
 	
 	openCL( clGetPlatformInfo(platforms[i], CL_PLATFORM_PROFILE, MAX_CL_INFO, openCL_info, NULL) );
@@ -984,8 +986,19 @@ for (int i=0;i<num_platforms;i++)
 	openCL( clGetPlatformInfo(platforms[i], CL_PLATFORM_NAME, MAX_CL_INFO, openCL_info, NULL) );
 	if (verbose) printf("Name: %s\n",openCL_info);
 	
+	if (gpuPlatform)
+		{
+		gpuPlatformOK = (strncmp(gpuPlatform,openCL_info,strlen(gpuPlatform))==0);
+		};
+	
 	openCL( clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, MAX_CL_INFO, openCL_info, NULL) );
 	if (verbose) printf("Vendor: %s\n",openCL_info);
+	
+	if (!gpuPlatformOK)
+		{
+		printf("[This platform name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuPlatform);
+		continue;
+		};
 	
 	//	Get the devices available on this platform
 	
@@ -1015,9 +1028,9 @@ for (int i=0;i<num_platforms;i++)
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_NAME, MAX_CL_INFO, openCL_info, NULL) );
 		if (verbose) printf("\tDevice name: %s\n",openCL_info);
 
-		if (gpuChoice)
+		if (gpuName)
 			{
-			gpuDeviceNameOK = (strncmp(gpuChoice,openCL_info,strlen(gpuChoice))==0);
+			gpuDeviceNameOK = (strncmp(gpuName,openCL_info,strlen(gpuName))==0);
 			};
 
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_VENDOR, MAX_CL_INFO, openCL_info, NULL) );
@@ -1042,7 +1055,7 @@ for (int i=0;i<num_platforms;i++)
 		
 		if (!gpuDeviceNameOK)
 			{
-			if (verbose) printf("\t[This device name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuChoice);
+			if (verbose) printf("\t[This device name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuName);
 			gpuOK = FALSE;
 			};
 		
@@ -2696,7 +2709,12 @@ for (int i=1;i<argc;i++)
 		}
 	else if (strcmp(argv[i],"gpuName")==0 && i+1<argc)
 		{
-		gpuChoice = argv[i+1];
+		gpuName = argv[i+1];
+		i++;
+		}
+	else if (strcmp(argv[i],"gpuPlatform")==0 && i+1<argc)
+		{
+		gpuPlatform = argv[i+1];
 		i++;
 		}
 	else
@@ -2706,7 +2724,7 @@ for (int i=1;i<argc;i++)
 		};
 	};
 	
-initOpenCL(gpuChoice,TRUE,TRUE);
+initOpenCL(gpuName,gpuPlatform,TRUE,TRUE);
 
 printf("Starting GPU validation checks\n");
 validationChecks("123456",NVAL,1,90,VERBOSE);
