@@ -954,8 +954,8 @@ if (knownN)
 
 //	See what OpenCL platforms and GPUs are available
 
-#define MAX_CL_PLATFORMS 5
-#define MAX_CL_DEVICES 5
+#define MAX_CL_PLATFORMS 10
+#define MAX_CL_DEVICES 10
 
 int foundPlatformAndGPU=FALSE;
 cl_platform_id platforms[MAX_CL_PLATFORMS];
@@ -1008,13 +1008,16 @@ for (int i=0;i<num_platforms;i++)
 	
 	//	Get the devices available on this platform
 	
-	openCL( clGetDeviceIDs(platforms[i],
+	cl_int cRet = clGetDeviceIDs(platforms[i],
                       CL_DEVICE_TYPE_GPU,
                       MAX_CL_DEVICES,
                       devices[i],
-                      &num_devices[i]) );
+                      &num_devices[i]);
+                      
+	if (cRet != CL_SUCCESS)	num_devices[i]=0;
                       
 	if (verbose) printf("Found %u GPU device%s for this platform:\n",num_devices[i],num_devices[i]==1?"":"s");
+	
 	for (int j=0; j<num_devices[i]; j++)
 		{
 		if (verbose) printf("\tDevice %d:\n",j+1);
