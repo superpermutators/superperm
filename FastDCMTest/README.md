@@ -42,7 +42,7 @@ The program will start by listing details of all the GPUs it finds, and it will 
 
 If a suitable GPU is found, it will attempt to compile the "kernels":  the code that will run on the GPU itself.
 
-If that succeeds, the program will attempt to validate its calculations, by doing a Chaffin Method search for wasted digits ranging from 1 to 80.
+If that succeeds, the program will attempt to validate its calculations, by doing a Chaffin Method search for wasted digits ranging from 1 to 90.
 If any mistakes are found, the program will quit.
 
 Finally, the program will proceed to give benchmarks of its performance, in terms of nodes searched per second. This will continue every 10 seconds indefinitely. You can
