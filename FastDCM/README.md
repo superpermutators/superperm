@@ -22,11 +22,11 @@ You will need to download the **entire directory** containing the main source co
 
 To build the program under MacOS, make that downloaded directory your current directory, then type:
 
-`gcc FastDCM.c -o3 -framework OpenCL -o FastDCM`
+`gcc FastDCM.c -O3 -framework OpenCL -o FastDCM`
 
 To build the program under Linux:
 
-`gcc FastDCM.c -o3 -lOpenCL -o FastDCM`
+`gcc FastDCMTest.c -O3 -lm -lOpenCL -o FastDCMTest`
 
 Building under Windows is still experimental. You will probably need to download an SDK (software development kit) that offers support for the `OpenCL` protocol
 from the manufacturer of your GPU, such as NVidia or AMD, which will contain the libraries and header files that your compiler needs to build the program.
