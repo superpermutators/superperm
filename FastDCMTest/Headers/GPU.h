@@ -1,5 +1,8 @@
 //  GPU.h
 //
+
+#define CL_TARGET_OPENCL_VERSION 120
+
 //	Avoiding bank conflicts in GPU
 
 #define LOG_NUM_BANKS 4
