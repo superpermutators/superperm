@@ -1,0 +1,379 @@
+	__kernel void search(
+	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
+	__constant unsigned short *mperm_res0,		//	1: Table of maximum number of permutations for each waste
+	int totalWaste,								//	2: Total waste we are allowing in each string		
+	unsigned int pte,							//	3: Permutations to exceed
+	unsigned int maxPermsSeen,					//	4: Maximum permutations seen in any string (not just this search)
+	unsigned long stepQuota,					//	5: Maximum number of steps to take before we quit
+	__global struct string *inputs,				//	6: String each thread starts from
+	__global unsigned int *inputIndices,		//	7: Indices used to select strings from inputs[]
+	__global struct string *outputs,			//	8: Final state of each thread's string
+	__global struct string *bestStrings,		//	9: Best string found by each thread
+	__local unsigned long *nsLocal,				//	10: Local buffer used for nodes searched
+	__global unsigned long *nsGlobal,			//	11: Number of nodes searched by each thread
+	__local struct stringStatus *psLocal,		//	12: Local buffer used for prefix sums
+	__global struct stringStatus *psGlobal,		//	13: Cumulative sum of 0|1 for finished|unfinished searches
+	__global unsigned int *blockSum,			//	14: Block totals for prefix sums
+	__local struct maxPermsLoc *mpLocal,		//	15: Local buffer used to determine best string across workgroup
+	__global struct maxPermsLoc *mpGlobal,		//	16: Info about best string in each block
+	unsigned int nLocalThreads,					//	17: Number of local threads in each workgroup
+	unsigned int nTrueInputs					//	18: Number of true inputs; threads will be padded out to a power of 2
+#if SUPER
+	,
+	__global struct string *superperms,			//	19: Any superpermutations found
+	__local struct stringStatus *SpsLocal,		//	20: Local buffer used for prefix sums
+	__global struct stringStatus *SpsGlobal,	//	21: Cumulative sum of 0|1 for finished|unfinished searches
+	__global unsigned int *SblockSum			//	22: Block totals for prefix sums
+#endif
+	)
+{
+
+//	Versions of this kernel are generated for 0/1 values of the preprocessor symbols OCP, SUPER and NODES_EXIT.
+//
+//	OCP adds extra code to track the occupancy of 1-cycles, once that becomes a worthwhile method of pruning.
+//
+//	SUPER adds extra code to store superpermutations, once we are at a point where we can expect to encounter them.
+//
+//	NODES_EXIT determines whether we stop iterating through the sequence of strings after a particular number of steps
+//	(which is more efficient, as all threads are more likely to end at the same time) or at a point where we have just
+//	increased the length of the string, which means we have yet to search any values for the next digit; this is a
+//	cleaner stopping point when we need to delegate branches of the search to other tasks.
+//
+//	If NODES_EXIT = 2, we undo the last addition of a digit before proceeding with the search.
+
+unsigned int id = get_global_id(0);
+unsigned int lid = get_local_id(0);
+unsigned int lidP = lid + CONFLICT_FREE_OFFSET(lid);
+unsigned int blk = id / nLocalThreads;
+
+//	Offset index into table
+
+__constant unsigned short *mperm_res = mperm_res0 + MPERM_OFFSET;
+
+//	Flag whether we are checking current string or unwinding the results of pursuing it
+
+int doUndo=1;
+
+//	Take a copy of the string we will start searching from.
+
+struct string cs;
+
+if (id < nTrueInputs)
+	{
+	cs = inputs[inputIndices[id]];
+	#if NODES_EXIT==2
+		cs.pos--;
+		doUndo = -1;
+		cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
+	#endif
+	}
+else
+	{
+	cs.pos=0;
+	cs.rootDepth=1;
+	};
+
+//	Indicate no "best string seen" yet for this thread.
+
+bestStrings[id].perms = 0;
+mpLocal[lidP].where = id;
+mpLocal[lidP].perms = 0;
+
+//	Nodes explored in this search
+
+unsigned long nodeCount = 0, stepCount = 0;
+
+#if SUPER
+	SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 0;
+#endif
+
+while ((cs.pos >= cs.rootDepth &&
+
+#if NODES_EXIT
+	nodeCount
+#else
+	stepCount
+#endif
+
+< stepQuota) || doUndo < 0)
+	{
+	//	Get the last digit in the current string
+	
+	unsigned int digit = cs.digits[cs.pos] & DIGIT_BITS;
+	
+	//	Compute the integer encoding the last N digits of the current string
+	
+	unsigned int lastN = cs.lastN1 + NN1 * digit;
+	
+	//	From the perms[] table entry, see if these N digits are a permutation.
+	//	If so, compute its index number 0 ... (N!-1).
+	//	If not, the entry is >= FNM [= (N-1)!] and we get the "not-a-permutation" flag, number FN [= N!], which is always set in the
+	//	flags.
+	
+	unsigned int P = perms[lastN];
+	int mnp = -(P>=FNM), mip = ~mnp, pmip = PERMUTATION_LSB & mip;
+	int pNum = (mnp & FN) | (mip & (digit*FNM+P));
+	int doMask = -(doUndo>0), undoMask = ~doMask;
+	
+	cs.digits[pNum] -= pmip & undoMask;
+	
+	int pInc = (cs.digits[pNum] & PERMUTATION_BITS) == 0; 
+	int oneMinusPInc = 1 ^ pInc;
+
+	cs.waste -= oneMinusPInc & undoMask;		//	Only for undoing
+	
+	cs.perms += doUndo*pInc;
+
+	//	Copy current string if it sets a new maximum for permutations
+	//	(Note that what we write out has cs.pos one less than length of full string, and has not
+	//	had latest permutation flagged.)
+	
+	if (cs.perms > maxPermsSeen)
+		{
+		maxPermsSeen = cs.perms;
+		bestStrings[id] = cs;
+		mpLocal[lidP].perms = cs.perms;
+		pte = max(pte,maxPermsSeen);
+		};
+		
+	#if SUPER
+		if (cs.perms==FN)
+			{
+			superperms[id] = cs;
+			SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 1;
+			pte = FN-1;
+			
+			//	Quit at first opportunity to do it cleanly, to avoid overwriting superperm
+			
+			stepQuota =
+			#if NODES_EXIT
+				nodeCount
+			#else
+				stepCount
+			#endif
+				+1;
+			};
+	#endif
+
+	//	Maybe track unvisited permutations in 1-cycles
+		
+	#if OCP
+		int prevC = cs.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+		cs.digits[OCP_OFFSET+P] += pmip & (-pInc) & undoMask;
+		cs.oneCycleBins[prevC] -= mip & pInc & undoMask;
+		cs.oneCycleBins[prevC+1] += mip & pInc & undoMask;
+	#endif
+
+	//	Least number of digits we would need to add to string (after latest digit at cs.pos) before we could reach a new permutation.
+	
+	unsigned int pAdd = (mnp & (P-FNM)) | (mip & (oneMinusPInc));
+
+	//	The maximum amount of spare waste that could still be left after any descendant string reaches a permutation:
+	
+		int spareW = totalWaste - (cs.waste + pAdd);
+
+	//	Note that cs.waste has NOT YET been updated to include the addition of the latest digit.
+	//
+	//	* If current string (including latest digit at cs.pos) DOES NOT end with a permutation, then current cs.waste is still ONE LESS than
+	//	true waste for current string, but pAdd is ONE MORE than the waste added if we add pAdd digits and get a permutation.  So overall,
+	//	waste will end up as cs.waste+pAdd if we add those pAdd digits and reach a permutation, and mperm_res[spareW] will give us
+	//	the maximum number of new permutations we can add to cs.perms without exceeding totalWaste.
+	//
+	//	* If current string (including latest digit at cs.pos) ends with a PREVIOUSLY VISITED permutation, then cs.waste is still ONE LESS than
+	//	true waste for current string, but pAdd = oneMinusPInc = 1, so cs.waste+pAdd is minimum waste we end up with after counting the
+	//	current wasted digit, and in the best-case scenario one more digit after that could give us a permutation with no more waste.
+	//	So again, we can add mperm_res[spareW] permutations.
+	//
+	//	* If current string (including latest digit at cs.pos) ends with an UNVISITED permutation, then waste is unchanged.
+	//	So if pInc=1 we always continue adding digits, unless we have reached N!.
+	
+
+	//	Maximum number of permutations this child's descendants could achieve
+	
+	#if OCP
+		unsigned short res0 = 0;
+		int w = (spareW+1) & (-(spareW>=0));
+		for (int b=NVAL;b>0;b--)
+			{
+			int ocb = cs.oneCycleBins[b];
+			if (w <= ocb)
+				{
+				res0 += w*b;
+				break;
+				}
+			else
+				{
+				res0 += ocb*b;
+				w -= ocb;
+				};
+			};
+		unsigned int mpd = cs.perms + min(res0, mperm_res[spareW]);
+	#else
+		unsigned int mpd = cs.perms + mperm_res[spareW];
+	#endif
+	
+	//	Do we follow this branch or not?
+	
+	int ki = ((mpd > pte) | pInc) & doMask;
+
+	#if SUPER
+		if (cs.perms==FN)
+			{
+			//	Do not try to extend a superpermutation, just backtrack on added perm and continue
+			
+			cs.perms--;
+			ki=0;
+			};
+	#endif
+	
+	doUndo = 1;
+	
+	//	Update waste
+	
+	cs.waste += oneMinusPInc & ki;
+		
+	//	Maybe increment position
+
+	cs.pos += ki;
+	nodeCount += ki;
+	
+	//	We either advance current digit, or place successor of current digit as our start for next position
+	
+	unsigned int digitP = (digit+1)%NVAL;
+	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
+	
+	if (ki)
+		{
+		//	We are extending the string.
+		
+		//	Count the permutation visits
+		
+		cs.digits[pNum] += pmip;
+		
+		//	Maybe track unvisited permutations in 1-cycles
+		
+		#if OCP
+			int prevC = cs.digits[OCP_OFFSET+P] >> PERMUTATION_SHIFT;
+			cs.digits[OCP_OFFSET+P] -= pmip & (-pInc);
+			cs.oneCycleBins[prevC] -= mip & pInc;
+			cs.oneCycleBins[prevC-1] += mip & pInc;
+		#endif
+
+		//	Update lastN1
+		
+		cs.lastN1 = lastN/NVAL;
+		}
+	else
+		{
+		//	We are going on to the next digit in the current position.
+		
+		//	If we came full circle in the digit range, fall back along the string.
+		
+		if (digitP == (cs.digits[cs.pos-1] & DIGIT_BITS))
+			{
+			cs.pos--;
+			doUndo = -1;
+			cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
+			};
+		};
+	stepCount++;
+	};
+	
+//	Store the endpoint of the search
+
+outputs[id] = cs;
+
+//	Record the number of nodes searched
+
+nsLocal[lidP] = nodeCount;
+
+//	Put 0|1 for finished|unfinished search into local buffer, ready for prefix sum computation 
+
+psLocal[lidP].keep = psLocal[lidP].prefixSum = (cs.pos >= cs.rootDepth);
+
+//	Compute the cumulative sum (aka prefix sum) of these quantities.
+//	Adapted from: https://developer.nvidia.com/gpugems/GPUGems3/gpugems3_ch39.html
+
+int ci = (lid << 1) + 1;
+int di = ci+1;
+int qi = nLocalThreads-1;
+qi += CONFLICT_FREE_OFFSET(qi);
+
+for (unsigned int d = nLocalThreads>>1; d > 0; d >>= 1)
+	{ 
+	barrier(CLK_LOCAL_MEM_FENCE);
+	if (lid < d)
+		{
+		int Ci = ci-1;
+		int Di = di-1;
+		Ci += CONFLICT_FREE_OFFSET(Ci);
+		Di += CONFLICT_FREE_OFFSET(Di);
+		
+		psLocal[Di].prefixSum += psLocal[Ci].prefixSum;
+		nsLocal[Di] += nsLocal[Ci];
+		
+		#if SUPER
+			SpsLocal[Di].prefixSum += SpsLocal[Ci].prefixSum;
+		#endif
+		
+		//	Track the maximum permutation count along the same tree as we use for the prefix sum
+		
+		int museC = -((int)(mpLocal[Ci].perms > mpLocal[Di].perms)), museD = ~museC;
+		mpLocal[Di].perms = (museC & mpLocal[Ci].perms) | (museD & mpLocal[Di].perms);
+		mpLocal[Di].where = (museC & mpLocal[Ci].where) | (museD & mpLocal[Di].where);
+		}
+	ci <<= 1;
+	di <<= 1;
+	}
+	
+//	Use a single thread to extract and store the block sum before zeroing it,
+//	and store the details of the maximum permutation in this block.
+
+if (lid == 0)
+	{
+	blockSum[blk] = psLocal[qi].prefixSum;
+	psLocal[qi].prefixSum = 0;
+	
+	#if SUPER
+		SblockSum[blk] = SpsLocal[qi].prefixSum;
+		SpsLocal[qi].prefixSum = 0;
+	#endif
+	
+	nsGlobal[blk] = nsLocal[qi];
+
+	mpGlobal[blk].perms = mpLocal[qi].perms;
+	mpGlobal[blk].where = mpLocal[qi].where;
+	}
+	
+for (unsigned int d = 1; d < nLocalThreads; d <<= 1)
+	{
+	ci >>= 1;
+	di >>= 1;
+	if (lid < d)                     
+		{
+		int Ci = ci-1;
+		int Di = di-1;
+		Ci += CONFLICT_FREE_OFFSET(Ci);
+		Di += CONFLICT_FREE_OFFSET(Di);
+		
+		unsigned int t = psLocal[Ci].prefixSum;
+		psLocal[Ci].prefixSum = psLocal[Di].prefixSum;
+		psLocal[Di].prefixSum += t;
+		
+		#if SUPER
+			t = SpsLocal[Ci].prefixSum;
+			SpsLocal[Ci].prefixSum = SpsLocal[Di].prefixSum;
+			SpsLocal[Di].prefixSum += t;
+		#endif
+		}
+	barrier(CLK_LOCAL_MEM_FENCE);
+	}
+
+//	Copy prefix sums into global array.
+
+psGlobal[id] = psLocal[lidP];
+
+#if SUPER
+	SpsGlobal[id] = SpsLocal[lidP];
+#endif
+}

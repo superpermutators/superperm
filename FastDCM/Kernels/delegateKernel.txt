@@ -1,0 +1,14 @@
+	__kernel void delegate(
+	__global unsigned int *inputIndices,		//	Indices used to select strings from inputs[]
+	__global struct string *inputs,				//	Final state of each thread's string
+	__global struct string *outputs,			//	Final state of each thread's string
+	unsigned int totalUnfinished				//	Number of true inputs; threads will be padded out to a power of 2
+	)
+{
+unsigned int id = get_global_id(0);
+if (id < totalUnfinished)
+	{
+	int ii = inputIndices[id];
+	outputs[id]=inputs[ii];
+	};
+}

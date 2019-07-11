@@ -1,0 +1,32 @@
+__kernel void orderIndex(
+	__global struct stringStatus *psGlobal,		//	Cumulative sum of 0|1 for finished|unfinished searches (summed only within each block)
+	__global unsigned int *blockSum,			//	Block totals for prefix sums
+	__global unsigned int *inputIndices,		//	Indices used to select strings from input heap
+	unsigned int nLocalThreads,					//	Number of threads in each local workgroup
+	unsigned int totalUnfinished				//	Number of strings whose searches didn't finish on last pass
+	)
+{
+unsigned int id = get_global_id(0);				//	Identify string in global list
+unsigned int blk = id / nLocalThreads;			//	Identify block it belongs to
+struct stringStatus s = psGlobal[id];			//	Get its status (finished|unfinished) and prefix sum
+unsigned int p = s.prefixSum + blockSum[blk];	//	Add block total to blockwise prefix sum, to give complete prefix sum.
+
+//	If we have an unfinished search on the string, the prefix sum of 0|1 for finished|unfinished gives its
+//	rank in the list of unfinished strings, so we have the input indices point to it in the initial segment
+//	consisting of all unfinished strings.
+//
+//	If we have a finished string, we convert its prefix sum:
+//
+//		p_n = sum(k=0...n-1) of x_k
+//
+//	to that of 1-x_k, i.e. 1|0 for finished|unfinished:
+//
+//		sum(k=0...n-1) of 1-x_k = n - p_n
+//
+//	to get its rank in the list of finished strings, and have the input indices point to it
+//	in the later segment consisting of all finished strings.
+
+if (!s.keep) p = totalUnfinished+id-p;
+
+inputIndices[p] = id;
+}
