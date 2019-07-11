@@ -18,7 +18,6 @@
 #define MAX_WASTE_VALS 30
 */
 
-
 #define NVAL 6
 #define FN 720
 #define FNM 120

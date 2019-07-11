@@ -1,16 +1,10 @@
-#if SEARCH==1
 	__kernel void search(
-#elif SEARCH==2
-	__kernel void search2(
-#elif SEARCH==3
-	__kernel void search3(
-#endif
 	__constant unsigned char *perms,			//	0: Table of permutation info for N-digit strings
 	__constant unsigned short *mperm_res0,		//	1: Table of maximum number of permutations for each waste
 	int totalWaste,								//	2: Total waste we are allowing in each string		
 	unsigned int pte,							//	3: Permutations to exceed
 	unsigned int maxPermsSeen,					//	4: Maximum permutations seen in any string (not just this search)
-	unsigned long nodeQuota,					//	5: Maximum number of nodes to check before we quit
+	unsigned long stepQuota,					//	5: Maximum number of steps to take before we quit
 	__global struct string *inputs,				//	6: String each thread starts from
 	__global unsigned int *inputIndices,		//	7: Indices used to select strings from inputs[]
 	__global struct string *outputs,			//	8: Final state of each thread's string
@@ -33,6 +27,20 @@
 #endif
 	)
 {
+
+//	Versions of this kernel are generated for 0/1 values of the preprocessor symbols OCP, SUPER and NODES_EXIT.
+//
+//	OCP adds extra code to track the occupancy of 1-cycles, once that becomes a worthwhile method of pruning.
+//
+//	SUPER adds extra code to store superpermutations, once we are at a point where we can expect to encounter them.
+//
+//	NODES_EXIT determines whether we stop iterating through the sequence of strings after a particular number of steps
+//	(which is more efficient, as all threads are more likely to end at the same time) or at a point where we have just
+//	increased the length of the string, which means we have yet to search any values for the next digit; this is a
+//	cleaner stopping point when we need to delegate branches of the search to other tasks.
+//
+//	If NODES_EXIT = 2, we undo the last addition of a digit before proceeding with the search.
+
 unsigned int id = get_global_id(0);
 unsigned int lid = get_local_id(0);
 unsigned int lidP = lid + CONFLICT_FREE_OFFSET(lid);
@@ -42,11 +50,23 @@ unsigned int blk = id / nLocalThreads;
 
 __constant unsigned short *mperm_res = mperm_res0 + MPERM_OFFSET;
 
+//	Flag whether we are checking current string or unwinding the results of pursuing it
+
+int doUndo=1;
+
 //	Take a copy of the string we will start searching from.
 
 struct string cs;
 
-if (id < nTrueInputs) cs = inputs[inputIndices[id]];
+if (id < nTrueInputs)
+	{
+	cs = inputs[inputIndices[id]];
+	#if NODES_EXIT==2
+		cs.pos--;
+		doUndo = -1;
+		cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
+	#endif
+	}
 else
 	{
 	cs.pos=0;
@@ -59,28 +79,24 @@ bestStrings[id].perms = 0;
 mpLocal[lidP].where = id;
 mpLocal[lidP].perms = 0;
 
-//	Flag whether we are checking current string or unwinding the results of pursuing it
-
-int doUndo=1;
-
 //	Nodes explored in this search
 
-unsigned long nodeCount = 0;
-
-#if SEARCH==2
-	cs.lowestDepthVisited = cs.depthSnapshot = cs.pos;
-#endif
+unsigned long nodeCount = 0, stepCount = 0;
 
 #if SUPER
 	SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 0;
 #endif
 
-while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
+while ((cs.pos >= cs.rootDepth &&
+
+#if NODES_EXIT
+	nodeCount
+#else
+	stepCount
+#endif
+
+< stepQuota) || doUndo < 0)
 	{
-	#if (SEARCH==2||SEARCH==3)
-		cs.lowestDepthVisited = min(cs.lowestDepthVisited,cs.pos);
-	#endif
-	
 	//	Get the last digit in the current string
 	
 	unsigned int digit = cs.digits[cs.pos] & DIGIT_BITS;
@@ -126,7 +142,16 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 			superperms[id] = cs;
 			SpsLocal[lidP].keep = SpsLocal[lidP].prefixSum = 1;
 			pte = FN-1;
-			nodeQuota = nodeCount;
+			
+			//	Quit at first opportunity to do it cleanly, to avoid overwriting superperm
+			
+			stepQuota =
+			#if NODES_EXIT
+				nodeCount
+			#else
+				stepCount
+			#endif
+				+1;
 			};
 	#endif
 
@@ -251,6 +276,7 @@ while (cs.pos >= cs.rootDepth && nodeCount < nodeQuota)
 			cs.lastN1 = NVAL*(cs.lastN1 % (NN1/NVAL)) + (cs.digits[cs.pos-(NVAL-1)] & DIGIT_BITS);
 			};
 		};
+	stepCount++;
 	};
 	
 //	Store the endpoint of the search

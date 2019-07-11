@@ -39,14 +39,7 @@ if (id < nInputTarget-totalUnfinished)
 	//	(c) In the other copy, we fall straight back to that depth (without changing the root depth), and
 	//	prepare to continue from there.
 	
-	//	If we are in delegation mode, so that the strings have a non-zero depthSnapshot used to track how long
-	//	is spent searching subtrees, we avoid splitting above it, in order to keep resources concentrated on
-	//	the subtree below it.
-	
-	unsigned int D, rd;
-	if (cs.depthSnapshot > 0 && cs.depthSnapshot < cs.pos) rd = cs.depthSnapshot;
-	else rd = cs.rootDepth;
-	D = (int)sqrt((float)rd*(float)cs.pos);
+	unsigned int D = (int)sqrt((float)cs.rootDepth*(float)cs.pos);
 	
 	//	Alter the root depth in the original.
 
@@ -109,8 +102,6 @@ if (id < nInputTarget-totalUnfinished)
 	//	without any overlap with the other part of the split. 
 		
 	cs.digits[cs.pos] = (cs.digits[cs.pos] & ~DIGIT_BITS) | digitP;
-	
-	if (cs.pos < cs.lowestDepthVisited) cs.lowestDepthVisited = cs.pos;
 	
 	//	Write the modified string.
 	
