@@ -45,9 +45,13 @@ One significant difference is that `FastDCM` will run for longer before splittin
 task, it will take longer to do so. It is best **not** to run `FastDCM` unless you are able to commit to running it for a substantial period of time
 (at least a few hours) without interruption.
 
-`FastDCM` has one additional option: if your computer has multiple GPUs, you can tell the program which one to use with the `gpuName` command line argument, e.g.:
+`FastDCM` has two additional options.  If your computer has multiple GPUs, you can tell the program which one to use with the `gpuName` command line argument, e.g.:
 
 `.\FastDCM gpuName "AMD"`
 
 In this case, only a GPU whose device name starts with "AMD" will be selected. You don't need to specify the full device name, just enough to distinguish between
 the different ones on your system.
+
+Also, if your system has multiple implementations of the `OpenCL` protocol installed, known as "platforms", you can single one out with the `gpuPlatform` command line argument, e.g.:
+
+`.\FastDCM gpuPlatform "NVIDIA"`
