@@ -992,11 +992,17 @@ for (int i=0;i<num_platforms;i++)
 		};
 	
 	openCL( clGetPlatformInfo(platforms[i], CL_PLATFORM_VENDOR, MAX_CL_INFO, openCL_info, NULL) );
+	
+	if (gpuPlatform)
+		{
+		if (strncmp(gpuPlatform,openCL_info,strlen(gpuPlatform))==0) gpuPlatformOK = TRUE;
+		};
+
 	if (verbose) printf("Vendor: %s\n",openCL_info);
 	
 	if (!gpuPlatformOK)
 		{
-		printf("[This platform name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuPlatform);
+		printf("[This platform's name or vendor do not start with the user-specified \"%s\", so it has been ruled out]\n",gpuPlatform);
 		continue;
 		};
 	
