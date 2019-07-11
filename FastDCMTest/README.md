@@ -36,6 +36,11 @@ the different ones on your system.
 If you have multiple GPUs and you wish to test the performance when they are used simultaneously, you can run multiple instances of the program and choose
 different GPUs for each instance.
 
+Also, if your system has multiple implementations of the `OpenCL` protocol installed, known as "platforms", you can single one out with the `gpuPlatform` command line argument, e.g.:
+
+`.\FastDCM gpuPlatform "NVIDIA"`
+
+
 ## Expected output
 
 The program will start by listing details of all the GPUs it finds, and it will exit if no suitable devices are found.
