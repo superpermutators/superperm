@@ -38,7 +38,7 @@ different GPUs for each instance.
 
 Also, if your system has multiple implementations of the `OpenCL` protocol installed, known as "platforms", you can single one out with the `gpuPlatform` command line argument, e.g.:
 
-`.\FastDCM gpuPlatform "NVIDIA"`
+`.\FastDCMTest gpuPlatform "NVIDIA"`
 
 
 ## Expected output
