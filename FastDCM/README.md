@@ -13,7 +13,7 @@ of `DistributedChaffinMethod` (which uses a single core of the CPU).
 
 ## Known issues
 
-`FastDCM` will currently not work with the integrated Intel graphics that run the display on some Mac laptops, as opposed to using a discrete GPU. If your system has *both*
+`FastDCM` will currently not work with the **integrated Intel graphics** that run the display on some Mac laptops and Mac Minis, as opposed to using a discrete GPU. If your system has *both*
 integrated Intel graphics and a discrete GPU, you can select the discrete GPU using the `gpuName` option described below.
 
 ## Building
