@@ -13,8 +13,8 @@ of `DistributedChaffinMethod` (which uses a single core of the CPU).
 
 ## Known issues
 
-`FastDCM` will currently not work with the **integrated Intel graphics** that run the display on some Mac laptops and Mac Minis, as opposed to using a discrete GPU. If your system has *both*
-integrated Intel graphics and a discrete GPU, you can select the discrete GPU using the `gpuName` option described below.
+`FastDCM` will currently not work with **integrated Intel graphics** (for example, those that run the display on some Mac laptops and Mac Minis); it requires a discrete GPU.
+If your system has *both* integrated Intel graphics and a discrete GPU, you can select the discrete GPU using the `gpuName` option described below.
 
 ## Building
 
@@ -30,6 +30,14 @@ To build the program under Linux:
 
 Building under Windows is still experimental. You will probably need to download an SDK (software development kit) that offers support for the `OpenCL` protocol
 from the manufacturer of your GPU, such as NVidia or AMD, which will contain the libraries and header files that your compiler needs to build the program.
+
+For example, one user was able to successfully build and run `FastDCM` on a Windows machine (Win10, i7-8700K w/ UHD Graphics 630, GTX 1070) by downloading
+and installing [NVidia's current CUDA libraries](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html), then using the following compilation flags:
+
+`gcc -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" FastDCM.c C:\Windows\System32\OpenCL.dll -o FastDCM.exe`
+
+and then running the program using `gpuName "GeForce"` to select the GTX 1070 instead of the integrated graphics.
+
 
 ## Running
 
