@@ -34,7 +34,9 @@ from the manufacturer of your GPU, such as NVidia or AMD, which will contain the
 For example, one user was able to successfully build and run `FastDCM` on a Windows machine (Win10, i7-8700K w/ UHD Graphics 630, GTX 1070) by downloading
 and installing [NVidia's current CUDA libraries](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html), then using the following compilation flags:
 
-`gcc -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" FastDCM.c C:\Windows\System32\OpenCL.dll -o FastDCM.exe`
+```
+gcc -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" FastDCM.c C:\Windows\System32\OpenCL.dll -o FastDCM.exe
+```
 
 and then running the program using `gpuName "GeForce"` to select the GTX 1070 instead of the integrated graphics.
 
