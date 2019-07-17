@@ -1,8 +1,8 @@
 # Readme
 
 Author:		Greg Egan  
-Date:		11 July 2019
-Version:		6.0
+Date:		17 July 2019
+Version:		6.1
 
 `FastDCM` is a client for the [Distributed Chaffin Method search](https://github.com/superpermutators/superperm/wiki/The-Distributed-Chaffin-Method-Search) that uses
 the Graphics Processing Unit (GPU) of your computer, rather than the CPU, for the bulk of its calculations.  Depending on the precise specifications of your system,
@@ -40,7 +40,6 @@ gcc -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" FastDCM
 
 and then running the program using `gpuName "GeForce"` to select the GTX 1070 instead of the integrated graphics.
 
-
 ## Running
 
 To run the program, it **must** be in the same directory as the original source code, with `Headers` and `Kernels` as subdirectories.
@@ -61,6 +60,10 @@ task, it will take longer to do so. It is best **not** to run `FastDCM` unless y
 
 In this case, only a GPU whose device name starts with "AMD" will be selected. You don't need to specify the full device name, just enough to distinguish between
 the different ones on your system.
+
+If your system has multiple GPUs with **identical names**, you can use the `gpuDeviceNumber` option, to specify the number of the device in the list the program produces, e.g.:
+
+`.\FastDCM gpuDeviceNumber 2`
 
 Also, if your system has multiple implementations of the `OpenCL` protocol installed, known as "platforms", you can single one out with the `gpuPlatform` command line argument, e.g.:
 
