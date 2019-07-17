@@ -1,5 +1,8 @@
 //  Structures.h
 
+#ifdef _WIN32
+__declspec(align(4))
+#endif
 struct string
 {
 unsigned short perms;				//	Number of distinct permutations
@@ -10,7 +13,11 @@ unsigned short lastN1;				//	Integer encoding of last n-1 digits in string, prio
 unsigned char digits[MSL];			//	Digits of string are in bits 0-2; permutation counts in other bits
 unsigned char oneCycleBins[NVAL+1];	//	The numbers of 1-cycles that have 0 ... N unvisited permutations
 unsigned char marker;
-} __attribute__ ((aligned (4)));	//	This seems to be necessary, beyond the usual alignment on 2-byte boundaries C guarantees
+}
+#ifndef _WIN32
+__attribute__ ((aligned (4)))		//	This seems to be necessary, beyond the usual alignment on 2-byte boundaries C guarantees
+#endif
+;
 
 //	Bit masks for the pieces of data in each digits[] entry
 
