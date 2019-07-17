@@ -1,8 +1,8 @@
 # Readme
 
 Author:		Greg Egan  
-Date:		11 July 2019
-Version:		6.0
+Date:		17 July 2019
+Version:		6.1
 
 `FastDCMTest` is a C program that will test whether your computer can run the Chaffin Method calculations correctly and efficiently using its GPU, instead of
 (or in addition to) the CPU.
@@ -32,6 +32,10 @@ If your computer has multiple GPUs, you can tell the program which one to use wi
 
 In this case, only a GPU whose device name starts with "AMD Radeon" will be selected. You don't need to specify the full device name, just enough to distinguish between
 the different ones on your system.
+
+If your system has multiple GPUs with **identical names**, you can use the `gpuDeviceNumber` option, to specify the number of the device in the list the program produces, e.g.:
+
+`.\FastDCMTest gpuDeviceNumber 2`
 
 If you have multiple GPUs and you wish to test the performance when they are used simultaneously, you can run multiple instances of the program and choose
 different GPUs for each instance.

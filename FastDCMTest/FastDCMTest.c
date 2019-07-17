@@ -1,9 +1,9 @@
 //
-//  FastDCM.c
+//  FastDCMTest.c
 //
 //  Author:		Greg Egan
-//	Version:	6.0
-//	Date:		11 July 2019
+//	Version:	6.1
+//	Date:		17 July 2019
 //
 //	This is a TEST version of the DistributedChaffinMethod client that uses
 //	OpenCL to run a parallel version of the search on a GPU.
@@ -51,18 +51,18 @@
 #include <unistd.h>
 #include <signal.h>
 
-#ifdef __linux__
-
-//	For Linux
-
-#include <CL/opencl.h>
-
-#else
+#ifdef __APPLE__
 
 //	For MacOS
 
 #define CL_SILENCE_DEPRECATION 1
 #include <OpenCL/opencl.h>
+
+#else
+
+//	For Linux etc.
+
+#include <CL/opencl.h>
 
 #endif
 
@@ -357,6 +357,7 @@ char pstrings[FN+NVAL][NVAL+1];
 #define MAX_CL_INFO 2048
 
 const char *gpuName = NULL, *gpuPlatform = NULL;
+int gpuDeviceNumber = -1, chosenDeviceNumber = -1;
 static char chosenGPU[MAX_CL_INFO];
 cl_platform_id gpu_platform;
 cl_device_id gpu_device;
@@ -386,6 +387,7 @@ char **headerSourceCode=NULL;
 #define OCP_KERNEL_OFFSET 2
 #define SUPER_KERNEL_OFFSET 4
 #define NODES_KERNEL_OFFSET 8
+#define TEST_KERNEL_OFFSET 24
 
 #define OCP0 "#define OCP 0\n"
 #define OCP1 "#define OCP 1\n"
@@ -434,8 +436,9 @@ const char *kernelFiles[][3] = {
 	{"Kernels/splitKernel.txt", "split",	OCP0 SUP1 NDS2},
 
 	{"Kernels/searchKernel.txt", "search",	OCP1 SUP1 NDS2},
-	{"Kernels/splitKernel.txt", "split",	OCP1 SUP1 NDS2}
-
+	{"Kernels/splitKernel.txt", "split",	OCP1 SUP1 NDS2},
+	
+	{"Kernels/searchKernel.txt", "search",	OCP0 SUP0 NDS0 "#define KERNEL_TEST 1\n"}
 };
 
 int nKernels=0;
@@ -792,7 +795,7 @@ if (check)
 	};
 }
 
-int initOpenCL(const char *gpuName, const char *gpuPlatform, int verbose, int host)
+int initOpenCL(const char *gpuName, const char *gpuPlatform, int gpuDeviceNumber, int verbose, int host)
 {
 for (int i=0;i<NUM_GPU_HEAPS;i++) gpu_heaps[i]=NULL;
 
@@ -1022,7 +1025,7 @@ for (int i=0;i<num_platforms;i++)
 		{
 		if (verbose) printf("\tDevice %d:\n",j+1);
 		
-		int gpuOK = TRUE, gpuDeviceNameOK = TRUE;
+		int gpuOK = TRUE, gpuDeviceNameOK = TRUE, gpuDeviceNumberOK = TRUE;
 		
 		//	Details of GPU
 
@@ -1040,6 +1043,11 @@ for (int i=0;i<num_platforms;i++)
 		if (gpuName)
 			{
 			gpuDeviceNameOK = (strncmp(gpuName,openCL_info,strlen(gpuName))==0);
+			};
+			
+		if (gpuDeviceNumber > 0)
+			{
+			gpuDeviceNumberOK = (j+1)==gpuDeviceNumber;
 			};
 
 		openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_VENDOR, MAX_CL_INFO, openCL_info, NULL) );
@@ -1065,6 +1073,12 @@ for (int i=0;i<num_platforms;i++)
 		if (!gpuDeviceNameOK)
 			{
 			if (verbose) printf("\t[This device name does not start with the user-specified \"%s\", so it has been ruled out]\n",gpuName);
+			gpuOK = FALSE;
+			};
+		
+		if (!gpuDeviceNumberOK)
+			{
+			if (verbose) printf("\t[This device number in the list is not the user-specified %d, so it has been ruled out]\n",gpuDeviceNumber);
 			gpuOK = FALSE;
 			};
 		
@@ -1099,6 +1113,7 @@ for (int i=0;i<num_platforms;i++)
 				gpu_cu = cu;
 				gpu_mws = mws;
 				openCL( clGetDeviceInfo(devices[i][j], CL_DEVICE_NAME, MAX_CL_INFO, chosenGPU, NULL) );
+				chosenDeviceNumber = j+1;
 				}
 			else
 				{
@@ -1115,7 +1130,7 @@ if (!foundPlatformAndGPU)
 	exit(EXIT_FAILURE);
 	};
 	
-if (verbose) printf("Using GPU: %s\n",chosenGPU);
+if (verbose) printf("Using GPU: %s [device number %d in list]\n",chosenGPU,chosenDeviceNumber);
 
 //	Get an OpenCL context
 
@@ -1574,6 +1589,8 @@ while (TRUE)		//	Loop for repeated runs of stepQuota
 		srchKI += NODES_KERNEL_OFFSET;
 		splitKI += NODES_KERNEL_OFFSET;
 		};
+		
+	if (TEST_VERSION && totalWaste==1 && (!ocp) && (!super) && (!timeOut)) srchKI += TEST_KERNEL_OFFSET;
 
 	cl_kernel sk = kernels[srchKI];
 
@@ -2602,7 +2619,15 @@ time(&startedRunning);
 	int rseed=(int)( (startedRunning + clock()  + (int) getpid()) % (1<<31) );
 #endif
 
-if (!TEST_VERSION)
+if (TEST_VERSION)
+	{
+	printf("On CPU, sizeof(struct string)=%d, sizeof(struct maxPermsLoc)=%d, sizeof(struct stringStatus)=%d\n",
+		(int)sizeof(struct string),
+		(int)sizeof(struct maxPermsLoc),
+		(int)sizeof(struct stringStatus)
+		);
+	}
+else
 	{
 	printf("Random seed is: %d\n", rseed);
 	srand(rseed);
@@ -2716,14 +2741,38 @@ for (int i=1;i<argc;i++)
 		sprintf(buffer,"Team name set to %s.\n",teamName);
 		logString(buffer);
 		}
-	else if (strcmp(argv[i],"gpuName")==0 && i+1<argc)
+	else if (strcmp(argv[i],"gpuName")==0)
 		{
+		if (i+1 >= argc)
+			{
+			printf("Expected an argument after the gpuName option\n");
+			exit(EXIT_FAILURE);
+			};
 		gpuName = argv[i+1];
 		i++;
 		}
-	else if (strcmp(argv[i],"gpuPlatform")==0 && i+1<argc)
+	else if (strcmp(argv[i],"gpuPlatform")==0)
 		{
+		if (i+1 >= argc)
+			{
+			printf("Expected an argument after the gpuPlatform option\n");
+			exit(EXIT_FAILURE);
+			};
 		gpuPlatform = argv[i+1];
+		i++;
+		}
+	else if (strcmp(argv[i],"gpuDeviceNumber")==0)
+		{
+		if (i+1 >= argc)
+			{
+			printf("Expected an argument after the gpuDeviceNumber option\n");
+			exit(EXIT_FAILURE);
+			};
+		if (sscanf(argv[i+1],"%d",&gpuDeviceNumber)!=1)
+			{
+			printf("Expected a number after gpuDeviceNumber option\n");
+			exit(EXIT_FAILURE);
+			};
 		i++;
 		}
 	else
@@ -2733,7 +2782,7 @@ for (int i=1;i<argc;i++)
 		};
 	};
 	
-initOpenCL(gpuName,gpuPlatform,TRUE,TRUE);
+initOpenCL(gpuName,gpuPlatform,gpuDeviceNumber,TRUE,TRUE);
 
 printf("Starting GPU validation checks\n");
 validationChecks("123456",NVAL,1,90,VERBOSE);

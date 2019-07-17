@@ -27,7 +27,6 @@
 #endif
 	)
 {
-
 //	Versions of this kernel are generated for 0/1 values of the preprocessor symbols OCP, SUPER and NODES_EXIT.
 //
 //	OCP adds extra code to track the occupancy of 1-cycles, once that becomes a worthwhile method of pruning.
@@ -45,6 +44,15 @@ unsigned int id = get_global_id(0);
 unsigned int lid = get_local_id(0);
 unsigned int lidP = lid + CONFLICT_FREE_OFFSET(lid);
 unsigned int blk = id / nLocalThreads;
+
+#if KERNEL_TEST
+if (id==0 && totalWaste==1)
+	printf("On GPU, sizeof(struct string)=%d, sizeof(struct maxPermsLoc)=%d, sizeof(struct stringStatus)=%d\n",
+		(int)sizeof(struct string),
+		(int)sizeof(struct maxPermsLoc),
+		(int)sizeof(struct stringStatus)
+		);
+#endif
 
 //	Offset index into table
 
