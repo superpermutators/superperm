@@ -2,8 +2,8 @@
 //  FastDCMTest.c
 //
 //  Author:		Greg Egan
-//	Version:	6.1
-//	Date:		17 July 2019
+//	Version:	6.1.1
+//	Date:		19 July 2019
 //
 //	This is a TEST version of the DistributedChaffinMethod client that uses
 //	OpenCL to run a parallel version of the search on a GPU.
@@ -1220,7 +1220,7 @@ for (int i=0;i<nKernels;i++)
 	openCL( clGetKernelWorkGroupInfo(kernels[i], gpu_device,CL_KERNEL_PRIVATE_MEM_SIZE, sizeof(kernelPMS[i]), &kernelPMS[i],NULL) );
 	openCL( clGetKernelWorkGroupInfo(kernels[i], gpu_device,CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE, sizeof(kernelPWM[i]), &kernelPWM[i],NULL) );
 	
-	if (verbose) printf("Successfully compiled kernel \"%s()\", work group size=%lu, local memory size=%llu, private memory size=%llu, preferred work group size multiple=%lu\n",
+	if (verbose) printf("Successfully compiled kernel \"%s()\", work group size=%zu, local memory size=%llu, private memory size=%llu, preferred work group size multiple=%zu\n",
 		kernelFiles[i][1],kernelWGS[i],kernelLMS[i],kernelPMS[i],kernelPWM[i]);
 	
 	if (kernelWGS[i] < min_kernel_ws) min_kernel_ws = kernelWGS[i];
