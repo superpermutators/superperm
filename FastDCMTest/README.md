@@ -1,11 +1,16 @@
 # Readme
 
 Author:		Greg Egan  
-Date:		17 July 2019
-Version:		6.1
+Date:		19 July 2019
+Version:		6.1.1
 
 `FastDCMTest` is a C program that will test whether your computer can run the Chaffin Method calculations correctly and efficiently using its GPU, instead of
 (or in addition to) the CPU.
+
+## Known issues
+
+`FastDCMTest` will currently not work with **integrated Intel graphics** (for example, those that run the display on some Mac laptops and Mac Minis); it requires a discrete GPU.
+If your system has *both* integrated Intel graphics and a discrete GPU, you can select the discrete GPU using the `gpuName` option described below.
 
 
 ## Building
@@ -19,6 +24,18 @@ To build the program under MacOS, make that downloaded directory your current di
 To build the program under Linux:
 
 `gcc FastDCMTest.c -O3 -lm -lOpenCL -o FastDCMTest`
+
+Building under Windows is still experimental. You will probably need to download an SDK (software development kit) that offers support for the `OpenCL` protocol
+from the manufacturer of your GPU, such as nVidia or AMD, which will contain the libraries and header files that your compiler needs to build the program.
+
+For example, one user was able to successfully build and run `FastDCM` on a Windows machine by downloading
+and installing [nVidia's current CUDA libraries](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html), then building the program
+in Visual C with:
+
+```
+cl -I"%CUDA_PATH%\include" FastDCMTest.c "%CUDA_PATH%\lib\x64\opencl.lib"
+```
+
 
 ## Running
 
