@@ -1,8 +1,8 @@
 # Readme
 
 Author:		Greg Egan  
-Date:		17 July 2019
-Version:		6.1
+Date:		19 July 2019
+Version:		6.1.1
 
 `FastDCM` is a client for the [Distributed Chaffin Method search](https://github.com/superpermutators/superperm/wiki/The-Distributed-Chaffin-Method-Search) that uses
 the Graphics Processing Unit (GPU) of your computer, rather than the CPU, for the bulk of its calculations.  Depending on the precise specifications of your system,
@@ -29,16 +29,15 @@ To build the program under Linux:
 `gcc FastDCM.c -O3 -lm -lOpenCL -o FastDCM`
 
 Building under Windows is still experimental. You will probably need to download an SDK (software development kit) that offers support for the `OpenCL` protocol
-from the manufacturer of your GPU, such as NVidia or AMD, which will contain the libraries and header files that your compiler needs to build the program.
+from the manufacturer of your GPU, such as nVidia or AMD, which will contain the libraries and header files that your compiler needs to build the program.
 
-For example, one user was able to successfully build and run `FastDCM` on a Windows machine (Win10, i7-8700K w/ UHD Graphics 630, GTX 1070) by downloading
-and installing [NVidia's current CUDA libraries](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html), then using the following compilation flags:
+For example, one user was able to successfully build and run `FastDCM` on a Windows machine by downloading
+and installing [nVidia's current CUDA libraries](https://docs.nvidia.com/cuda/cuda-installation-guide-microsoft-windows/index.html), then building the program
+in Visual C with:
 
 ```
-gcc -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v10.1\include" FastDCM.c C:\Windows\System32\OpenCL.dll -o FastDCM.exe
+cl -I"%CUDA_PATH%\include" FastDCM.c "%CUDA_PATH%\lib\x64\opencl.lib"
 ```
-
-and then running the program using `gpuName "GeForce"` to select the GTX 1070 instead of the integrated graphics.
 
 ## Running
 
