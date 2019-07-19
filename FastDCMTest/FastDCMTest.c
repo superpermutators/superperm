@@ -528,7 +528,7 @@ char *readTextFile(const char *fileName, size_t *textSize)
 {
 char *res = NULL;
 
-FILE *fp = fopen(fileName,"r");
+FILE *fp = fopen(fileName,"rb");
 if (fp==NULL)
 	{
 	printf("Unable to open the file %s to read (%s)\n",fileName,strerror(errno));
