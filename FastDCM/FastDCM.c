@@ -528,7 +528,7 @@ char *readTextFile(const char *fileName, size_t *textSize)
 {
 char *res = NULL;
 
-FILE *fp = fopen(fileName,"r");
+FILE *fp = fopen(fileName,"rb");
 if (fp==NULL)
 	{
 	printf("Unable to open the file %s to read (%s)\n",fileName,strerror(errno));
@@ -1431,7 +1431,7 @@ void writeFromGPUtoDisk(cl_mem gpu_buffer, size_t n, char *name)
 char *buffer = (char *)malloc(n);
 openCL( clEnqueueReadBuffer(commands, gpu_buffer, CL_TRUE,
 			0, n, buffer, 0, NULL, NULL) );
-FILE *fp=fopen(name,"w");
+FILE *fp=fopen(name,"wb");
 if (fp==NULL)
 	{
 	printf("Unable to open file %s to write\n",name);
@@ -1449,7 +1449,7 @@ free(buffer);
 void readToGPUFromDisk(cl_mem gpu_buffer, size_t n, char *name)
 {
 char *buffer = (char *)malloc(n);
-FILE *fp=fopen(name,"r");
+FILE *fp=fopen(name,"rb");
 if (fp==NULL)
 	{
 	printf("Unable to open file %s to read\n",name);
