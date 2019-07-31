@@ -414,10 +414,8 @@ longRunner=FALSE;
 teamName = DEFAULT_TEAM_NAME;
 currentTask.task_id = 0;
 
-
 //	Choose a random number to identify this instance of the program;
 //	this also individualises the log file and the server response file.
-
 
 time(&startedRunning);
 
@@ -1149,7 +1147,7 @@ if (++nodesChecked >= nodesBeforeTimeCheck)
 			};
 		};
 
-	if (timeSinceLastTimeReport > MINUTE)
+	if (timeSinceLastTimeReport >= MINUTE)
 		{
 		int tskTime = (int)timeSpentOnTask;
 		int tskMin = tskTime / 60;
@@ -2575,7 +2573,7 @@ unvisited[tperm]=TRUE;
 //	We follow a weight-2 edge instead of the weight-3 edge, then follow four weight-1 edges, then
 //	a weight-3 edge will again take us back to the permutation we would have reached without the detour.
 //	If all five permutations in question were unvisited, we will have added them at the cost of an increase in
-//	weight of 1. 
+//	waste of 1. 
 
 void maybeUpdateLowerBoundSplice(int size, int w, int p)
 {
