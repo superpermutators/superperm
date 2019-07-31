@@ -3384,7 +3384,7 @@ if (timeQuotaHardMins > 0)
 		};
 	};
 
-if (timeSinceLastTimeReport > MINUTE)
+if (timeSinceLastTimeReport >= MINUTE)
 	{
 	int tskTime = (int)timeSpentOnTask;
 	int tskMin = tskTime / 60;
