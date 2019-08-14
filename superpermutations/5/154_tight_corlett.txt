@@ -1,6 +1,5 @@
 # This is an exhaustive list of the superpermutations on 5 symbols meeting the following criteria:
 # • Only edges of weights 1 and 2
-# • No consecutive edges of weight 2
 # • The total length of the string is 154
 #
 # They were posted to the superpermutators group by Rob Corlett on 2019-08-14
