@@ -82,7 +82,7 @@ def findbests(done):
         for cost in done[end]:
             if done[end][cost]:
                 best[cost] = max(best[cost], max(len(p) for p in done[end][cost]))
-    for i in range(len(best)):
+    for i, b in enumerate(best):
         if best[i]:
             print(i, best[i])
 
