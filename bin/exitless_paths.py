@@ -2,7 +2,7 @@
 
 import itertools as it
 
-k = 3
+k = 5
 
 L = [tuple(p) for p in it.permutations(range(k))] # builds each permutation
  # associates each permutation with a single number (its index in L)
