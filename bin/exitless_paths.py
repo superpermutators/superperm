@@ -37,7 +37,7 @@ def get(S,E,cutoff):
             todo[end] = set()
         done[end][cost].add(cycs(start))
         todo[end].add(cycs(start))
-    
+
     queue = []
     while todo:
         for end in todo: 
@@ -56,7 +56,7 @@ def get(S,E,cutoff):
                         continue
                     tail = add(e,front)
                     poss = build(ops,cycs(tail[:-1]))
-            
+
                     if poss:
                         if tail[-1] not in done:
                             done[tail[-1]] = {i:set() for i in range(cutoff+1)}
@@ -76,7 +76,7 @@ def findbests(done): #returns the length of the longest path of each 1-cycle ski
     for i in range(len(best)):
         if best[i]:
             print(i, best[i])
-            
+
 
 def build(S,e): #find the paths in S which don't intersect with e
     return {path|e for path in S if not path&e}
@@ -132,7 +132,7 @@ for m in genmoves(3): #how we will continue our path, consists of a 3-edge, foll
             break
     print(m, phi(m)[0], len(toadd))
     moves += toadd
-    
+
 #by the current definition of wastage I have, I'd say a 4-edge has an extra waste of (k-1), as we have double the cost (if we subtract the exprected cost of 2 for these being 2+-edges)
 '''for m in genmoves(4):
     toadd = [((phi(m),tau),k-3+k-1)]
