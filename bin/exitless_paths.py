@@ -2,6 +2,7 @@
 
 import itertools as it
 
+from bitsets import bitset
 from pympler import muppy, summary
 
 k = 5
@@ -18,8 +19,10 @@ for p in L: # building one-cycles
             cycle[idem[tuple(y)]] = idem[p]
             y.append(y.pop(0))
 
+Cycles = bitset('Cycles', tuple(set(cycle.values())))
+
 def cycs(L1): # returns one-cycles of each vertex
-    return frozenset([cycle[p] for p in L1])
+    return Cycles([cycle[p] for p in L1])
 
 
 def get(S, E, cutoff):
