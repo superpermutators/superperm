@@ -75,6 +75,9 @@ def get(S, E, cutoff):
                             todo[tail[-1]] = set()
                         todo[tail[-1]] |= poss
         print(sum(len(todo[a]) for a in todo))
+        all_objects = muppy.get_objects()
+        sum1 = summary.summarize(all_objects)
+        summary.print_(sum1)
     findbests(done)
 
 def findbests(done):
@@ -169,6 +172,3 @@ for m in genmoves(3):
 
 if __name__ == '__main__':
     get(Ts, moves, 13)
-    all_objects = muppy.get_objects()
-    sum1 = summary.summarize(all_objects)
-    summary.print_(sum1)
