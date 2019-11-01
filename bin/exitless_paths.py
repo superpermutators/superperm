@@ -144,4 +144,5 @@ for m in genmoves(3): #how we will continue our path, consists of a 3-edge, foll
     print(m, phi(m)[0], len(toadd))
     moves += toadd'''
 
-get(Ts,moves,13)
+if __name__ == '__main__':
+    get(Ts,moves,13)
