@@ -2,6 +2,8 @@
 
 import itertools as it
 
+from pympler import muppy, summary
+
 k = 5
 
 L = [tuple(p) for p in it.permutations(range(k))] # builds each permutation
@@ -167,3 +169,6 @@ for m in genmoves(3):
 
 if __name__ == '__main__':
     get(Ts, moves, 13)
+    all_objects = muppy.get_objects()
+    sum1 = summary.summarize(all_objects)
+    summary.print_(sum1)
