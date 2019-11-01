@@ -2,7 +2,7 @@
 
 import itertools as it
 
-k = 6
+k = 3
 
 L = [tuple(p) for p in it.permutations(range(k))] #builds each permutation
 idem = {L[i]:i for i in range(len(L))} #associates each permutation with a single number (its index in L)
