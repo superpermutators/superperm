@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import itertools as it
 
 k = 6
