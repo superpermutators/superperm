@@ -72,18 +72,18 @@ if options.counts:
     for q in perms:
         counts[distance(ordered, q)] += 1
     for w, c in counts.iteritems():
-        print "{0}: {1} ({2:.3f})".format(w, c, c/math.factorial(N))
+        print("{0}: {1} ({2:.3f})".format(w, c, c/math.factorial(N)))
     exit(0)
 
-print "NAME : superperm %d" % (N,)
-print "TYPE : ATSP"
-print "DIMENSION : %d" % (n_perms,)
-print "EDGE_WEIGHT_TYPE : EXPLICIT"
-print "EDGE_WEIGHT_FORMAT : FULL_MATRIX"
-print "NODE_COORD_TYPE : NO_COORDS"
-print "DISPLAY_DATA_TYPE : NO_DISPLAY"
+print("NAME : superperm %d" % (N,))
+print("TYPE : ATSP")
+print("DIMENSION : %d" % (n_perms,))
+print("EDGE_WEIGHT_TYPE : EXPLICIT")
+print("EDGE_WEIGHT_FORMAT : FULL_MATRIX")
+print("NODE_COORD_TYPE : NO_COORDS")
+print("DISPLAY_DATA_TYPE : NO_DISPLAY")
 
-print "EDGE_WEIGHT_SECTION :"
+print("EDGE_WEIGHT_SECTION :")
 
 for p in perms:
-    print " ".join([ str(distance(p, q)) for q in perms ])
+    print(" ".join([ str(distance(p, q)) for q in perms ]))
