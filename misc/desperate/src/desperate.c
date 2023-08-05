@@ -151,7 +151,7 @@ int invalid_sset(const char *sset)
 	if (sset == NULL)
 		return 1;
 
-	if (strlen(sset) == 0)
+	if (*sset == 0)
 		return 1;
 
 	if (strchr(sset, 0x000A))
