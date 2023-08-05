@@ -2,7 +2,7 @@
 
 #include <string.h>
 
-#include "global.h"
+#include "env.h"
 
 
 extern char **environ;

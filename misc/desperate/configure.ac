@@ -1,5 +1,5 @@
 AC_PREREQ([2.69])
-AC_INIT([depermutate], [0.1.0], [bugs@kara-online.net], [depermutate], [])
+AC_INIT([desperate], [0.2.0], [bugs@kara-online.net], [desperate], [])
 
 AC_ARG_ENABLE(debug,
   [S_HELP_STRING([--enable-debug], [Enable debug messages (default is no)])],
@@ -66,6 +66,7 @@ AC_PROG_CC
 AC_TYPE_SIZE_T
 
 #functions
+AC_CHECK_FUNCS([atexit])
 AC_CHECK_FUNCS([memset])
 AC_CHECK_FUNCS([strchr])
 AC_CHECK_FUNCS([strerror])

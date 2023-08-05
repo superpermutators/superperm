@@ -105,4 +105,4 @@ concorde -o "$SUPERPERM_DIR"/concorde/out/6.out "$SUPERPERM_DIR"/tsp/6.tsp
 
 * The directory `superpermutations` contains various known superpermutations that are interesting for some reason.
 
-* [`depermutate`](misc/depermutate) Is a program which attempts to find all valid permutations in a string. It may be useful as a visualization aid.
+* [`desperate`](misc/desperate) Is a program which attempts to find all valid permutations in a string. It may be useful as a visualization aid.
