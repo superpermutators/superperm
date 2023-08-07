@@ -4,7 +4,7 @@
 #define GLOBAL_H
 
 #define S(X) _S(X)
-#define _S(X) #X
+#define _S(...) #__VA_ARGS__
 
 
 int env_debug(void);

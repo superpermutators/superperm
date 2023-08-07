@@ -11,7 +11,8 @@
 
 
 struct {
-	int numbered;
+	int numbered: 1;
+	int null_separated: 1;
 } flags = {0};
 
 /* on the stack because I love you */
@@ -67,15 +68,14 @@ int desperate()
 
 	/* find spans which are set_length in ...length. */
 	while ((c = fgetc(fp)) != EOF) {
-		if (!c || (c == 0x000A)) {
-			/* null byte or LF, reset everything. */
-			while (start != i) {
-				csetp[buffer[start++]] = 1;
-				if (start == set_length)
-					start = 0;
-			}
-			start = i = 0;
-			position = 0;
+		switch (c) {
+		case 0x0000:
+			if (flags.null_separated)
+				goto reset;
+			continue;
+		case 0x000A:
+			if (!flags.null_separated)
+				goto reset;
 			continue;
 		}
 
@@ -119,6 +119,16 @@ shift:
 		}
 
 		csetp[c] = 0;
+		continue;
+reset:
+		/* null byte or LF, reset everything. */
+		while (start != i) {
+			csetp[buffer[start++]] = 1;
+			if (start == set_length)
+				start = 0;
+		}
+		start = i = 0;
+		position = 0;
 	}
 
 	return 0;
@@ -141,8 +151,9 @@ given as raw bytes; escaped sequences will not be interpreted.\n\
 \n\
 Options:\n\
   -h, --help           Show this message.\n\
-      --numbered       Also display the position of each permutation.\n\
-");
+  -0, --null           Superpermutations are separated by a NULL character\n\
+                       instead of a newline.\n\
+      --numbered       Also display the position of each permutation.\n");
 }
 
 
@@ -154,7 +165,7 @@ int invalid_sset(const char *sset)
 	if (*sset == 0)
 		return 1;
 
-	if (strchr(sset, 0x000A))
+	if (!flags.null_separated && strchr(sset, 0x000A))
 		return 1;
 
 	return 0;
@@ -166,9 +177,10 @@ int parse_args(int argc, char * const *argv, char **sset, FILE **fp_in)
 	int opt;
 	char *sp;
 
-	const char *optstring = "h";
+	const char *optstring = "h0";
 	const struct option longopts[] = {
 		{ "help", no_argument, NULL, 'h' },
+		{ "null", no_argument, NULL, '0' },
 		{ "numbered", no_argument, NULL, 1 },
 		{ 0 }
 	};
@@ -182,6 +194,9 @@ int parse_args(int argc, char * const *argv, char **sset, FILE **fp_in)
 		case 'h':
 			usage();
 			return -1; // exit 0
+		case '0':
+			flags.null_separated = 1;
+			break;
 		case 1:
 			flags.numbered = 1;
 			break;
