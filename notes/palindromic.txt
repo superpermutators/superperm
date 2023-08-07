@@ -1,0 +1,93 @@
+Oversimplified and informal algorithm to generate palindromic superpermutations
+
+Kara
+
+
+ Quick definitions
+===================
+
+Given a set of elements S, all the permutations of those elements must be
+present in a list of elements from set S in order for that list to be a
+superpermutation on the set S. I'll be using the term "set S" to refer to this
+specific set of elements.
+
+Palindromic superpermutations are usually not minimal superpermutations. Their
+length is determined by the partial sum p(n) (equation 1), where n is the
+number of elements in the set S.
+
+                n
+(1)    p(n) :=  Σ (x!)
+               x=1
+
+
+
+ Introduction
+==============
+
+I got inspiration from Heap's algorithm for generating permutations [1].
+
+In order to generate palindromic superpermutations, we neet to utilize a
+counting method using a list of mixed-base digits (single-digit numbers),
+where ,when performing addition, an overflow of one digit is carried onto the
+next digit in the list. This is identical to a mixed-radix number of the form:
+
+       d1_b(n), d2_b(n-1), d3_b(n-2), ..., d(n-1)_b2, dn_b1
+
+Each digit is identified by d1, d2, ..., dn, and each digit's base is
+identified by b1 (base-1), b2 (base-2), and so on. The thing we're really
+interested in here is the last digit to overflow (carry) when incrementing by
+one. For n=4 the sequence looks something like this:
+
+       1,1,1,1, 2, 1,1,1,1, 2, 1,1,1,1, 2, ..., 3, ..., 2, ...
+
+In other words, it's like:
+
+        four 1's, then carry to 2.  <- (We're only ever adding 1)
+        three 2's, then carry to 3.
+        two 3's, then carry to 4.
+        one 4, then stop.
+
+Once you carry to digit 4, the superpermutation will be complete.
+
+Unrelated: something I'm working out right now is how to generate any
+superpermutation of length p(n), generally, by modifying the phase of the
+sequence or the sequence itself.
+
+---
+
+[1]  Heap, B. R. (1963). "Permutations by Interchanges".
+     The Computer Journal. 6 (3): 293–4. doi:10.1093/comjnl/6.3.293.
+     https://doi.org/10.1093/comjnl/6.3.293 
+
+
+
+ Algorithm
+===========
+
+I still need to prove this works, but this is how I figured to do it.
+
+We start with a list of elements from the set S, which is a valid permutation.
+For example, you may choose the list:
+
+        [ 1, 2, 3, 4, ..., n ]
+
+Given the values produced by the sequence described above as x, we perform the
+following steps:
+
+ 1.) Rotate the permutation to the left by x.
+     This is done by splicing the last (n - x) digits to the left of the first
+     x digits. If x is 2,
+       [ 1, 2, 3, 4, ..., n ] |-> [ 3, 4, ..., n, 1, 2 ]
+
+ 2.) Reverse the order of the right-most x digits.
+       [ 3, 4, ..., n, 1, 2 ] |-> [ 3, 4, ..., n, 2, 1 ]
+
+ 3.) Print out the right-most x digits as items in the superpermutation.
+       print "21"
+
+If the carry from the sequence described above reaches the last digit (4, in
+the example) then you'd stop before doing these steps. Otherwise, you'd have
+the same list of elements in the same order as when you started.
+
+Runs in O(n!), obviously.
+
