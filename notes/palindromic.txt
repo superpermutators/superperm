@@ -31,23 +31,23 @@ counting method using a list of mixed-base digits (single-digit numbers),
 where ,when performing addition, an overflow of one digit is carried onto the
 next digit in the list. This is identical to a mixed-radix number of the form:
 
-       d1_b(n), d2_b(n-1), d3_b(n-2), ..., d(n-1)_b2, dn_b1
+       d1_b(n), d2_b(n-1), d3_b(n-2), ..., d(n-1)_b2
 
 Each digit is identified by d1, d2, ..., dn, and each digit's base is
 identified by b1 (base-1), b2 (base-2), and so on. The thing we're really
 interested in here is the last digit to overflow (carry) when incrementing by
 one. For n=4 the sequence looks something like this:
 
-       1,1,1,1, 2, 1,1,1,1, 2, 1,1,1,1, 2, ..., 3, ..., 2, ...
+       1,1,1, 2, 1,1,1, 2, 1,1,1, 3, ..., 2, ..., 2, ..., 4.
 
 In other words, it's like:
 
-        four 1's, then carry to 2.  <- (We're only ever adding 1)
-        three 2's, then carry to 3.
-        two 3's, then carry to 4.
-        one 4, then stop.
+        if four 1's, then carry to 2.  <- (We're only ever adding 1)
+        if three 2's, then carry to 3.
+        if two 3's, then carry to 4.
+        if one 4, then stop.
 
-Once you carry to digit 4, the superpermutation will be complete.
+Once you carry to digit 4, that marks the end of the algorithm.
 
 Unrelated: something I'm working out right now is how to generate any
 superpermutation of length p(n), generally, by modifying the phase of the
