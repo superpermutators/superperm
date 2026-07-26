@@ -1,7 +1,6 @@
-#!/usr/bin/python
-# -*- encoding: utf-8 -*-
-from __future__ import division
+#!/usr/bin/env python3
 
+from functools import reduce
 import sys
 
 def squash(xs):
@@ -14,7 +13,7 @@ def overlap(x, y):
             return i
 
 def do(f):
-	print squash([ line.strip() for line in f if not line.startswith(".") ])
+	print(squash([ line.strip() for line in f if not line.startswith(".") ]))
 
 if len(sys.argv) > 1:
 	(filename,) = sys.argv[1:]

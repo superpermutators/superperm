@@ -1,5 +1,4 @@
-#!/usr/bin/python
-# -*- encoding: utf8 -*-
+#!/usr/bin/env python3
 
 import optparse
 import sys
@@ -78,7 +77,7 @@ for i in range(len(s) - n):
 def two_cycles_adjacencies(two_cycles):
 	max_nb = 0
 	n_nbs = {}
-	tss = set(two_cycles.iterkeys())
+	tss = set(two_cycles.keys())
 	r = ""
 	for (c, p) in sorted(tss):
 		nbs = [
@@ -91,7 +90,7 @@ def two_cycles_adjacencies(two_cycles):
 	return r
 
 def two_cycles_graphviz(two_cycles):
-	ts_list = list(two_cycles.iterkeys())
+	ts_list = list(two_cycles.keys())
 	tss = set(ts_list)
 
 	index_by_two_cycle = {}
@@ -115,13 +114,13 @@ def two_cycles_graphviz(two_cycles):
 def two_cycles_oneline(two_cycles):
 	return " ".join([
 		"%s/%s" % ts
-		for ts in sorted(two_cycles.iterkeys())
+		for ts in sorted(two_cycles.keys())
 	])
 
 if options.oneline:
-	print two_cycles_oneline(two_cycles)
+	print(two_cycles_oneline(two_cycles))
 elif options.graph:
-	print two_cycles_graphviz(two_cycles)
+	print(two_cycles_graphviz(two_cycles))
 else:
-	print header
-	print two_cycles_adjacencies(two_cycles)
+	print(header)
+	print(two_cycles_adjacencies(two_cycles))

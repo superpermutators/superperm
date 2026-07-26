@@ -1,6 +1,4 @@
-#!/usr/bin/python
-# -*- encoding: utf-8 -*-
-from __future__ import division
+#!/usr/bin/env python3
 
 """
 Find superpermutations with 2-cycle graphs of a particular form.
@@ -203,10 +201,10 @@ def print_solution(n, solution):
 	))
 
 	for partial_two_cycle in solution:
-		print list(partial_two_cycle)
+		print(list(partial_two_cycle))
 	p = SYMBOLS[:n]
 	visited = set([p])
-	print p
+	print(p)
 
 	while len(visited) < factorial(n):
 		p1 = p[1:] + p[0]
@@ -214,21 +212,21 @@ def print_solution(n, solution):
 		p3 = p[3:] + p[2] + p[1] + p[0]
 
 		if p in entrances:
-			print "-->"
+			print("-->")
 			p = p2
 		elif p1 not in visited:
 			p = p1
 		elif p2 not in visited:
-			print "..."
+			print("...")
 			p = p2
 		elif p3 not in visited:
-			print "..."
-			print "..."
+			print("...")
+			print("...")
 			p = p3
 		else: raise BadSolution
 
 		visited.add(p)
-		print p
+		print(p)
 
 def permutations_in_solution(n, solution):
 	entrances = set((
@@ -240,7 +238,8 @@ def permutations_in_solution(n, solution):
 	visited = set([p])
 	yield p
 
-	while len(visited) < factorial(n):
+	n_factorial = factorial(n)
+	while len(visited) < n_factorial:
 		p1 = p[1:] + p[0]
 		p2 = p[2:] + p[1] + p[0]
 		p3 = p[3:] + p[2] + p[1] + p[0]
@@ -281,8 +280,8 @@ n = int(sys.argv[1])
 matrix, secondary = single_4cycle(n)
 for solution in exactcover.Coverings(matrix, secondary):
 	try:
-		print solution_as_superpermutation(n, solution)
+		print(solution_as_superpermutation(n, solution))
 	except BadSolution:
-		print >>sys.stderr, "Ignoring bad solution"
+		print("Ignoring bad solution", file=sys.stderr)
 		pass
 # for row in solution: print row

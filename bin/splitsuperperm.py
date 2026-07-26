@@ -1,6 +1,4 @@
-#!/usr/bin/python
-# -*- encoding: utf-8 -*-
-from __future__ import division
+#!/usr/bin/env python3
 
 import argparse
 import math
@@ -44,10 +42,10 @@ def split_superperm(superperm, opts):
         perms = set(p for p in permutations(n, superperm) if p != '...')
         perm_count = len(perms)
         expected = math.factorial(n)
-        print '{}{}'.format(perm_count, '*' if perm_count == expected else '')
+        print('{}{}'.format(perm_count, '*' if perm_count == expected else ''))
     else:
         for p in permutations(n, superperm):
-            print p
+            print(p)
 
 
 def split_file(file, opts):
