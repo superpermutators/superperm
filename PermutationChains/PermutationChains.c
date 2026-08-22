@@ -10,6 +10,7 @@
 //								exclude
 //	V1.4	11 March 2019		Reorganised freeCount tracking
 //	V2		15 March 2019		Added coverFirst option
+//	V2.1	22 August 2026		Added branchMostFree option
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -248,6 +249,10 @@ static int fullSymm=FALSE;			//	Require the solution to consist entirely of orbi
 //	Structure solution by covering all 1-cycles first
 
 static int coverFirst=FALSE;
+
+//	Choose which of the loops tied for the smallest freeCount to branch on
+
+static int branchMostFree=FALSE;
 
 //	Maybe filter solutions
 
@@ -2450,6 +2455,44 @@ return -1;
 //	Search for a solution via permutation chains
 
 struct loop **minL=NULL;
+
+//	Score a loop for the branchMostFree option: for the first two free 2-cycles
+//	reachable from the loop, sum the freeCount of every top-level loop that the
+//	1-cycles those 2-cycles pass through currently belong to.  A higher score
+//	means branching there leaves more free capacity in the surrounding structure.
+
+static long long branchScoreSum;
+static int branchScoreCount;
+
+void branchScore(struct loop *lp)
+{
+if (branchScoreCount>=2) return;
+
+struct loop *c0 = lp->firstChild;
+if (c0)
+	{
+	struct loop *c=c0;
+	while (TRUE)
+		{
+		if (c->freeCount>0) branchScore(c);
+		if (branchScoreCount>=2) return;
+		c = c->nextSib;
+		if (c==c0) return;
+		};
+	};
+
+if (lp->freeCount==0) return;
+
+struct oneCycle *ocm = lp->oc;
+for (int p=0;p<n && branchScoreCount<2;p++)
+if (ocm->edgeStatus[p]==0)
+	{
+	int *oft = oneForTwo + ocm->twoCycleNumbers[p]*(n-1);
+	for (int i=0;i<n-1;i++) branchScoreSum += topLoop(oneCycleTable+oft[i])->freeCount;
+	branchScoreCount++;
+	};
+}
+
 void searchPC(int lev)
 {
 #if DEBUG_PC
@@ -2512,6 +2555,23 @@ while (lp != &loopHeader)
 	lp = lp->nextTop;
 	};
 	
+//	With branchMostFree, put the highest-scoring tied loop first; the search
+//	below is unchanged, and still falls through to the others if it fails.
+
+if (branchMostFree && nMinL>1)
+	{
+	int best=0;
+	long long bestScore=-1;
+	for (int j=0;j<nMinL;j++)
+		{
+		branchScoreSum=0;
+		branchScoreCount=0;
+		branchScore(minL[j]);
+		if (branchScoreSum > bestScore) { bestScore=branchScoreSum; best=j; };
+		};
+	if (best!=0) { struct loop *t0=minL[0]; minL[0]=minL[best]; minL[best]=t0; };
+	};
+
 traverseLoopTwoCycle=-1;
 int res=-1;
 
@@ -3262,6 +3322,10 @@ for (int i=1;i<argc;i++)
 //	Cover all 1-cycles first?
 
 	else if (strcmp(argv[i],"coverFirst")==0) coverFirst=TRUE;
+
+//	Choose the branching loop?
+
+	else if (strcmp(argv[i],"branchMostFree")==0) branchMostFree=TRUE;
 	
 //	Maybe filter solutions
 	
